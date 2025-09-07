@@ -19,18 +19,66 @@ def process_seeding_with_times(input_file):
         return False, f"Archivo no encontrado: {input_file}"
     
     try:
-        # Leer archivo Excel
-        df = pd.read_excel(input_file)
+        # Leer archivo Excel completo sin headers para procesar estructura
+        df_raw = pd.read_excel(input_file, header=None)
         
-        # Verificar que tenga la columna de tiempo de competencia
-        if 'Tiempo Competencia' not in df.columns:
-            return False, "El archivo no contiene la columna 'Tiempo Competencia'"
+        # Procesar datos estructurados
+        resultados_data = []
+        current_event = None
+        current_series = None
         
-        # Filtrar solo filas con tiempos de competencia
-        df_with_times = df[pd.notna(df['Tiempo Competencia']) & (df['Tiempo Competencia'] != "")]
+        for index, row in df_raw.iterrows():
+            # Convertir fila a lista para mejor manejo
+            row_values = [str(val) if pd.notna(val) else "" for val in row.values]
+            
+            # Detectar evento (líneas con formato "EVENTO - Género")
+            if len(row_values) > 0 and " - " in row_values[0] and row_values[0] != "":
+                # Verificar si es un título de evento (no tiene datos en otras columnas)
+                if all(val == "" or val == "nan" for val in row_values[1:7]):
+                    current_event = row_values[0]
+                    continue
+            
+            # Detectar serie (líneas con formato "Serie X")
+            if len(row_values) > 0 and row_values[0].startswith("Serie "):
+                try:
+                    current_series = int(row_values[0].split()[1])
+                    continue
+                except:
+                    pass
+            
+            # Detectar header row (Carril, Nombre, etc.)
+            if len(row_values) > 0 and row_values[0] == "Carril":
+                continue
+                
+            # Procesar filas de datos (tienen carril numérico)
+            try:
+                carril = int(float(row_values[0]))
+                nombre = row_values[1] if len(row_values) > 1 else ""
+                equipo = row_values[2] if len(row_values) > 2 else ""
+                edad = row_values[3] if len(row_values) > 3 else ""
+                categoria = row_values[4] if len(row_values) > 4 else ""
+                tiempo_inscripcion = row_values[5] if len(row_values) > 5 else ""
+                tiempo_competencia = row_values[6] if len(row_values) > 6 else ""
+                
+                # Solo procesar si hay nombre y tiempo de competencia
+                if nombre and nombre != "---" and tiempo_competencia and tiempo_competencia.strip() != "":
+                    resultados_data.append({
+                        'Evento': current_event or "Evento sin nombre",
+                        'Nombre': nombre,
+                        'Equipo': equipo,
+                        'Edad': edad,
+                        'Categoria': categoria,
+                        'Tiempo': tiempo_competencia,
+                        'Serie': current_series or 1,
+                        'Carril': carril
+                    })
+                    
+            except (ValueError, TypeError):
+                # No es una fila de datos válida
+                continue
         
-        if len(df_with_times) == 0:
-            return False, "No se encontraron tiempos de competencia en el archivo"
+        if len(resultados_data) == 0:
+            return False, "No se encontraron tiempos de competencia válidos en el archivo"
         
         # Crear archivo de resultados
         output_file = f"resultados_desde_sembrado_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
@@ -45,42 +93,25 @@ def process_seeding_with_times(input_file):
             cell = ws.cell(row=1, column=col, value=header)
             cell.font = Font(bold=True)
         
-        row = 2
-        current_event = None
-        current_series = None
-        
-        # Procesar cada fila
-        for index, data_row in df_with_times.iterrows():
-            # Detectar cambios de evento (esto puede necesitar ajuste según la estructura)
-            # Por ahora asumimos que está en una columna o se puede inferir
-            
-            ws.cell(row=row, column=1, value=current_event or "Evento")  # Necesitarás ajustar esto
-            ws.cell(row=row, column=2, value=data_row.get('Nombre', ''))
-            ws.cell(row=row, column=3, value=data_row.get('Equipo', ''))
-            ws.cell(row=row, column=4, value=data_row.get('Edad', ''))
-            ws.cell(row=row, column=5, value=data_row.get('Categoría', ''))
-            ws.cell(row=row, column=6, value=data_row.get('Tiempo Competencia', ''))
-            ws.cell(row=row, column=7, value=current_series or 1)  # Necesitarás ajustar esto
-            ws.cell(row=row, column=8, value=data_row.get('Carril', ''))
-            
-            row += 1
+        # Escribir datos
+        for row_idx, data in enumerate(resultados_data, 2):
+            ws.cell(row=row_idx, column=1, value=data['Evento'])
+            ws.cell(row=row_idx, column=2, value=data['Nombre'])
+            ws.cell(row=row_idx, column=3, value=data['Equipo'])
+            ws.cell(row=row_idx, column=4, value=data['Edad'])
+            ws.cell(row=row_idx, column=5, value=data['Categoria'])
+            ws.cell(row=row_idx, column=6, value=data['Tiempo'])
+            ws.cell(row=row_idx, column=7, value=data['Serie'])
+            ws.cell(row=row_idx, column=8, value=data['Carril'])
         
         # Ajustar ancho de columnas
-        for column in ws.columns:
-            max_length = 0
-            column_letter = column[0].column_letter
-            for cell in column:
-                try:
-                    if len(str(cell.value)) > max_length:
-                        max_length = len(str(cell.value))
-                except:
-                    pass
-            adjusted_width = min(max_length + 2, 50)
-            ws.column_dimensions[column_letter].width = adjusted_width
+        column_widths = {'A': 40, 'B': 30, 'C': 20, 'D': 8, 'E': 12, 'F': 15, 'G': 8, 'H': 8}
+        for col, width in column_widths.items():
+            ws.column_dimensions[col].width = width
         
         wb.save(output_file)
         
-        return True, f"Archivo de resultados generado: {output_file}"
+        return True, f"Archivo de resultados generado: {output_file} con {len(resultados_data)} registros"
         
     except Exception as e:
         return False, f"Error al procesar archivo: {str(e)}"
