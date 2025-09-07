@@ -546,64 +546,172 @@ def inscripcion_nadadores_interface():
     with tab1:
         st.markdown("### Registrar Nuevo Nadador")
         
-        col1, col2 = st.columns(2)
+        # Método de inscripción
+        inscripcion_method = st.radio(
+            "Método de inscripción:",
+            ["✍️ Manual", "🔍 Buscar en Base de Datos"],
+            horizontal=True
+        )
         
-        with col1:
-            name = st.text_input("Nombre y Apellidos", placeholder="Ej: Juan Pérez García")
-            team = st.text_input("Equipo", placeholder="Ej: Club Natación TEN")
-            age = st.number_input("Edad", min_value=6, max_value=99, value=12)
+        if inscripcion_method == "✍️ Manual":
+            # INSCRIPCIÓN MANUAL (código existente)
+            col1, col2 = st.columns(2)
             
-        with col2:
-            gender = st.selectbox("Sexo", ["M", "F"], format_func=lambda x: "Masculino" if x == "M" else "Femenino")
-            category = registration_system.get_category_by_age(age, gender)
-            st.info(f"Categoría automática: **{category}**")
+            with col1:
+                name = st.text_input("Nombre y Apellidos", placeholder="Ej: Juan Pérez García")
+                team = st.text_input("Equipo", placeholder="Ej: Club Natación TEN")
+                age = st.number_input("Edad", min_value=6, max_value=99, value=12)
+                
+            with col2:
+                gender = st.selectbox("Sexo", ["M", "F"], format_func=lambda x: "Masculino" if x == "M" else "Femenino")
+                category = registration_system.get_category_by_age(age, gender)
+                st.info(f"Categoría automática: **{category}**")
+                
+            st.markdown("### Pruebas de Inscripción")
+            st.markdown("*Ingresa los tiempos de inscripción en formato MM:SS.dd o SS.dd. Deja en blanco las pruebas en las que no participa.*")
             
-        st.markdown("### Pruebas de Inscripción")
-        st.markdown("*Ingresa los tiempos de inscripción en formato MM:SS.dd o SS.dd. Deja en blanco las pruebas en las que no participa.*")
-        
-        events_data = {}
-        col1, col2, col3 = st.columns(3)
-        
-        for i, event in enumerate(registration_system.swimming_events):
-            with [col1, col2, col3][i % 3]:
-                time_input = st.text_input(
-                    event,
-                    key=f"event_{i}",
-                    placeholder="MM:SS.dd",
-                    help="Ejemplo: 1:25.30 o 85.30"
-                )
-                
-                if time_input:
-                    is_valid, error_msg = registration_system.validate_time_format(time_input)
-                    if not is_valid:
-                        st.error(error_msg)
-                    else:
-                        events_data[event] = time_input
-        
-        if st.button("🏊‍♂️ Registrar Nadador", type="primary"):
-            if not name.strip():
-                st.error("El nombre es obligatorio")
-            elif not team.strip():
-                st.error("El equipo es obligatorio")
-            elif not events_data:
-                st.warning("Debe inscribirse en al menos una prueba")
-            else:
-                swimmer_data = {
-                    'name': name.strip(),
-                    'team': team.strip(),
-                    'age': age,
-                    'category': category,
-                    'gender': gender,
-                    'events': events_data
-                }
-                
-                success, message = registration_system.add_swimmer(swimmer_data)
-                if success:
-                    st.success(message)
-                    st.balloons()
-                    st.rerun()
+            events_data = {}
+            col1, col2, col3 = st.columns(3)
+            
+            for i, event in enumerate(registration_system.swimming_events):
+                with [col1, col2, col3][i % 3]:
+                    time_input = st.text_input(
+                        event,
+                        key=f"manual_event_{i}",
+                        placeholder="MM:SS.dd",
+                        help="Ejemplo: 1:25.30 o 85.30"
+                    )
+                    
+                    if time_input:
+                        is_valid, error_msg = registration_system.validate_time_format(time_input)
+                        if not is_valid:
+                            st.error(error_msg)
+                        else:
+                            events_data[event] = time_input
+            
+            if st.button("🏊‍♂️ Registrar Nadador (Manual)", type="primary"):
+                if not name.strip():
+                    st.error("El nombre es obligatorio")
+                elif not team.strip():
+                    st.error("El equipo es obligatorio")
+                elif not events_data:
+                    st.warning("Debe inscribirse en al menos una prueba")
                 else:
-                    st.error(message)
+                    swimmer_data = {
+                        'name': name.strip(),
+                        'team': team.strip(),
+                        'age': age,
+                        'category': category,
+                        'gender': gender,
+                        'events': events_data
+                    }
+                    
+                    success, message, duplicate_info = registration_system.add_swimmer(swimmer_data)
+                    if success:
+                        st.success(message)
+                        st.balloons()
+                        st.rerun()
+                    else:
+                        if duplicate_info:  # Es un duplicado
+                            st.error(message)
+                            st.markdown("### ⚠️ Información del Nadador Existente:")
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.write(f"**Nombre:** {duplicate_info['name']}")
+                                st.write(f"**Equipo:** {duplicate_info['team']}")
+                                st.write(f"**Edad:** {duplicate_info['age']}")
+                            with col2:
+                                st.write(f"**Categoría:** {duplicate_info['category']}")
+                                st.write(f"**Sexo:** {'Masculino' if duplicate_info['gender'] == 'M' else 'Femenino'}")
+                            
+                            if st.button("🚫 Inscribir De Todas Formas", key="force_add_manual"):
+                                success_force, message_force, _ = registration_system.add_swimmer(swimmer_data, force_add=True)
+                                if success_force:
+                                    st.success(f"✅ {swimmer_data['name']} inscrito como registro adicional")
+                                    st.balloons()
+                                    st.rerun()
+                                else:
+                                    st.error(message_force)
+                        else:
+                            st.error(message)
+        
+        else:
+            # BÚSQUEDA EN BASE DE DATOS
+            st.markdown("### Buscar Nadador en Base de Datos")
+            
+            search_term = st.text_input(
+                "Buscar nadador por nombre:",
+                placeholder="Escribe el nombre del nadador...",
+                help="Se buscará en la base de datos existente"
+            )
+            
+            if search_term and len(search_term.strip()) >= 3:
+                with st.spinner("Buscando en la base de datos..."):
+                    matches, search_message = registration_system.search_swimmer_in_database(search_term)
+                
+                if matches:
+                    st.success(search_message)
+                    
+                    # Mostrar resultados de búsqueda
+                    st.markdown("### Resultados de Búsqueda")
+                    
+                    for i, match in enumerate(matches):
+                        with st.expander(f"🏊‍♂️ {match['name']}"):
+                            col1, col2 = st.columns([3, 1])
+                            
+                            with col1:
+                                # Obtener información del nadador
+                                swimmer_info = registration_system.get_swimmer_info_from_database(match)
+                                st.write(f"**Equipo:** {swimmer_info['team'] or 'No especificado'}")
+                                st.write(f"**Edad:** {swimmer_info['age'] or 'No especificada'}")
+                                st.write(f"**Categoría:** {swimmer_info['category'] or 'No especificada'}")
+                                st.write(f"**Sexo:** {'Masculino' if swimmer_info['gender'] == 'M' else 'Femenino' if swimmer_info['gender'] == 'F' else 'No especificado'}")
+                                
+                                # Mostrar tiempos disponibles
+                                latest_times, times_message = registration_system.get_swimmer_latest_times(swimmer_info)
+                                if latest_times:
+                                    st.write("**Últimos tiempos registrados:**")
+                                    for event, time in latest_times.items():
+                                        st.write(f"• {event}: {time}")
+                                else:
+                                    st.write("*No hay tiempos registrados*")
+                            
+                            with col2:
+                                if st.button(f"📋 Inscribir", key=f"db_register_{i}"):
+                                    # Crear nadador desde base de datos
+                                    swimmer_data, create_message = registration_system.create_swimmer_from_database(match)
+                                    
+                                    # Registrar el nadador
+                                    success, register_message, duplicate_info = registration_system.add_swimmer(swimmer_data)
+                                    if success:
+                                        st.success(register_message)
+                                        st.balloons()
+                                        st.rerun()
+                                    else:
+                                        if duplicate_info:  # Es un duplicado
+                                            st.error(register_message)
+                                            if st.button("🚫 Inscribir De Todas Formas", key=f"force_add_db_{i}"):
+                                                success_force, message_force, _ = registration_system.add_swimmer(swimmer_data, force_add=True)
+                                                if success_force:
+                                                    st.success(f"✅ {swimmer_data['name']} inscrito como registro adicional")
+                                                    st.balloons()
+                                                    st.rerun()
+                                                else:
+                                                    st.error(message_force)
+                                        else:
+                                            st.error(register_message)
+                else:
+                    st.warning(search_message)
+            
+            elif search_term and len(search_term.strip()) < 3:
+                st.info("Escribe al menos 3 caracteres para buscar")
+            
+            # Información sobre la base de datos
+            if os.path.exists(registration_system.archivo_base_datos):
+                st.markdown("### 📊 Estado de la Base de Datos")
+                st.success(f"✅ Base de datos encontrada: `{registration_system.archivo_base_datos}`")
+            else:
+                st.warning(f"⚠️ No se encontró la base de datos: `{registration_system.archivo_base_datos}`")
     
     with tab2:
         st.markdown("### Nadadores Inscritos")
@@ -631,13 +739,99 @@ def inscripcion_nadadores_interface():
                             st.write("*Sin pruebas registradas*")
                     
                     with col2:
-                        if st.button("🗑️ Eliminar", key=f"delete_{i}"):
-                            success, message = registration_system.delete_swimmer(swimmer['index'])
-                            if success:
-                                st.success(message)
+                        col_edit, col_delete = st.columns(2)
+                        
+                        with col_edit:
+                            if st.button("✏️ Editar", key=f"edit_{i}"):
+                                st.session_state[f'editing_swimmer_{i}'] = True
                                 st.rerun()
-                            else:
-                                st.error(message)
+                        
+                        with col_delete:
+                            if st.button("🗑️ Eliminar", key=f"delete_{i}"):
+                                success, message = registration_system.delete_swimmer(swimmer['index'])
+                                if success:
+                                    st.success(message)
+                                    st.rerun()
+                                else:
+                                    st.error(message)
+            
+            # Formulario de edición (aparece cuando se hace clic en editar)
+            for i, swimmer in enumerate(swimmers):
+                if f'editing_swimmer_{i}' in st.session_state and st.session_state[f'editing_swimmer_{i}']:
+                    st.markdown("---")
+                    st.markdown(f"### ✏️ Editando: {swimmer['name']}")
+                    
+                    # Obtener datos actuales del nadador
+                    swimmer_data, message = registration_system.get_swimmer_for_editing(swimmer['index'])
+                    
+                    if swimmer_data:
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            edit_name = st.text_input("Nombre y Apellidos", value=swimmer_data['name'], key=f"edit_name_{i}")
+                            edit_team = st.text_input("Equipo", value=swimmer_data['team'], key=f"edit_team_{i}")
+                            edit_age = st.number_input("Edad", min_value=6, max_value=99, value=swimmer_data['age'], key=f"edit_age_{i}")
+                            
+                        with col2:
+                            edit_gender = st.selectbox("Sexo", ["M", "F"], 
+                                                     index=0 if swimmer_data['gender'] == 'M' else 1,
+                                                     format_func=lambda x: "Masculino" if x == "M" else "Femenino",
+                                                     key=f"edit_gender_{i}")
+                            edit_category = registration_system.get_category_by_age(edit_age, edit_gender)
+                            st.info(f"Categoría automática: **{edit_category}**")
+                        
+                        st.markdown("### Pruebas de Inscripción")
+                        st.markdown("*Edita los tiempos de inscripción. Deja en blanco para eliminar la prueba.*")
+                        
+                        edit_events_data = {}
+                        col1, col2, col3 = st.columns(3)
+                        
+                        for j, event in enumerate(registration_system.swimming_events):
+                            with [col1, col2, col3][j % 3]:
+                                current_time = swimmer_data['events'].get(event, "")
+                                edit_time_input = st.text_input(
+                                    event,
+                                    value=current_time,
+                                    key=f"edit_event_{i}_{j}",
+                                    placeholder="MM:SS.dd",
+                                    help="Ejemplo: 1:25.30 o 85.30"
+                                )
+                                
+                                if edit_time_input:
+                                    is_valid, error_msg = registration_system.validate_time_format(edit_time_input)
+                                    if not is_valid:
+                                        st.error(error_msg)
+                                    else:
+                                        edit_events_data[event] = edit_time_input
+                        
+                        col_save, col_cancel = st.columns(2)
+                        
+                        with col_save:
+                            if st.button("💾 Guardar Cambios", key=f"save_{i}", type="primary"):
+                                updated_swimmer_data = {
+                                    'name': edit_name.strip(),
+                                    'team': edit_team.strip(),
+                                    'age': edit_age,
+                                    'category': edit_category,
+                                    'gender': edit_gender,
+                                    'events': edit_events_data
+                                }
+                                
+                                success, message = registration_system.update_swimmer(swimmer['index'], updated_swimmer_data)
+                                if success:
+                                    st.success(message)
+                                    del st.session_state[f'editing_swimmer_{i}']
+                                    st.balloons()
+                                    st.rerun()
+                                else:
+                                    st.error(message)
+                        
+                        with col_cancel:
+                            if st.button("❌ Cancelar", key=f"cancel_{i}"):
+                                del st.session_state[f'editing_swimmer_{i}']
+                                st.rerun()
+                    else:
+                        st.error(message)
     
     with tab3:
         st.markdown("### Gestión del Sistema")
@@ -651,22 +845,86 @@ def inscripcion_nadadores_interface():
             if swimmers:
                 teams = {}
                 categories = {}
-                genders = {"M": 0, "F": 0}
+                genders = {"Masculino": 0, "Femenino": 0}
+                events_stats = {}
                 
+                # Procesar estadísticas
                 for swimmer in swimmers:
+                    # Equipos
                     teams[swimmer['team']] = teams.get(swimmer['team'], 0) + 1
+                    
+                    # Categorías
                     categories[swimmer['category']] = categories.get(swimmer['category'], 0) + 1
-                    genders[swimmer['gender']] += 1
+                    
+                    # Géneros
+                    gender_label = "Masculino" if swimmer['gender'] == 'M' else "Femenino"
+                    genders[gender_label] += 1
+                    
+                    # Eventos (contar inscripciones por prueba)
+                    for event_info in swimmer['events']:
+                        if ':' in event_info:  # Formato "EVENTO: tiempo"
+                            event_name = event_info.split(':')[0].strip()
+                            events_stats[event_name] = events_stats.get(event_name, 0) + 1
                 
-                st.metric("Total Nadadores", len(swimmers))
-                st.metric("Equipos", len(teams))
-                st.metric("Masculino/Femenino", f"{genders['M']}/{genders['F']}")
+                # Métricas principales
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Total Nadadores", len(swimmers))
+                with col2:
+                    st.metric("Equipos Diferentes", len(teams))
+                with col3:
+                    st.metric("Categorías", len(categories))
                 
-                if st.checkbox("Ver distribución por categorías"):
+                # Distribución por género
+                st.markdown("#### 👥 Distribución por Sexo")
+                if genders:
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric("👨 Masculino", genders["Masculino"])
+                    with col2:
+                        st.metric("👩 Femenino", genders["Femenino"])
+                    
+                    # Gráfico de género
+                    st.bar_chart(genders)
+                
+                # Distribución por pruebas
+                if events_stats:
+                    st.markdown("#### 🏊‍♂️ Distribución por Pruebas")
+                    st.bar_chart(events_stats)
+                    
+                    # Top 5 pruebas más populares
+                    top_events = sorted(events_stats.items(), key=lambda x: x[1], reverse=True)[:5]
+                    st.markdown("**Top 5 Pruebas Más Populares:**")
+                    for i, (event, count) in enumerate(top_events, 1):
+                        st.write(f"{i}. **{event}**: {count} nadadores")
+                
+                # Otras estadísticas expandibles
+                if st.checkbox("📊 Ver distribución por categorías"):
                     st.bar_chart(categories)
                 
-                if st.checkbox("Ver distribución por equipos"):
+                if st.checkbox("🏢 Ver distribución por equipos"):
                     st.bar_chart(teams)
+                
+                if st.checkbox("📈 Estadísticas detalladas"):
+                    st.markdown("#### Estadísticas Detalladas")
+                    
+                    # Promedio de edad
+                    ages = [swimmer['age'] for swimmer in swimmers if swimmer['age']]
+                    if ages:
+                        avg_age = sum(ages) / len(ages)
+                        st.metric("Edad Promedio", f"{avg_age:.1f} años")
+                    
+                    # Nadadores por categoría
+                    st.markdown("**Nadadores por Categoría:**")
+                    for category, count in sorted(categories.items()):
+                        percentage = (count / len(swimmers)) * 100
+                        st.write(f"• **{category}**: {count} nadadores ({percentage:.1f}%)")
+                    
+                    # Total de inscripciones en pruebas
+                    total_event_entries = sum(len(swimmer['events']) for swimmer in swimmers)
+                    if total_event_entries > 0:
+                        avg_events_per_swimmer = total_event_entries / len(swimmers)
+                        st.metric("Promedio pruebas/nadador", f"{avg_events_per_swimmer:.1f}")
             else:
                 st.info("No hay datos para mostrar estadísticas")
         
@@ -689,6 +947,50 @@ def inscripcion_nadadores_interface():
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
             
+            # Generar reporte PDF
+            if swimmers:
+                if st.button("📄 Generar Reporte PDF", type="primary"):
+                    try:
+                        pdf_data = registration_system.generate_pdf_report(swimmers, teams, categories, genders, events_stats)
+                        if pdf_data:
+                            st.download_button(
+                                label="📄 Descargar Reporte PDF",
+                                data=pdf_data,
+                                file_name="reporte_inscripciones.pdf",
+                                mime="application/pdf"
+                            )
+                            st.success("¡Reporte PDF generado exitosamente!")
+                        else:
+                            st.error("**ReportLab no está instalado en este entorno Python**")
+                            st.markdown("""
+                            **Para generar reportes PDF, pruebe uno de estos comandos:**
+                            ```bash
+                            pip install reportlab
+                            # o
+                            pip3 install reportlab
+                            # o
+                            python -m pip install reportlab
+                            # o  
+                            python3 -m pip install reportlab
+                            ```
+                            
+                            **Si está usando un entorno virtual, asegúrese de activarlo primero:**
+                            ```bash
+                            source venv/bin/activate  # Linux/Mac
+                            # o
+                            venv\\Scripts\\activate     # Windows
+                            ```
+                            
+                            Luego reinicie la aplicación Streamlit.
+                            """)
+                    except Exception as e:
+                        if "reportlab" in str(e).lower() or "not available" in str(e).lower():
+                            st.error("Para generar reportes PDF, instale la librería ReportLab ejecutando: pip install reportlab")
+                        else:
+                            st.error(f"Error al generar el reporte PDF: {str(e)}")
+            else:
+                st.info("No hay nadadores inscritos para generar reporte")
+            
             st.markdown("#### ℹ️ Información")
             st.info("""
             **Categorías por edad:**
@@ -703,6 +1005,15 @@ def inscripcion_nadadores_interface():
             - SENIOR: ≤17 años
             - MASTER: >17 años
             """)
+    
+    # Copyright footer para todas las páginas
+    st.markdown("---")
+    st.markdown(
+        "<div style='text-align: center; color: #666; font-size: 12px; margin-top: 20px;'>"
+        "Sistema de Gestión de Competencias de Natación - Todos los derechos reservados"
+        "</div>", 
+        unsafe_allow_html=True
+    )
 
 if __name__ == "__main__":
     main()
