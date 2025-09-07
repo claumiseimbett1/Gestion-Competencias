@@ -597,6 +597,12 @@ class SwimmerRegistration:
             return None
         
         try:
+            # Colores del logo TEN (azul corporativo)
+            TEN_BLUE = colors.HexColor('#1E88E5')  # Azul principal del logo
+            TEN_LIGHT_BLUE = colors.HexColor('#64B5F6')  # Azul claro del gradiente
+            TEN_DARK_BLUE = colors.HexColor('#1565C0')  # Azul oscuro
+            TEN_ACCENT = colors.HexColor('#E3F2FD')  # Azul muy claro para fondos
+            
             # Crear buffer para PDF en memoria
             buffer = BytesIO()
             
@@ -614,29 +620,46 @@ class SwimmerRegistration:
                                          parent=styles['Heading1'],
                                          fontSize=18,
                                          spaceAfter=30,
-                                         alignment=TA_CENTER)
+                                         alignment=TA_CENTER,
+                                         textColor=TEN_DARK_BLUE)
             
             heading_style = ParagraphStyle('CustomHeading',
                                            parent=styles['Heading2'],
                                            fontSize=14,
                                            spaceAfter=12,
-                                           alignment=TA_LEFT)
+                                           alignment=TA_LEFT,
+                                           textColor=TEN_BLUE)
             
             copyright_style = ParagraphStyle('Copyright',
                                              parent=styles['Normal'],
                                              fontSize=8,
-                                             alignment=TA_CENTER)
+                                             alignment=TA_CENTER,
+                                             textColor=TEN_DARK_BLUE)
             
-            # Agregar logo si existe
+            # Agregar logo si existe (mantener proporciones originales)
             logo_path = 'img/TEN.png'
             if os.path.exists(logo_path):
                 try:
+                    # Cargar logo con proporciones originales
+                    from PIL import Image as PILImage
+                    pil_img = PILImage.open(logo_path)
+                    original_width, original_height = pil_img.size
+                    aspect_ratio = original_width / original_height
+                    
+                    # Definir altura deseada y calcular ancho proporcional
+                    desired_height = 1*inch
+                    desired_width = desired_height * aspect_ratio
+                    
+                    logo = Image(logo_path, width=desired_width, height=desired_height)
+                    logo.hAlign = 'CENTER'
+                    story.append(logo)
+                    story.append(Spacer(1, 20))
+                except Exception as e:
+                    # Fallback a dimensiones fijas si hay error
                     logo = Image(logo_path, width=2*inch, height=1*inch)
                     logo.hAlign = 'CENTER'
                     story.append(logo)
                     story.append(Spacer(1, 20))
-                except:
-                    pass
             
             # Título del reporte
             story.append(Paragraph("REPORTE DE INSCRIPCIONES", title_style))
@@ -655,14 +678,14 @@ class SwimmerRegistration:
             
             summary_table = Table(summary_data, colWidths=[3*inch, 1.5*inch])
             summary_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('BACKGROUND', (0, 0), (-1, 0), TEN_BLUE),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
                 ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
                 ('FONTSIZE', (0, 0), (-1, 0), 12),
                 ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+                ('BACKGROUND', (0, 1), (-1, -1), TEN_ACCENT),
+                ('GRID', (0, 0), (-1, -1), 1, TEN_DARK_BLUE)
             ]))
             story.append(summary_table)
             story.append(Spacer(1, 20))
@@ -677,14 +700,14 @@ class SwimmerRegistration:
             
             gender_table = Table(gender_data, colWidths=[2*inch, 1*inch, 1*inch])
             gender_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('BACKGROUND', (0, 0), (-1, 0), TEN_BLUE),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
                 ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
                 ('FONTSIZE', (0, 0), (-1, 0), 12),
                 ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+                ('BACKGROUND', (0, 1), (-1, -1), TEN_ACCENT),
+                ('GRID', (0, 0), (-1, -1), 1, TEN_DARK_BLUE)
             ]))
             story.append(gender_table)
             story.append(Spacer(1, 20))
@@ -699,53 +722,98 @@ class SwimmerRegistration:
                 
                 events_table = Table(events_data, colWidths=[1*inch, 3*inch, 1*inch])
                 events_table.setStyle(TableStyle([
-                    ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                    ('BACKGROUND', (0, 0), (-1, 0), TEN_BLUE),
                     ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
                     ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
                     ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
                     ('FONTSIZE', (0, 0), (-1, 0), 12),
                     ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                    ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-                    ('GRID', (0, 0), (-1, -1), 1, colors.black)
+                    ('BACKGROUND', (0, 1), (-1, -1), TEN_ACCENT),
+                    ('GRID', (0, 0), (-1, -1), 1, TEN_DARK_BLUE)
                 ]))
                 story.append(events_table)
                 story.append(Spacer(1, 20))
             
-            # Nueva página para lista de nadadores
+            # Nueva página para lista detallada de nadadores
             story.append(PageBreak())
-            story.append(Paragraph("LISTA COMPLETA DE NADADORES", title_style))
+            story.append(Paragraph("PLANILLA DETALLADA DE INSCRIPCIONES", title_style))
             story.append(Spacer(1, 20))
             
-            # Tabla de nadadores
-            swimmers_data = [["#", "Nombre", "Equipo", "Edad", "Categoría", "Sexo", "Pruebas"]]
+            # Generar reporte detallado por nadador
             for i, swimmer in enumerate(swimmers, 1):
-                events_count = len(swimmer['events'])
+                # Información básica del nadador
+                swimmer_info_style = ParagraphStyle(
+                    'SwimmerInfo',
+                    parent=styles['Normal'],
+                    fontSize=11,
+                    textColor=TEN_DARK_BLUE,
+                    fontName='Helvetica-Bold',
+                    spaceAfter=8
+                )
+                
                 gender_label = "Masculino" if swimmer['gender'] == 'M' else "Femenino"
-                swimmers_data.append([
-                    str(i),
-                    swimmer['name'],
-                    swimmer['team'],
-                    str(swimmer['age']),
-                    swimmer['category'],
-                    gender_label,
-                    str(events_count)
-                ])
-            
-            swimmers_table = Table(swimmers_data, colWidths=[0.5*inch, 2*inch, 1.5*inch, 0.7*inch, 1*inch, 0.8*inch, 0.7*inch])
-            swimmers_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, 0), 10),
-                ('FONTSIZE', (0, 1), (-1, -1), 8),
-                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-                ('GRID', (0, 0), (-1, -1), 1, colors.black),
-                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE')
-            ]))
-            story.append(swimmers_table)
-            story.append(Spacer(1, 30))
+                story.append(Paragraph(f"<b>{i}. {swimmer['name']}</b>", swimmer_info_style))
+                
+                # Datos básicos en tabla
+                basic_data = [
+                    ["Equipo:", swimmer['team']],
+                    ["Edad:", f"{swimmer['age']} años"],
+                    ["Categoría:", swimmer['category']],
+                    ["Sexo:", gender_label]
+                ]
+                
+                basic_table = Table(basic_data, colWidths=[1.2*inch, 3*inch])
+                basic_table.setStyle(TableStyle([
+                    ('FONTSIZE', (0, 0), (-1, -1), 9),
+                    ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
+                    ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+                    ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                    ('TEXTCOLOR', (0, 0), (0, -1), TEN_DARK_BLUE),
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 5),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 5)
+                ]))
+                story.append(basic_table)
+                story.append(Spacer(1, 10))
+                
+                # Pruebas inscritas
+                if swimmer['events']:
+                    story.append(Paragraph("<b>Pruebas Inscritas:</b>", ParagraphStyle('EventsHeader', parent=styles['Normal'], fontSize=10, fontName='Helvetica-Bold', textColor=TEN_BLUE)))
+                    
+                    events_data = [["Prueba", "Tiempo de Inscripción"]]
+                    for event_string in swimmer['events']:
+                        if ':' in event_string:
+                            event_name, event_time = event_string.split(':', 1)
+                            events_data.append([event_name.strip(), event_time.strip()])
+                        else:
+                            events_data.append([event_string, "Sin tiempo"])
+                    
+                    events_table = Table(events_data, colWidths=[3*inch, 1.5*inch])
+                    events_table.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (-1, 0), TEN_BLUE),
+                        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                        ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
+                        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                        ('FONTSIZE', (0, 0), (-1, 0), 9),
+                        ('FONTSIZE', (0, 1), (-1, -1), 8),
+                        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+                        ('TOPPADDING', (0, 0), (-1, 0), 8),
+                        ('BACKGROUND', (0, 1), (-1, -1), TEN_ACCENT),
+                        ('GRID', (0, 0), (-1, -1), 1, TEN_DARK_BLUE),
+                        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                        ('RIGHTPADDING', (0, 0), (-1, -1), 8)
+                    ]))
+                    story.append(events_table)
+                else:
+                    story.append(Paragraph("<i>Sin pruebas registradas</i>", ParagraphStyle('NoEvents', parent=styles['Normal'], fontSize=9, textColor=TEN_LIGHT_BLUE, fontStyle='italic')))
+                
+                # Separador entre nadadores
+                story.append(Spacer(1, 15))
+                if i < len(swimmers):  # No agregar línea después del último nadador
+                    story.append(Table([[""], [""]], colWidths=[7*inch], rowHeights=[0.5, 0.5]))
+                    story.append(Spacer(1, 10))
             
             # Copyright footer
             story.append(Paragraph("Sistema de Gestión de Competencias de Natación - Todos los derechos reservados", copyright_style))
@@ -780,6 +848,7 @@ class SwimmerRegistration:
             imported_swimmers = []
             errors = []
             duplicates = []
+            imported_names = []
             
             # Procesar cada nadador
             for index, row in df.iterrows():
@@ -812,6 +881,7 @@ class SwimmerRegistration:
                         existing_df = pd.read_excel(self.archivo_inscripcion)
                         if swimmer_name.lower() in existing_df['NOMBRE Y AP'].str.lower().values:
                             duplicates.append(swimmer_name)
+                            errors.append(f"Fila {index + 2}: {swimmer_name} ya existe en la base de datos")
                             continue
                     
                     # Procesar tiempos de las pruebas
@@ -826,8 +896,9 @@ class SwimmerRegistration:
                                 time_str = str(time_value).strip()
                             
                             # Validar formato de tiempo
-                            if self.validate_time_format(time_str):
-                                events_data[event] = time_str
+                            is_valid, validated_time = self.validate_time_format(time_str)
+                            if is_valid:
+                                events_data[event] = validated_time
                     
                     # Solo agregar nadadores con al menos una prueba
                     if events_data:
@@ -842,6 +913,7 @@ class SwimmerRegistration:
                         }
                         
                         imported_swimmers.append(new_swimmer)
+                        imported_names.append(swimmer_name)
                     else:
                         errors.append(f"Fila {index + 2}: {swimmer_name} no tiene pruebas válidas")
                         
@@ -849,29 +921,60 @@ class SwimmerRegistration:
                     errors.append(f"Fila {index + 2}: Error procesando datos - {str(e)}")
                     continue
             
-            # Guardar nadadores importados
+            # Determinar el resultado final
+            total_processed = len(imported_swimmers) + len(duplicates) + (len(errors) - len(duplicates))
+            
             if imported_swimmers:
+                # Hay nadadores para importar
                 success = self.save_swimmers_to_excel(imported_swimmers)
                 if success:
-                    result_msg = f"✅ Se importaron {len(imported_swimmers)} nadadores correctamente"
+                    result_msg = f"✅ **Importación exitosa:** {len(imported_swimmers)} nadadores agregados"
                     
+                    # Mostrar nadadores importados
+                    result_msg += f"\n\n📝 **Nadadores AGREGADOS ({len(imported_names)}):**"
+                    if len(imported_names) <= 10:
+                        result_msg += f"\n• " + "\n• ".join(imported_names)
+                    else:
+                        result_msg += f"\n• " + "\n• ".join(imported_names[:10])
+                        result_msg += f"\n• ... y {len(imported_names) - 10} más"
+                    
+                    # Mostrar duplicados omitidos
                     if duplicates:
-                        result_msg += f"\n⚠️ Se omitieron {len(duplicates)} nadadores duplicados: {', '.join(duplicates[:3])}"
-                        if len(duplicates) > 3:
-                            result_msg += f" y {len(duplicates) - 3} más"
-                    
-                    if errors:
-                        result_msg += f"\n❌ {len(errors)} errores encontrados"
-                        if len(errors) <= 5:
-                            result_msg += f":\n• " + "\n• ".join(errors)
+                        result_msg += f"\n\n⚠️ **Duplicados OMITIDOS ({len(duplicates)}):**"
+                        if len(duplicates) <= 10:
+                            result_msg += f"\n• " + "\n• ".join(duplicates)
                         else:
-                            result_msg += f":\n• " + "\n• ".join(errors[:5]) + f"\n• ... y {len(errors) - 5} errores más"
+                            result_msg += f"\n• " + "\n• ".join(duplicates[:10])
+                            result_msg += f"\n• ... y {len(duplicates) - 10} más"
+                    
+                    # Mostrar otros errores
+                    if len(errors) > len(duplicates):  # Hay otros errores además de duplicados
+                        other_errors = [e for e in errors if "ya existe en la base de datos" not in e]
+                        if other_errors:
+                            result_msg += f"\n❌ **Errores adicionales ({len(other_errors)}):**"
+                            if len(other_errors) <= 3:
+                                result_msg += f"\n• " + "\n• ".join(other_errors)
+                            else:
+                                result_msg += f"\n• " + "\n• ".join(other_errors[:3]) + f"\n• ... y {len(other_errors) - 3} más"
                     
                     return True, result_msg
                 else:
                     return False, "Error guardando los datos importados"
+                    
+            elif duplicates and len(errors) == len(duplicates):
+                # Solo hay duplicados, ningún nadador nuevo
+                result_msg = f"⚠️ **Todos los nadadores ya existen en la base de datos**"
+                result_msg += f"\n\n📋 **Duplicados detectados ({len(duplicates)}):**"
+                if len(duplicates) <= 10:
+                    result_msg += f"\n• " + "\n• ".join(duplicates)
+                else:
+                    result_msg += f"\n• " + "\n• ".join(duplicates[:10])
+                    result_msg += f"\n• ... y {len(duplicates) - 10} más"
+                return False, result_msg
+                
             else:
-                return False, f"No se pudo importar ningún nadador. Errores:\n• " + "\n• ".join(errors[:10])
+                # Solo errores, sin duplicados o con otros errores
+                return False, f"❌ No se pudo importar ningún nadador. Errores encontrados:\n• " + "\n• ".join(errors[:10])
                 
         except Exception as e:
             return False, f"Error leyendo el archivo: {str(e)}"

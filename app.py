@@ -272,7 +272,7 @@ def generar_sembrado_categoria():
         
         # Mostrar preview
         if st.checkbox("Ver vista previa de datos"):
-            st.dataframe(df.head())
+            st.dataframe(df.head(10))
     except Exception as e:
         st.error(f"Error al leer el archivo: {e}")
         return
@@ -517,7 +517,7 @@ def gestion_archivos():
             
             with col2:
                 try:
-                    df = pd.read_excel(archivo, nrows=5)
+                    df = pd.read_excel(archivo, nrows=10)
                     if st.button("👁️", key=f"view_{archivo}", help="Ver vista previa"):
                         st.dataframe(df)
                 except:
@@ -750,18 +750,38 @@ def inscripcion_nadadores_interface():
             uploaded_file = st.file_uploader(
                 "Selecciona el archivo Excel con los nadadores:",
                 type=['xlsx', 'xls'],
-                help="El archivo debe contener las columnas requeridas y los datos de los nadadores"
+                help="El archivo debe contener las columnas requeridas y los datos de los nadadores",
+                key="bulk_import_uploader"
             )
             
+            # Limpiar estado cuando se cambia de archivo
             if uploaded_file is not None:
+                # Detectar si es un archivo nuevo
+                current_file_info = f"{uploaded_file.name}_{uploaded_file.size}"
+                if 'last_uploaded_file' not in st.session_state:
+                    st.session_state.last_uploaded_file = current_file_info
+                elif st.session_state.last_uploaded_file != current_file_info:
+                    # Archivo nuevo detectado, limpiar estados previos
+                    st.session_state.last_uploaded_file = current_file_info
+                    # Limpiar cualquier resultado anterior
+                    for key in list(st.session_state.keys()):
+                        if key.startswith('bulk_import_'):
+                            del st.session_state[key]
+                    st.rerun()
+                
                 st.success(f"✅ Archivo cargado: {uploaded_file.name}")
                 
                 # Vista previa del archivo
-                if st.checkbox("👁️ Ver vista previa del archivo"):
+                if st.checkbox("👁️ Ver vista previa del archivo", key="preview_checkbox"):
                     try:
-                        preview_df = pd.read_excel(uploaded_file)
-                        st.markdown("**Vista previa (primeras 5 filas):**")
-                        st.dataframe(preview_df.head())
+                        # Usar caché para evitar re-lecturas
+                        @st.cache_data
+                        def load_preview_data(file_content, file_name):
+                            return pd.read_excel(io.BytesIO(file_content))
+                        
+                        preview_df = load_preview_data(uploaded_file.getvalue(), uploaded_file.name)
+                        st.markdown("**Vista previa (primeras 10 filas):**")
+                        st.dataframe(preview_df.head(10))
                         st.info(f"Total de filas en el archivo: {len(preview_df)}")
                     except Exception as e:
                         st.error(f"Error al leer el archivo: {str(e)}")
@@ -774,6 +794,10 @@ def inscripcion_nadadores_interface():
                     if st.button("🚀 Importar Nadadores", type="primary", use_container_width=True):
                         with st.spinner("Importando nadadores..."):
                             success, message = registration_system.bulk_import_from_excel(uploaded_file)
+                            
+                            # Guardar resultado en session_state
+                            st.session_state.bulk_import_result = (success, message)
+                            st.session_state.bulk_import_completed = True
                             
                             if success:
                                 st.success("✅ **Importación completada exitosamente!**")
@@ -800,6 +824,25 @@ def inscripcion_nadadores_interface():
                             else:
                                 st.error("❌ **Error en la importación**")
                                 st.markdown(message)
+                
+                # Mostrar resultados previos si existen
+                if 'bulk_import_completed' in st.session_state and st.session_state.bulk_import_completed:
+                    st.markdown("---")
+                    col1, col2 = st.columns([3, 1])
+                    
+                    with col1:
+                        if st.session_state.bulk_import_result[0]:
+                            st.info("📋 **Importación anterior completada**")
+                        else:
+                            st.warning("⚠️ **Última importación tuvo errores**")
+                    
+                    with col2:
+                        if st.button("🧹 Limpiar Resultados", help="Limpia los resultados de la importación anterior"):
+                            # Limpiar resultados
+                            for key in list(st.session_state.keys()):
+                                if key.startswith('bulk_import_'):
+                                    del st.session_state[key]
+                            st.rerun()
             
             else:
                 st.info("📤 Selecciona un archivo Excel para importar nadadores masivamente")
