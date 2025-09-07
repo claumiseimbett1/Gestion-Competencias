@@ -496,7 +496,8 @@ def sembrado_competencia_interface():
                                     "Equipo": nadador['equipo'],
                                     "Edad": nadador['edad'],
                                     "Categoría": nadador['categoria'],
-                                    "Tiempo": str(nadador['tiempo_inscripcion'])
+                                    "Tiempo Inscripción": str(nadador['tiempo_inscripcion']),
+                                    "Tiempo Competencia": ""
                                 })
                             else:
                                 carriles_data.append({
@@ -505,7 +506,8 @@ def sembrado_competencia_interface():
                                     "Equipo": "---",
                                     "Edad": "---",
                                     "Categoría": "---",
-                                    "Tiempo": "---"
+                                    "Tiempo Inscripción": "---",
+                                    "Tiempo Competencia": "---"
                                 })
                         
                         df_serie = pd.DataFrame(carriles_data)
@@ -600,7 +602,8 @@ def sembrado_competencia_interface():
                                     "Equipo": nadador['equipo'],
                                     "Edad": nadador['edad'],
                                     "Categoría": nadador['categoria'],
-                                    "Tiempo": str(nadador['tiempo_inscripcion'])
+                                    "Tiempo Inscripción": str(nadador['tiempo_inscripcion']),
+                                    "Tiempo Competencia": ""
                                 })
                             else:
                                 carriles_data.append({
@@ -609,7 +612,8 @@ def sembrado_competencia_interface():
                                     "Equipo": "---",
                                     "Edad": "---",
                                     "Categoría": "---",
-                                    "Tiempo": "---"
+                                    "Tiempo Inscripción": "---",
+                                    "Tiempo Competencia": "---"
                                 })
                         
                         df_serie = pd.DataFrame(carriles_data)
