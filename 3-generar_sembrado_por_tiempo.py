@@ -5,8 +5,37 @@ import math
 from openpyxl import Workbook
 from openpyxl.styles import Font
 
-# (Las funciones de ayuda como parse_time y seed_series son iguales, no las repito aquí para brevedad)
-# ... [copiar parse_time y seed_series del script anterior] ...
+# Funciones de ayuda
+def parse_time(time_val):
+    if pd.isna(time_val): return float('inf')
+    if hasattr(time_val, 'minute'): return time_val.minute * 60 + time_val.second + time_val.microsecond / 1_000_000
+    time_str = str(time_val).replace(',', '.')
+    try:
+        parts = time_str.split(':')
+        if len(parts) == 2: return int(parts[0]) * 60 + float(parts[1])
+        return float(time_str)
+    except (ValueError, IndexError): return float('inf')
+
+def seed_series(swimmers, lanes=8):
+    lane_order = [4, 5, 3, 6, 2, 7, 1, 8]
+    num_swimmers = len(swimmers)
+    if num_swimmers == 0: return []
+    num_series = math.ceil(num_swimmers / lanes)
+    series_list = []
+    sorted_swimmers = sorted(swimmers, key=lambda x: x['tiempo_en_segundos'])
+    all_series_swimmers = []
+    for i in range(num_series):
+        start_index = max(0, num_swimmers - (i + 1) * lanes)
+        end_index = num_swimmers - i * lanes
+        serie_swimmers = sorted_swimmers[start_index:end_index]
+        all_series_swimmers.append(serie_swimmers)
+    for i, serie_swimmers in enumerate(all_series_swimmers, 1):
+        serie_data = {"serie": i, "carriles": [None] * lanes}
+        for j, swimmer in enumerate(serie_swimmers):
+            target_lane = lane_order[j] - 1
+            serie_data["carriles"][target_lane] = swimmer
+        series_list.append(serie_data)
+    return series_list
 
 def main():
     print("Iniciando sembrado por TIEMPO (versión corregida)...")
@@ -75,38 +104,9 @@ def main():
     wb.save('sembrado_competencia_POR_TIEMPO.xlsx')
     print("¡Éxito! Archivo 'sembrado_competencia_POR_TIEMPO.xlsx' generado con la columna 'Categoría'.")
 
-# (No olvides copiar las funciones parse_time y seed_series en el script final)
-if __name__ == "__main__":
-    # Necesitas las funciones parse_time y seed_series definidas aquí para que corra
-    def parse_time(time_val):
-        if pd.isna(time_val): return float('inf')
-        if hasattr(time_val, 'minute'): return time_val.minute * 60 + time_val.second + time_val.microsecond / 1_000_000
-        time_str = str(time_val).replace(',', '.')
-        try:
-            parts = time_str.split(':')
-            if len(parts) == 2: return int(parts[0]) * 60 + float(parts[1])
-            return float(time_str)
-        except (ValueError, IndexError): return float('inf')
+def main_full():
+    """Función completa para usar desde app.py"""
+    main()
 
-    def seed_series(swimmers, lanes=8):
-        lane_order = [4, 5, 3, 6, 2, 7, 1, 8]
-        num_swimmers = len(swimmers)
-        if num_swimmers == 0: return []
-        num_series = math.ceil(num_swimmers / lanes)
-        series_list = []
-        sorted_swimmers = sorted(swimmers, key=lambda x: x['tiempo_en_segundos'])
-        all_series_swimmers = []
-        for i in range(num_series):
-            start_index = max(0, num_swimmers - (i + 1) * lanes)
-            end_index = num_swimmers - i * lanes
-            serie_swimmers = sorted_swimmers[start_index:end_index]
-            all_series_swimmers.append(serie_swimmers)
-        for i, serie_swimmers in enumerate(all_series_swimmers, 1):
-            serie_data = {"serie": i, "carriles": [None] * lanes}
-            for j, swimmer in enumerate(serie_swimmers):
-                target_lane = lane_order[j] - 1
-                serie_data["carriles"][target_lane] = swimmer
-            series_list.append(serie_data)
-        return series_list
-    
+if __name__ == "__main__":
     main()

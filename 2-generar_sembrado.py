@@ -126,5 +126,9 @@ def main():
     wb.save(ARCHIVO_SALIDA)
     print(f"¡Éxito! Archivo '{ARCHIVO_SALIDA}' generado con la columna 'Categoría'.")
 
+def main_full():
+    """Función completa para usar desde app.py"""
+    main()
+
 if __name__ == "__main__":
     main()

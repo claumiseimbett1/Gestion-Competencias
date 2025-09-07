@@ -108,12 +108,7 @@ pip install -r requirements.txt
 
 If you encounter issues with PDF generation, ReportLab might not be installed in your Python environment. Try these solutions:
 
-1. **Check your Python environment:**
-   ```bash
-   python3 diagnostico_reportlab.py
-   ```
-
-2. **Install ReportLab manually:**
+1. **Install ReportLab manually:**
    ```bash
    pip install reportlab
    # or
@@ -124,7 +119,7 @@ If you encounter issues with PDF generation, ReportLab might not be installed in
    python3 -m pip install reportlab
    ```
 
-3. **If using virtual environment:**
+2. **If using virtual environment:**
    ```bash
    # Activate your virtual environment first
    source venv/bin/activate  # Linux/Mac
@@ -135,7 +130,7 @@ If you encounter issues with PDF generation, ReportLab might not be installed in
    pip install reportlab
    ```
 
-4. **Restart Streamlit after installation:**
+3. **Restart Streamlit after installation:**
    ```bash
    streamlit run app.py
    ```

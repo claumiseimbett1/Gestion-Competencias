@@ -170,8 +170,7 @@ def main():
         [
             "🏠 Inicio",
             "✍️ Inscripción de Nadadores",
-            "📊 Generar Sembrado por Categoría",
-            "⏱️ Generar Sembrado por Tiempo",
+            "📊 Sembrado de Competencia",
             "🏆 Procesar Resultados",
             "📁 Gestión de Archivos"
         ]
@@ -181,10 +180,8 @@ def main():
         mostrar_inicio()
     elif opcion == "✍️ Inscripción de Nadadores":
         inscripcion_nadadores_interface()
-    elif opcion == "📊 Generar Sembrado por Categoría":
-        generar_sembrado_categoria()
-    elif opcion == "⏱️ Generar Sembrado por Tiempo":
-        generar_sembrado_tiempo()
+    elif opcion == "📊 Sembrado de Competencia":
+        sembrado_competencia_interface()
     elif opcion == "🏆 Procesar Resultados":
         procesar_resultados()
     elif opcion == "📁 Gestión de Archivos":
@@ -385,6 +382,131 @@ def generar_sembrado_tiempo():
                     file_name="sembrado_competencia_POR_TIEMPO.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
+
+def sembrado_competencia_interface():
+    st.markdown("## 📊 Sembrado de Competencia")
+    
+    st.markdown("""
+    <div class="info-message">
+        Genera los listados de participantes organizados por series y carriles para la competencia.
+        Elige el método de sembrado que mejor se adapte a tu competencia.
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Verificar archivo de inscripciones
+    if not os.path.exists("planilla_inscripcion.xlsx"):
+        st.markdown("""
+        <div class="warning-message">
+            ⚠️ No se encontró el archivo <strong>planilla_inscripcion.xlsx</strong>. 
+            Por favor, ve a la sección "Inscripción de Nadadores" para registrar participantes.
+        </div>
+        """, unsafe_allow_html=True)
+        return
+    
+    # Pestañas para diferentes métodos de sembrado
+    tab1, tab2, tab3 = st.tabs(["📊 Por Categorías", "⏱️ Por Tiempo", "✍️ Manual"])
+    
+    with tab1:
+        st.markdown("### 📊 Sembrado por Categorías")
+        st.markdown("""
+        **¿Cuándo usar este método?**
+        - Competencias federadas o oficiales
+        - Eventos con múltiples categorías de edad
+        - Cuando se busca competencia equitativa por grupos etarios
+        
+        **Cómo funciona:**
+        - Agrupa nadadores por categoría de edad
+        - Ordena por tiempo dentro de cada categoría
+        - Coloca los mejores tiempos en las series finales
+        """)
+        
+        col1, col2 = st.columns([1, 3])
+        
+        with col1:
+            if st.button("🚀 Generar Sembrado por Categorías", type="primary"):
+                with st.spinner("Generando sembrado por categorías..."):
+                    try:
+                        script1.main_full()
+                        st.markdown("""
+                            <div class="success-message">
+                                ✅ <strong>Sembrado generado exitosamente!</strong><br>
+                                Archivo creado: <code>sembrado_competencia.xlsx</code>
+                            </div>
+                            """, unsafe_allow_html=True)
+                    except Exception as e:
+                        st.error(f"Error al generar sembrado: {e}")
+        
+        with col2:
+            if os.path.exists("sembrado_competencia.xlsx"):
+                st.info("📄 Archivo generado disponible para descarga")
+                with open("sembrado_competencia.xlsx", "rb") as file:
+                    st.download_button(
+                        label="⬇️ Descargar Sembrado por Categorías",
+                        data=file.read(),
+                        file_name="sembrado_competencia.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+    
+    with tab2:
+        st.markdown("### ⏱️ Sembrado por Tiempo")
+        st.markdown("""
+        **¿Cuándo usar este método?**
+        - Competencias de clasificación o qualifiers
+        - Eventos abiertos sin restricción de edad
+        - Búsqueda de récords o marcas específicas
+        
+        **Cómo funciona:**
+        - Ignora las categorías de edad
+        - Ordena todos los nadadores por tiempo de inscripción
+        - Series más rápidas al final del evento
+        """)
+        
+        col1, col2 = st.columns([1, 3])
+        
+        with col1:
+            if st.button("🚀 Generar Sembrado por Tiempo", type="primary"):
+                with st.spinner("Generando sembrado por tiempo..."):
+                    try:
+                        script2.main()
+                        st.markdown("""
+                            <div class="success-message">
+                                ✅ <strong>Sembrado generado exitosamente!</strong><br>
+                                Archivo creado: <code>sembrado_competencia_POR_TIEMPO.xlsx</code>
+                            </div>
+                            """, unsafe_allow_html=True)
+                    except Exception as e:
+                        st.error(f"Error al generar sembrado: {e}")
+        
+        with col2:
+            if os.path.exists("sembrado_competencia_POR_TIEMPO.xlsx"):
+                st.info("📄 Archivo generado disponible para descarga")
+                with open("sembrado_competencia_POR_TIEMPO.xlsx", "rb") as file:
+                    st.download_button(
+                        label="⬇️ Descargar Sembrado por Tiempo",
+                        data=file.read(),
+                        file_name="sembrado_competencia_POR_TIEMPO.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+    
+    with tab3:
+        st.markdown("### ✍️ Sembrado Manual")
+        st.markdown("""
+        **¿Cuándo usar este método?**
+        - Competencias con criterios especiales
+        - Eventos ceremoniales o de exhibición
+        - Cuando necesitas control total sobre la organización
+        """)
+        
+        st.info("🚧 **Próximamente**: Interfaz para crear sembrados manuales con drag & drop y organización personalizada.")
+        
+        # Placeholder para funcionalidad futura
+        st.markdown("""
+        **Funcionalidades planeadas:**
+        - 📋 Vista de todas las pruebas inscritas
+        - 🔄 Organización manual de series y carriles
+        - 👥 Agrupación personalizada de nadadores
+        - 📊 Vista previa del sembrado antes de generar
+        """)
 
 def procesar_resultados():
     st.markdown("## 🏆 Procesar Resultados")
