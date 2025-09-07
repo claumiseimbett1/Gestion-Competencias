@@ -1039,6 +1039,66 @@ def gestion_archivos():
                 except Exception as e:
                     st.error(f"❌ Error al restaurar: {e}")
     
+    # Opciones de reset/limpiar datos
+    st.markdown("### 🔄 Reset de Datos de Competencia")
+    
+    col_reset1, col_reset2, col_reset3 = st.columns([2, 1, 1])
+    
+    with col_reset1:
+        st.info("🗑️ Opciones para limpiar datos y empezar una nueva competencia")
+    
+    with col_reset2:
+        if st.button("🧹 Limpiar Todo", type="secondary", help="Eliminar archivos de sembrado, resultados y session state"):
+            files_to_delete = [
+                "sembrado_competencia.xlsx",
+                "sembrado_competencia_POR_TIEMPO.xlsx", 
+                "resultados_con_tiempos.xlsx",
+                "reporte_premiacion_final_CORREGIDO.xlsx"
+            ]
+            
+            # Limpiar archivos dinámicos también
+            import glob
+            dynamic_files = glob.glob("resultados_desde_sembrado_*.xlsx")
+            files_to_delete.extend(dynamic_files)
+            
+            deleted_files = []
+            for file in files_to_delete:
+                if os.path.exists(file):
+                    try:
+                        os.remove(file)
+                        deleted_files.append(file)
+                    except Exception as e:
+                        st.error(f"❌ Error eliminando {file}: {e}")
+            
+            # Limpiar session state
+            keys_to_clear = [
+                'seeding_preview_cat', 'seeding_preview_time',
+                'updated_seeding_cat', 'updated_seeding_time'
+            ]
+            for key in keys_to_clear:
+                if key in st.session_state:
+                    del st.session_state[key]
+            
+            if deleted_files:
+                st.success(f"✅ Eliminados {len(deleted_files)} archivos")
+                st.success("🔄 ¡Listo para nueva competencia!")
+                st.rerun()
+            else:
+                st.info("ℹ️ No se encontraron archivos para eliminar")
+    
+    with col_reset3:
+        if st.button("👥 Reset Inscripciones", help="Limpiar solo la planilla de inscripción para nuevos nadadores"):
+            if os.path.exists("planilla_inscripcion.xlsx"):
+                try:
+                    os.remove("planilla_inscripcion.xlsx")
+                    st.success("✅ Planilla de inscripción eliminada")
+                    st.info("🏊‍♂️ Ahora puedes inscribir nuevos nadadores")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error: {e}")
+            else:
+                st.info("ℹ️ No hay planilla de inscripción")
+    
     # Mostrar archivos existentes
     st.markdown("### 📄 Archivos Disponibles")
     
