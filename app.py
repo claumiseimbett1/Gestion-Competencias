@@ -3,6 +3,7 @@ import pandas as pd
 import io
 import os
 from pathlib import Path
+from datetime import datetime
 #import subprocess  # No longer needed
 import sys
 
@@ -420,7 +421,7 @@ def sembrado_competencia_interface():
         - Coloca los mejores tiempos en las series finales
         """)
         
-        col1, col2 = st.columns([1, 3])
+        col1, col2, col3 = st.columns([1, 1, 2])
         
         with col1:
             if st.button("🚀 Generar Sembrado por Categorías", type="primary"):
@@ -433,10 +434,24 @@ def sembrado_competencia_interface():
                                 Archivo creado: <code>sembrado_competencia.xlsx</code>
                             </div>
                             """, unsafe_allow_html=True)
+                        st.rerun()
                     except Exception as e:
                         st.error(f"Error al generar sembrado: {e}")
         
         with col2:
+            if st.button("👁️ Visualizar Sembrado", help="Ver preview del sembrado antes de descargar"):
+                with st.spinner("Cargando visualización..."):
+                    try:
+                        seeding_data, message = script1.get_seeding_data()
+                        if seeding_data:
+                            st.session_state['seeding_preview_cat'] = seeding_data
+                            st.success("✅ Visualización cargada")
+                        else:
+                            st.error(message)
+                    except Exception as e:
+                        st.error(f"Error al cargar visualización: {e}")
+        
+        with col3:
             if os.path.exists("sembrado_competencia.xlsx"):
                 st.info("📄 Archivo generado disponible para descarga")
                 with open("sembrado_competencia.xlsx", "rb") as file:
@@ -446,6 +461,55 @@ def sembrado_competencia_interface():
                         file_name="sembrado_competencia.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
+        
+        # Mostrar visualización del sembrado si está disponible
+        if 'seeding_preview_cat' in st.session_state:
+            st.markdown("---")
+            st.markdown("### 👁️ Vista Previa del Sembrado por Categorías")
+            
+            seeding_data = st.session_state['seeding_preview_cat']
+            
+            # Selector de evento para visualizar
+            eventos_disponibles = list(seeding_data.keys())
+            if eventos_disponibles:
+                evento_seleccionado = st.selectbox(
+                    "Selecciona un evento para visualizar:",
+                    eventos_disponibles,
+                    key="evento_cat_preview"
+                )
+                
+                if evento_seleccionado:
+                    series = seeding_data[evento_seleccionado]['series']
+                    st.markdown(f"**{evento_seleccionado}**")
+                    
+                    # Mostrar cada serie
+                    for serie in series:
+                        st.markdown(f"#### Serie {serie['serie']}")
+                        
+                        # Crear tabla de la serie
+                        carriles_data = []
+                        for i, nadador in enumerate(serie['carriles'], 1):
+                            if nadador:
+                                carriles_data.append({
+                                    "Carril": i,
+                                    "Nombre": nadador['nombre'],
+                                    "Equipo": nadador['equipo'],
+                                    "Edad": nadador['edad'],
+                                    "Categoría": nadador['categoria'],
+                                    "Tiempo": str(nadador['tiempo_inscripcion'])
+                                })
+                            else:
+                                carriles_data.append({
+                                    "Carril": i,
+                                    "Nombre": "---",
+                                    "Equipo": "---",
+                                    "Edad": "---",
+                                    "Categoría": "---",
+                                    "Tiempo": "---"
+                                })
+                        
+                        df_serie = pd.DataFrame(carriles_data)
+                        st.dataframe(df_serie, use_container_width=True, hide_index=True)
     
     with tab2:
         st.markdown("### ⏱️ Sembrado por Tiempo")
@@ -461,10 +525,10 @@ def sembrado_competencia_interface():
         - Series más rápidas al final del evento
         """)
         
-        col1, col2 = st.columns([1, 3])
+        col1, col2, col3 = st.columns([1, 1, 2])
         
         with col1:
-            if st.button("🚀 Generar Sembrado por Tiempo", type="primary"):
+            if st.button("🚀 Generar Sembrado por Tiempo", type="primary", key="gen_tiempo"):
                 with st.spinner("Generando sembrado por tiempo..."):
                     try:
                         script2.main()
@@ -474,10 +538,24 @@ def sembrado_competencia_interface():
                                 Archivo creado: <code>sembrado_competencia_POR_TIEMPO.xlsx</code>
                             </div>
                             """, unsafe_allow_html=True)
+                        st.rerun()
                     except Exception as e:
                         st.error(f"Error al generar sembrado: {e}")
         
         with col2:
+            if st.button("👁️ Visualizar Sembrado", help="Ver preview del sembrado antes de descargar", key="view_tiempo"):
+                with st.spinner("Cargando visualización..."):
+                    try:
+                        seeding_data, message = script2.get_seeding_data()
+                        if seeding_data:
+                            st.session_state['seeding_preview_time'] = seeding_data
+                            st.success("✅ Visualización cargada")
+                        else:
+                            st.error(message)
+                    except Exception as e:
+                        st.error(f"Error al cargar visualización: {e}")
+        
+        with col3:
             if os.path.exists("sembrado_competencia_POR_TIEMPO.xlsx"):
                 st.info("📄 Archivo generado disponible para descarga")
                 with open("sembrado_competencia_POR_TIEMPO.xlsx", "rb") as file:
@@ -487,6 +565,107 @@ def sembrado_competencia_interface():
                         file_name="sembrado_competencia_POR_TIEMPO.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
+        
+        # Mostrar visualización del sembrado si está disponible
+        if 'seeding_preview_time' in st.session_state:
+            st.markdown("---")
+            st.markdown("### 👁️ Vista Previa del Sembrado por Tiempo")
+            
+            seeding_data = st.session_state['seeding_preview_time']
+            
+            # Selector de evento para visualizar
+            eventos_disponibles = list(seeding_data.keys())
+            if eventos_disponibles:
+                evento_seleccionado = st.selectbox(
+                    "Selecciona un evento para visualizar:",
+                    eventos_disponibles,
+                    key="evento_time_preview"
+                )
+                
+                if evento_seleccionado:
+                    series = seeding_data[evento_seleccionado]['series']
+                    st.markdown(f"**{evento_seleccionado}**")
+                    
+                    # Mostrar cada serie
+                    for serie in series:
+                        st.markdown(f"#### Serie {serie['serie']}")
+                        
+                        # Crear tabla de la serie
+                        carriles_data = []
+                        for i, nadador in enumerate(serie['carriles'], 1):
+                            if nadador:
+                                carriles_data.append({
+                                    "Carril": i,
+                                    "Nombre": nadador['nombre'],
+                                    "Equipo": nadador['equipo'],
+                                    "Edad": nadador['edad'],
+                                    "Categoría": nadador['categoria'],
+                                    "Tiempo": str(nadador['tiempo_inscripcion'])
+                                })
+                            else:
+                                carriles_data.append({
+                                    "Carril": i,
+                                    "Nombre": "---",
+                                    "Equipo": "---",
+                                    "Edad": "---",
+                                    "Categoría": "---",
+                                    "Tiempo": "---"
+                                })
+                        
+                        df_serie = pd.DataFrame(carriles_data)
+                        st.dataframe(df_serie, use_container_width=True, hide_index=True)
+        
+        # Sección para procesar sembrado con tiempos
+        st.markdown("---")
+        st.markdown("### 🔄 Procesar Sembrado con Tiempos de Competencia")
+        st.markdown("""
+        Si ya tienes un archivo de sembrado con los tiempos de competencia agregados,
+        puedes convertirlo a formato de resultados aquí.
+        """)
+        
+        col_upload, col_process = st.columns([2, 1])
+        
+        with col_upload:
+            uploaded_seeding = st.file_uploader(
+                "Sube tu archivo de sembrado con tiempos agregados:",
+                type=['xlsx'],
+                key="seeding_with_times_upload",
+                help="Archivo Excel de sembrado donde ya agregaste los tiempos en la columna 'Tiempo Competencia'"
+            )
+        
+        with col_process:
+            if uploaded_seeding is not None:
+                if st.button("🔄 Convertir a Resultados", type="secondary"):
+                    with st.spinner("Procesando tiempos..."):
+                        try:
+                            # Guardar archivo temporalmente
+                            temp_file = f"temp_seeding_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+                            with open(temp_file, "wb") as f:
+                                f.write(uploaded_seeding.getbuffer())
+                            
+                            # Importar y usar la función de procesamiento
+                            import importlib.util
+                            spec = importlib.util.spec_from_file_location("processor", "5-procesar_sembrado_tiempos.py")
+                            processor = importlib.util.module_from_spec(spec)
+                            spec.loader.exec_module(processor)
+                            
+                            success, message = processor.process_seeding_with_times(temp_file)
+                            
+                            # Limpiar archivo temporal
+                            if os.path.exists(temp_file):
+                                os.remove(temp_file)
+                            
+                            if success:
+                                st.success(f"✅ {message}")
+                                st.info("📄 El archivo de resultados está disponible para descarga en la sección de gestión de archivos")
+                            else:
+                                st.error(f"❌ {message}")
+                                
+                        except Exception as e:
+                            st.error(f"❌ Error al procesar archivo: {e}")
+                            # Limpiar archivo temporal en caso de error
+                            if os.path.exists(temp_file):
+                                os.remove(temp_file)
     
     with tab3:
         st.markdown("### ✍️ Sembrado Manual")
@@ -727,6 +906,12 @@ def gestion_archivos():
         "resultados_con_tiempos.xlsx": "🏆 Resultados de Competencia",
         "reporte_premiacion_final_CORREGIDO.xlsx": "🏅 Reporte de Premiación"
     }
+    
+    # Detectar archivos dinámicos generados por el procesador de sembrado
+    import glob
+    dynamic_result_files = glob.glob("resultados_desde_sembrado_*.xlsx")
+    for file in dynamic_result_files:
+        archivos[file] = "🏁 Resultados desde Sembrado"
     
     for archivo, descripcion in archivos.items():
         if os.path.exists(archivo):

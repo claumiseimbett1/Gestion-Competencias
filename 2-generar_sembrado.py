@@ -103,10 +103,14 @@ def main():
                 ws.cell(row=fila_actual, column=1, value=f"Serie {serie['serie']}").font = Font(bold=True)
                 fila_actual += 1
                 
-                # <-- ¡CORRECCIÓN CLAVE! Añadimos la columna 'Categoría' al reporte.
-                headers = ["Carril", "Nombre", "Equipo", "Edad", "Categoría", "Tiempo Inscripción"]
+                # Headers con columna adicional para tiempo de competencia
+                headers = ["Carril", "Nombre", "Equipo", "Edad", "Categoría", "Tiempo Inscripción", "Tiempo Competencia"]
                 for col, header in enumerate(headers, 1):
-                    ws.cell(row=fila_actual, column=col, value=header).font = Font(bold=True)
+                    cell = ws.cell(row=fila_actual, column=col, value=header)
+                    cell.font = Font(bold=True)
+                    # Destacar la columna de tiempo de competencia
+                    if header == "Tiempo Competencia":
+                        cell.font = Font(bold=True, color="FF0000")  # Rojo para destacar
                 fila_actual += 1
                 
                 for carril_num, nadador in enumerate(serie['carriles'], 1):
@@ -117,14 +121,50 @@ def main():
                         ws.cell(row=fila_actual, column=2, value=nadador['nombre'])
                         ws.cell(row=fila_actual, column=3, value=nadador['equipo'])
                         ws.cell(row=fila_actual, column=4, value=nadador['edad'])
-                        ws.cell(row=fila_actual, column=5, value=nadador['categoria']) # <-- Dato añadido            
+                        ws.cell(row=fila_actual, column=5, value=nadador['categoria'])           
                         ws.cell(row=fila_actual, column=6, value=tiempo_str)
+                        # Columna vacía para tiempo de competencia (editable)
+                        comp_cell = ws.cell(row=fila_actual, column=7, value="")
+                        comp_cell.font = Font(color="0000FF")  # Azul para indicar que es editable
                     fila_actual += 1
                 fila_actual += 1
     
     ws.column_dimensions['B'].width = 40
     wb.save(ARCHIVO_SALIDA)
     print(f"¡Éxito! Archivo '{ARCHIVO_SALIDA}' generado con la columna 'Categoría'.")
+
+def get_seeding_data():
+    """Retorna los datos del sembrado para visualización sin generar archivo"""
+    try:
+        df = pd.read_excel(ARCHIVO_ENTRADA)
+        info_cols = ['NOMBRE Y AP', 'EQUIPO', 'EDAD', 'CAT.', 'SEXO']
+        event_cols = [col for col in df.columns if col not in info_cols and 'Nø' not in col and 'FECHA DE NA' not in col]
+    except Exception as e:
+        return None, f"Error al leer el archivo de Excel: {e}"
+
+    eventos = {}
+    for index, row in df.iterrows():
+        if pd.isna(row['NOMBRE Y AP']): continue
+        sexo = row['SEXO'].upper()
+        categoria = row['CAT.']
+        
+        for prueba in event_cols:
+            if pd.notna(row[prueba]):
+                nombre_prueba = f"{prueba} - {categoria} - {'Mujeres' if sexo == 'F' else 'Hombres'}"
+                if nombre_prueba not in eventos: eventos[nombre_prueba] = []
+                
+                nadador_info = {
+                    "nombre": row['NOMBRE Y AP'], "equipo": row['EQUIPO'], "edad": int(row['EDAD']),
+                    "categoria": row['CAT.'],
+                    "tiempo_inscripcion": row[prueba], "tiempo_en_segundos": parse_time(row[prueba])
+                }
+                eventos[nombre_prueba].append(nadador_info)
+
+    sembrado_final = {}
+    for nombre_prueba, nadadores in eventos.items():
+        sembrado_final[nombre_prueba] = {"series": seed_series(nadadores, CARRILES_PISCINA)}
+
+    return sembrado_final, "Sembrado generado exitosamente"
 
 def main_full():
     """Función completa para usar desde app.py"""
