@@ -573,20 +573,7 @@ def sembrado_competencia_interface():
                         # Tabla editable con solo la columna Tiempo Competencia editable
                         edited_df = st.data_editor(
                             df_evento,
-                            column_config={
-                                "Serie": st.column_config.NumberColumn("Serie", disabled=True),
-                                "Carril": st.column_config.NumberColumn("Carril", disabled=True),
-                                "Nombre": st.column_config.TextColumn("Nombre", disabled=True),
-                                "Equipo": st.column_config.TextColumn("Equipo", disabled=True),
-                                "Edad": st.column_config.NumberColumn("Edad", disabled=True),
-                                "Categoría": st.column_config.TextColumn("Categoría", disabled=True),
-                                "Tiempo Inscripción": st.column_config.TextColumn("Tiempo Inscripción", disabled=True),
-                                "Tiempo Competencia": st.column_config.TextColumn(
-                                    "Tiempo Competencia ✏️",
-                                    help="Ingresa el tiempo real de la competencia (formato: MM:SS.dd)",
-                                    placeholder="MM:SS.dd"
-                                )
-                            },
+                            disabled=["Serie", "Carril", "Nombre", "Equipo", "Edad", "Categoría", "Tiempo Inscripción"],
                             use_container_width=True,
                             hide_index=True,
                             key=f"editor_cat_{evento_seleccionado}"
@@ -753,20 +740,7 @@ def sembrado_competencia_interface():
                         # Tabla editable con solo la columna Tiempo Competencia editable
                         edited_df = st.data_editor(
                             df_evento,
-                            column_config={
-                                "Serie": st.column_config.NumberColumn("Serie", disabled=True),
-                                "Carril": st.column_config.NumberColumn("Carril", disabled=True),
-                                "Nombre": st.column_config.TextColumn("Nombre", disabled=True),
-                                "Equipo": st.column_config.TextColumn("Equipo", disabled=True),
-                                "Edad": st.column_config.NumberColumn("Edad", disabled=True),
-                                "Categoría": st.column_config.TextColumn("Categoría", disabled=True),
-                                "Tiempo Inscripción": st.column_config.TextColumn("Tiempo Inscripción", disabled=True),
-                                "Tiempo Competencia": st.column_config.TextColumn(
-                                    "Tiempo Competencia ✏️",
-                                    help="Ingresa el tiempo real de la competencia (formato: MM:SS.dd)",
-                                    placeholder="MM:SS.dd"
-                                )
-                            },
+                            disabled=["Serie", "Carril", "Nombre", "Equipo", "Edad", "Categoría", "Tiempo Inscripción"],
                             use_container_width=True,
                             hide_index=True,
                             key=f"editor_time_{evento_seleccionado}"
