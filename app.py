@@ -737,10 +737,78 @@ def inscripcion_nadadores_interface():
             # BÚSQUEDA EN BASE DE DATOS
             st.markdown("### Buscar Nadador en Base de Datos")
             
+            # Estado de la base de datos
+            with st.container():
+                col_db1, col_db2 = st.columns([2, 1])
+                
+                with col_db1:
+                    if os.path.exists("BASE-DE-DATOS.xlsx"):
+                        try:
+                            xl_file = pd.ExcelFile("BASE-DE-DATOS.xlsx")
+                            target_sheets = ['FPROYECCION 2025T', 'M. PROYECCION 2025']
+                            available_sheets = [s for s in target_sheets if s in xl_file.sheet_names]
+                            
+                            if available_sheets:
+                                # Contar registros
+                                total_records = 0
+                                for sheet in available_sheets:
+                                    try:
+                                        df = pd.read_excel("BASE-DE-DATOS.xlsx", sheet_name=sheet)
+                                        total_records += len(df)
+                                    except:
+                                        pass
+                                
+                                st.success(f"✅ Base de datos activa: {total_records:,} atletas ({len(available_sheets)} hojas)")
+                            else:
+                                st.warning("⚠️ Base de datos sin hojas válidas")
+                        except Exception as e:
+                            st.error("❌ Error al leer base de datos")
+                    else:
+                        st.error("❌ No se encuentra base de datos")
+                
+                with col_db2:
+                    with st.popover("🔄 Cambiar BD", help="Cargar una base de datos diferente"):
+                        st.markdown("**Cargar nueva base de datos:**")
+                        uploaded_db = st.file_uploader(
+                            "Archivo de base de datos",
+                            type=['xlsx'],
+                            key="db_for_search",
+                            help="Debe contener hojas FPROYECCION 2025T y/o M. PROYECCION 2025"
+                        )
+                        
+                        if uploaded_db:
+                            try:
+                                # Guardar como archivo temporal
+                                with open("BASE-DE-DATOS-TEMP.xlsx", "wb") as f:
+                                    f.write(uploaded_db.getbuffer())
+                                
+                                # Verificar estructura
+                                xl_file = pd.ExcelFile("BASE-DE-DATOS-TEMP.xlsx")
+                                target_sheets = ['FPROYECCION 2025T', 'M. PROYECCION 2025']
+                                available_sheets = [s for s in target_sheets if s in xl_file.sheet_names]
+                                
+                                if available_sheets:
+                                    # Crear backup si existe BD actual
+                                    if os.path.exists("BASE-DE-DATOS.xlsx"):
+                                        os.rename("BASE-DE-DATOS.xlsx", "BASE-DE-DATOS-BACKUP.xlsx")
+                                    os.rename("BASE-DE-DATOS-TEMP.xlsx", "BASE-DE-DATOS.xlsx")
+                                    
+                                    st.success("✅ Base de datos cargada")
+                                    st.rerun()
+                                else:
+                                    os.remove("BASE-DE-DATOS-TEMP.xlsx")
+                                    st.error("❌ Archivo sin hojas válidas")
+                            except Exception as e:
+                                st.error(f"❌ Error: {e}")
+                                if os.path.exists("BASE-DE-DATOS-TEMP.xlsx"):
+                                    os.remove("BASE-DE-DATOS-TEMP.xlsx")
+            
+            st.markdown("---")
+            
             search_term = st.text_input(
                 "Buscar nadador por nombre:",
                 placeholder="Escribe el nombre del nadador...",
-                help="Se buscará en la base de datos existente"
+                help="Se buscará en la base de datos activa"
             )
             
             if search_term and len(search_term.strip()) >= 3:
