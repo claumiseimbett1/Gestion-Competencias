@@ -758,3 +758,148 @@ class SwimmerRegistration:
         except Exception as e:
             print(f"Error generando PDF: {str(e)}")
             return None
+    
+    def bulk_import_from_excel(self, uploaded_file):
+        """Importa múltiples nadadores desde un archivo Excel"""
+        try:
+            # Leer archivo Excel
+            df = pd.read_excel(uploaded_file)
+            
+            # Validar columnas requeridas
+            required_columns = ['NOMBRE Y AP', 'EQUIPO', 'EDAD', 'CAT.', 'SEXO']
+            missing_columns = [col for col in required_columns if col not in df.columns]
+            if missing_columns:
+                return False, f"Faltan columnas requeridas: {', '.join(missing_columns)}"
+            
+            # Filtrar filas con datos válidos
+            df = df.dropna(subset=['NOMBRE Y AP'])
+            
+            if len(df) == 0:
+                return False, "No se encontraron nadadores válidos en el archivo"
+            
+            imported_swimmers = []
+            errors = []
+            duplicates = []
+            
+            # Procesar cada nadador
+            for index, row in df.iterrows():
+                try:
+                    swimmer_name = str(row['NOMBRE Y AP']).strip()
+                    if not swimmer_name or swimmer_name.lower() == 'nan':
+                        continue
+                        
+                    # Datos básicos del nadador
+                    team = str(row['EQUIPO']).strip() if pd.notna(row['EQUIPO']) else ""
+                    age = int(row['EDAD']) if pd.notna(row['EDAD']) else 0
+                    category = str(row['CAT.']).strip() if pd.notna(row['CAT.']) else ""
+                    gender = str(row['SEXO']).strip().upper() if pd.notna(row['SEXO']) else ""
+                    
+                    # Validar datos básicos
+                    if age <= 0:
+                        errors.append(f"Fila {index + 2}: Edad inválida para {swimmer_name}")
+                        continue
+                    
+                    if gender not in ['M', 'F']:
+                        errors.append(f"Fila {index + 2}: Sexo debe ser M o F para {swimmer_name}")
+                        continue
+                    
+                    # Auto-generar categoría si no se proporciona
+                    if not category:
+                        category = self.get_category_by_age(age, gender)
+                    
+                    # Verificar si ya existe el nadador
+                    if os.path.exists(self.archivo_inscripcion):
+                        existing_df = pd.read_excel(self.archivo_inscripcion)
+                        if swimmer_name.lower() in existing_df['NOMBRE Y AP'].str.lower().values:
+                            duplicates.append(swimmer_name)
+                            continue
+                    
+                    # Procesar tiempos de las pruebas
+                    events_data = {}
+                    for event in self.swimming_events:
+                        if event in df.columns and pd.notna(row[event]):
+                            time_value = row[event]
+                            # Convertir a string si es numérico
+                            if isinstance(time_value, (int, float)):
+                                time_str = f"{int(time_value//60):02d}:{time_value%60:05.2f}"
+                            else:
+                                time_str = str(time_value).strip()
+                            
+                            # Validar formato de tiempo
+                            if self.validate_time_format(time_str):
+                                events_data[event] = time_str
+                    
+                    # Solo agregar nadadores con al menos una prueba
+                    if events_data:
+                        # Crear nuevo nadador
+                        new_swimmer = {
+                            'NOMBRE Y AP': swimmer_name,
+                            'EQUIPO': team,
+                            'EDAD': age,
+                            'CAT.': category,
+                            'SEXO': gender,
+                            **{event: events_data.get(event, "") for event in self.swimming_events}
+                        }
+                        
+                        imported_swimmers.append(new_swimmer)
+                    else:
+                        errors.append(f"Fila {index + 2}: {swimmer_name} no tiene pruebas válidas")
+                        
+                except Exception as e:
+                    errors.append(f"Fila {index + 2}: Error procesando datos - {str(e)}")
+                    continue
+            
+            # Guardar nadadores importados
+            if imported_swimmers:
+                success = self.save_swimmers_to_excel(imported_swimmers)
+                if success:
+                    result_msg = f"✅ Se importaron {len(imported_swimmers)} nadadores correctamente"
+                    
+                    if duplicates:
+                        result_msg += f"\n⚠️ Se omitieron {len(duplicates)} nadadores duplicados: {', '.join(duplicates[:3])}"
+                        if len(duplicates) > 3:
+                            result_msg += f" y {len(duplicates) - 3} más"
+                    
+                    if errors:
+                        result_msg += f"\n❌ {len(errors)} errores encontrados"
+                        if len(errors) <= 5:
+                            result_msg += f":\n• " + "\n• ".join(errors)
+                        else:
+                            result_msg += f":\n• " + "\n• ".join(errors[:5]) + f"\n• ... y {len(errors) - 5} errores más"
+                    
+                    return True, result_msg
+                else:
+                    return False, "Error guardando los datos importados"
+            else:
+                return False, f"No se pudo importar ningún nadador. Errores:\n• " + "\n• ".join(errors[:10])
+                
+        except Exception as e:
+            return False, f"Error leyendo el archivo: {str(e)}"
+    
+    def save_swimmers_to_excel(self, swimmers_data):
+        """Guarda múltiples nadadores al archivo Excel"""
+        try:
+            # Cargar datos existentes o crear nuevo DataFrame
+            if os.path.exists(self.archivo_inscripcion):
+                existing_df = pd.read_excel(self.archivo_inscripcion)
+                new_df = pd.DataFrame(swimmers_data)
+                combined_df = pd.concat([existing_df, new_df], ignore_index=True)
+            else:
+                combined_df = pd.DataFrame(swimmers_data)
+            
+            # Asegurar que todas las columnas estén presentes
+            all_columns = ['NOMBRE Y AP', 'EQUIPO', 'EDAD', 'CAT.', 'SEXO'] + self.swimming_events
+            for col in all_columns:
+                if col not in combined_df.columns:
+                    combined_df[col] = ""
+            
+            # Reordenar columnas
+            combined_df = combined_df[all_columns]
+            
+            # Guardar archivo
+            combined_df.to_excel(self.archivo_inscripcion, index=False)
+            return True
+            
+        except Exception as e:
+            print(f"Error guardando nadadores: {str(e)}")
+            return False

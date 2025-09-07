@@ -549,7 +549,7 @@ def inscripcion_nadadores_interface():
         # Método de inscripción
         inscripcion_method = st.radio(
             "Método de inscripción:",
-            ["✍️ Manual", "🔍 Buscar en Base de Datos"],
+            ["✍️ Manual", "🔍 Buscar en Base de Datos", "📤 Importar desde Excel"],
             horizontal=True
         )
         
@@ -635,7 +635,7 @@ def inscripcion_nadadores_interface():
                         else:
                             st.error(message)
         
-        else:
+        elif inscripcion_method == "🔍 Buscar en Base de Datos":
             # BÚSQUEDA EN BASE DE DATOS
             st.markdown("### Buscar Nadador en Base de Datos")
             
@@ -712,6 +712,97 @@ def inscripcion_nadadores_interface():
                 st.success(f"✅ Base de datos encontrada: `{registration_system.archivo_base_datos}`")
             else:
                 st.warning(f"⚠️ No se encontró la base de datos: `{registration_system.archivo_base_datos}`")
+        
+        elif inscripcion_method == "📤 Importar desde Excel":
+            # IMPORTACIÓN MASIVA DESDE EXCEL
+            st.markdown("### Importar Nadadores desde Excel")
+            
+            st.markdown("""
+            <div class="info-message">
+                <h4>📋 Instrucciones para la importación masiva:</h4>
+                <ol>
+                    <li>Utiliza un archivo Excel con la misma estructura que el archivo <code>planilla_inscripcion.xlsx</code></li>
+                    <li>Las columnas requeridas son: <strong>NOMBRE Y AP</strong>, <strong>EQUIPO</strong>, <strong>EDAD</strong>, <strong>CAT.</strong>, <strong>SEXO</strong></li>
+                    <li>Las columnas de pruebas deben tener los tiempos en formato MM:SS.dd (ejemplo: 1:25.30)</li>
+                    <li>Los nadadores duplicados serán omitidos automáticamente</li>
+                    <li>La categoría se calculará automáticamente si no se proporciona</li>
+                </ol>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Descarga del template
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                st.markdown("#### 📥 Subir Archivo de Inscripciones")
+            
+            with col2:
+                if os.path.exists("planilla_inscripcion.xlsx"):
+                    with open("planilla_inscripcion.xlsx", "rb") as file:
+                        st.download_button(
+                            label="📄 Descargar Template",
+                            data=file.read(),
+                            file_name="template_inscripciones.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            help="Descarga el archivo actual como plantilla"
+                        )
+            
+            # Upload del archivo
+            uploaded_file = st.file_uploader(
+                "Selecciona el archivo Excel con los nadadores:",
+                type=['xlsx', 'xls'],
+                help="El archivo debe contener las columnas requeridas y los datos de los nadadores"
+            )
+            
+            if uploaded_file is not None:
+                st.success(f"✅ Archivo cargado: {uploaded_file.name}")
+                
+                # Vista previa del archivo
+                if st.checkbox("👁️ Ver vista previa del archivo"):
+                    try:
+                        preview_df = pd.read_excel(uploaded_file)
+                        st.markdown("**Vista previa (primeras 5 filas):**")
+                        st.dataframe(preview_df.head())
+                        st.info(f"Total de filas en el archivo: {len(preview_df)}")
+                    except Exception as e:
+                        st.error(f"Error al leer el archivo: {str(e)}")
+                
+                # Botón de importación
+                st.markdown("---")
+                col1, col2, col3 = st.columns([1, 1, 2])
+                
+                with col2:
+                    if st.button("🚀 Importar Nadadores", type="primary", use_container_width=True):
+                        with st.spinner("Importando nadadores..."):
+                            success, message = registration_system.bulk_import_from_excel(uploaded_file)
+                            
+                            if success:
+                                st.success("✅ **Importación completada exitosamente!**")
+                                st.markdown(message)
+                                st.balloons()
+                                
+                                # Mostrar estadísticas actualizadas
+                                updated_swimmers = registration_system.get_swimmers_list()
+                                if updated_swimmers:
+                                    st.markdown("---")
+                                    st.markdown("### 📊 Estado Actualizado de Inscripciones")
+                                    
+                                    total_swimmers = len(updated_swimmers)
+                                    male_count = len([s for s in updated_swimmers if s['gender'] == 'M'])
+                                    female_count = len([s for s in updated_swimmers if s['gender'] == 'F'])
+                                    
+                                    col1, col2, col3 = st.columns(3)
+                                    with col1:
+                                        st.metric("Total Nadadores", total_swimmers)
+                                    with col2:
+                                        st.metric("Masculinos", male_count)
+                                    with col3:
+                                        st.metric("Femeninos", female_count)
+                            else:
+                                st.error("❌ **Error en la importación**")
+                                st.markdown(message)
+            
+            else:
+                st.info("📤 Selecciona un archivo Excel para importar nadadores masivamente")
     
     with tab2:
         st.markdown("### Nadadores Inscritos")
