@@ -100,24 +100,43 @@ class SwimmerRegistration:
         if not time_str or time_str.strip() == "":
             return True, None
             
-        time_str = time_str.strip().replace(',', '.')
+        # Normalizar el formato: coma a punto, eliminar espacios
+        time_str = str(time_str).strip().replace(',', '.')
+        
+        # Manejar casos especiales de Excel
+        if time_str.lower() in ['nan', 'none', 'null']:
+            return True, None
         
         try:
+            # Formato MM:SS.dd o M:SS.dd
             if ':' in time_str:
                 parts = time_str.split(':')
                 if len(parts) == 2:
-                    minutes = int(parts[0])
+                    minutes = int(float(parts[0]))  # Usar float primero por si hay decimales
                     seconds = float(parts[1])
                     if 0 <= minutes <= 59 and 0 <= seconds < 60:
-                        return True, time_str
+                        # Formatear consistentemente
+                        formatted_time = f"{minutes:02d}:{seconds:05.2f}"
+                        return True, formatted_time
+            
+            # Formato solo segundos (SS.dd o SSS.dd)
             else:
-                seconds = float(time_str)
-                if 0 <= seconds <= 3600:
-                    return True, time_str
-        except ValueError:
+                total_seconds = float(time_str)
+                if 0 <= total_seconds <= 3600:  # Máximo 1 hora
+                    # Convertir a formato MM:SS.dd si es mayor a 60 segundos
+                    if total_seconds >= 60:
+                        minutes = int(total_seconds // 60)
+                        seconds = total_seconds % 60
+                        formatted_time = f"{minutes:02d}:{seconds:05.2f}"
+                    else:
+                        formatted_time = f"00:{total_seconds:05.2f}"
+                    return True, formatted_time
+                    
+        except (ValueError, TypeError) as e:
+            # Log del error para debugging
             pass
             
-        return False, "Formato de tiempo inválido. Use MM:SS.dd o SS.dd"
+        return False, f"Formato de tiempo inválido: '{time_str}'. Use MM:SS,dd o MM:SS.dd"
     
     def load_existing_data(self):
         if os.path.exists(self.archivo_inscripcion):
@@ -889,16 +908,22 @@ class SwimmerRegistration:
                     for event in self.swimming_events:
                         if event in df.columns and pd.notna(row[event]):
                             time_value = row[event]
-                            # Convertir a string si es numérico
+                            
+                            # Convertir a string y normalizar formato
                             if isinstance(time_value, (int, float)):
+                                # Si es numérico (segundos totales), convertir a MM:SS.CS
                                 time_str = f"{int(time_value//60):02d}:{time_value%60:05.2f}"
                             else:
-                                time_str = str(time_value).strip()
+                                # Si es texto, normalizar formato (coma a punto)
+                                time_str = str(time_value).strip().replace(',', '.')
                             
                             # Validar formato de tiempo
                             is_valid, validated_time = self.validate_time_format(time_str)
                             if is_valid:
                                 events_data[event] = validated_time
+                            else:
+                                # Agregar información de error más específica
+                                errors.append(f"Fila {index + 2}: Formato de tiempo inválido '{time_value}' en {event} para {swimmer_name}")
                     
                     # Solo agregar nadadores con al menos una prueba
                     if events_data:
