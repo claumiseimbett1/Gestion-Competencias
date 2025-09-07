@@ -384,6 +384,74 @@ def generar_sembrado_tiempo():
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
 
+def generate_seeding_excel(df_evento, evento_nombre, tipo_sembrado):
+    """
+    Genera un archivo Excel con formato de sembrado actualizado con tiempos de competencia
+    """
+    from io import BytesIO
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"Sembrado {tipo_sembrado.title()}"
+    
+    # Título principal
+    ws.cell(row=1, column=1, value=evento_nombre).font = Font(bold=True, size=16)
+    
+    current_row = 3
+    current_serie = None
+    
+    # Procesar por serie
+    for _, row in df_evento.iterrows():
+        serie_num = row['Serie']
+        
+        # Nueva serie
+        if serie_num != current_serie:
+            if current_serie is not None:
+                current_row += 1  # Espacio entre series
+            
+            ws.cell(row=current_row, column=1, value=f"Serie {serie_num}").font = Font(bold=True, size=14)
+            current_row += 1
+            
+            # Headers
+            headers = ["Carril", "Nombre", "Equipo", "Edad", "Categoría", "Tiempo Inscripción", "Tiempo Competencia"]
+            for col, header in enumerate(headers, 1):
+                cell = ws.cell(row=current_row, column=col, value=header)
+                cell.font = Font(bold=True)
+                if header == "Tiempo Competencia":
+                    cell.font = Font(bold=True, color="FF0000")
+            current_row += 1
+            current_serie = serie_num
+        
+        # Datos del nadador
+        ws.cell(row=current_row, column=1, value=row['Carril'])
+        ws.cell(row=current_row, column=2, value=row['Nombre'])
+        ws.cell(row=current_row, column=3, value=row['Equipo'])
+        ws.cell(row=current_row, column=4, value=row['Edad'])
+        ws.cell(row=current_row, column=5, value=row['Categoría'])
+        ws.cell(row=current_row, column=6, value=row['Tiempo Inscripción'])
+        
+        # Tiempo de competencia (editado por el usuario)
+        tiempo_comp = row['Tiempo Competencia']
+        comp_cell = ws.cell(row=current_row, column=7, value=tiempo_comp if tiempo_comp else "")
+        comp_cell.font = Font(color="0000FF")
+        
+        current_row += 1
+    
+    # Ajustar ancho de columnas
+    ws.column_dimensions['B'].width = 40  # Nombre
+    ws.column_dimensions['C'].width = 25  # Equipo
+    ws.column_dimensions['F'].width = 18  # Tiempo Inscripción
+    ws.column_dimensions['G'].width = 18  # Tiempo Competencia
+    
+    # Guardar en buffer
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    
+    return buffer.getvalue()
+
 def sembrado_competencia_interface():
     st.markdown("## 📊 Sembrado de Competencia")
     
@@ -465,7 +533,7 @@ def sembrado_competencia_interface():
         # Mostrar visualización del sembrado si está disponible
         if 'seeding_preview_cat' in st.session_state:
             st.markdown("---")
-            st.markdown("### 👁️ Vista Previa del Sembrado por Categorías")
+            st.markdown("### 👁️ Vista Previa Editable - Sembrado por Categorías")
             
             seeding_data = st.session_state['seeding_preview_cat']
             
@@ -473,24 +541,23 @@ def sembrado_competencia_interface():
             eventos_disponibles = list(seeding_data.keys())
             if eventos_disponibles:
                 evento_seleccionado = st.selectbox(
-                    "Selecciona un evento para visualizar:",
+                    "Selecciona un evento para editar:",
                     eventos_disponibles,
                     key="evento_cat_preview"
                 )
                 
                 if evento_seleccionado:
-                    series = seeding_data[evento_seleccionado]['series']
                     st.markdown(f"**{evento_seleccionado}**")
                     
-                    # Mostrar cada serie
+                    # Crear una sola tabla consolidada para todas las series del evento
+                    all_carriles_data = []
+                    series = seeding_data[evento_seleccionado]['series']
+                    
                     for serie in series:
-                        st.markdown(f"#### Serie {serie['serie']}")
-                        
-                        # Crear tabla de la serie
-                        carriles_data = []
                         for i, nadador in enumerate(serie['carriles'], 1):
                             if nadador:
-                                carriles_data.append({
+                                all_carriles_data.append({
+                                    "Serie": serie['serie'],
                                     "Carril": i,
                                     "Nombre": nadador['nombre'],
                                     "Equipo": nadador['equipo'],
@@ -499,19 +566,94 @@ def sembrado_competencia_interface():
                                     "Tiempo Inscripción": str(nadador['tiempo_inscripcion']),
                                     "Tiempo Competencia": ""
                                 })
-                            else:
-                                carriles_data.append({
-                                    "Carril": i,
-                                    "Nombre": "---",
-                                    "Equipo": "---",
-                                    "Edad": "---",
-                                    "Categoría": "---",
-                                    "Tiempo Inscripción": "---",
-                                    "Tiempo Competencia": "---"
-                                })
+                    
+                    if all_carriles_data:
+                        df_evento = pd.DataFrame(all_carriles_data)
                         
-                        df_serie = pd.DataFrame(carriles_data)
-                        st.dataframe(df_serie, use_container_width=True, hide_index=True)
+                        # Tabla editable con solo la columna Tiempo Competencia editable
+                        edited_df = st.data_editor(
+                            df_evento,
+                            column_config={
+                                "Serie": st.column_config.NumberColumn("Serie", disabled=True),
+                                "Carril": st.column_config.NumberColumn("Carril", disabled=True),
+                                "Nombre": st.column_config.TextColumn("Nombre", disabled=True),
+                                "Equipo": st.column_config.TextColumn("Equipo", disabled=True),
+                                "Edad": st.column_config.NumberColumn("Edad", disabled=True),
+                                "Categoría": st.column_config.TextColumn("Categoría", disabled=True),
+                                "Tiempo Inscripción": st.column_config.TextColumn("Tiempo Inscripción", disabled=True),
+                                "Tiempo Competencia": st.column_config.TextColumn(
+                                    "Tiempo Competencia ✏️",
+                                    help="Ingresa el tiempo real de la competencia (formato: MM:SS.dd)",
+                                    placeholder="MM:SS.dd"
+                                )
+                            },
+                            use_container_width=True,
+                            hide_index=True,
+                            key=f"editor_cat_{evento_seleccionado}"
+                        )
+                        
+                        # Botones de acción
+                        col_save, col_download, col_process, col_info = st.columns([1, 1, 1, 1])
+                        
+                        with col_save:
+                            if st.button("💾 Guardar Cambios", type="primary", help="Guardar los tiempos editados"):
+                                # Actualizar session_state con los cambios
+                                updated_key = f"updated_seeding_cat_{evento_seleccionado}"
+                                st.session_state[updated_key] = edited_df
+                                st.success("✅ Cambios guardados en memoria")
+                        
+                        with col_download:
+                            if st.button("⬇️ Descargar Excel", help="Descargar archivo Excel con los tiempos actualizados"):
+                                # Generar archivo Excel con los datos editados
+                                excel_buffer = generate_seeding_excel(edited_df, evento_seleccionado, "categoria")
+                                st.download_button(
+                                    label="📥 Descargar Sembrado Actualizado",
+                                    data=excel_buffer,
+                                    file_name=f"sembrado_{evento_seleccionado.replace(' ', '_').replace('-', '_')}_editado.xlsx",
+                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                )
+                        
+                        with col_process:
+                            if st.button("🏆 Procesar a Resultados", help="Convertir a formato de resultados para procesamiento"):
+                                # Verificar si hay tiempos de competencia
+                                tiempos_comp = [t for t in edited_df["Tiempo Competencia"] if t and t.strip()]
+                                if len(tiempos_comp) > 0:
+                                    # Guardar archivo temporalmente y procesarlo
+                                    temp_file = f"temp_seeding_cat_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+                                    excel_data = generate_seeding_excel(edited_df, evento_seleccionado, "categoria")
+                                    
+                                    with open(temp_file, "wb") as f:
+                                        f.write(excel_data)
+                                    
+                                    try:
+                                        # Procesar con el script de resultados
+                                        import importlib.util
+                                        spec = importlib.util.spec_from_file_location("processor", "5-procesar_sembrado_tiempos.py")
+                                        processor = importlib.util.module_from_spec(spec)
+                                        spec.loader.exec_module(processor)
+                                        
+                                        success, message = processor.process_seeding_with_times(temp_file)
+                                        
+                                        if success:
+                                            st.success(f"✅ {message}")
+                                            st.info("📄 Archivo de resultados disponible en gestión de archivos")
+                                        else:
+                                            st.error(f"❌ {message}")
+                                    
+                                    except Exception as e:
+                                        st.error(f"❌ Error al procesar: {e}")
+                                    
+                                    finally:
+                                        # Limpiar archivo temporal
+                                        if os.path.exists(temp_file):
+                                            os.remove(temp_file)
+                                else:
+                                    st.warning("⚠️ Debes agregar al menos un tiempo de competencia")
+                        
+                        with col_info:
+                            tiempos_completados = len([t for t in edited_df["Tiempo Competencia"] if t and t.strip()])
+                            total_nadadores = len([n for n in edited_df["Nombre"] if n != "---"])
+                            st.info(f"⏱️ Tiempos: {tiempos_completados}/{total_nadadores}")
     
     with tab2:
         st.markdown("### ⏱️ Sembrado por Tiempo")
@@ -571,7 +713,7 @@ def sembrado_competencia_interface():
         # Mostrar visualización del sembrado si está disponible
         if 'seeding_preview_time' in st.session_state:
             st.markdown("---")
-            st.markdown("### 👁️ Vista Previa del Sembrado por Tiempo")
+            st.markdown("### 👁️ Vista Previa Editable - Sembrado por Tiempo")
             
             seeding_data = st.session_state['seeding_preview_time']
             
@@ -579,24 +721,23 @@ def sembrado_competencia_interface():
             eventos_disponibles = list(seeding_data.keys())
             if eventos_disponibles:
                 evento_seleccionado = st.selectbox(
-                    "Selecciona un evento para visualizar:",
+                    "Selecciona un evento para editar:",
                     eventos_disponibles,
                     key="evento_time_preview"
                 )
                 
                 if evento_seleccionado:
-                    series = seeding_data[evento_seleccionado]['series']
                     st.markdown(f"**{evento_seleccionado}**")
                     
-                    # Mostrar cada serie
+                    # Crear una sola tabla consolidada para todas las series del evento
+                    all_carriles_data = []
+                    series = seeding_data[evento_seleccionado]['series']
+                    
                     for serie in series:
-                        st.markdown(f"#### Serie {serie['serie']}")
-                        
-                        # Crear tabla de la serie
-                        carriles_data = []
                         for i, nadador in enumerate(serie['carriles'], 1):
                             if nadador:
-                                carriles_data.append({
+                                all_carriles_data.append({
+                                    "Serie": serie['serie'],
                                     "Carril": i,
                                     "Nombre": nadador['nombre'],
                                     "Equipo": nadador['equipo'],
@@ -605,71 +746,96 @@ def sembrado_competencia_interface():
                                     "Tiempo Inscripción": str(nadador['tiempo_inscripcion']),
                                     "Tiempo Competencia": ""
                                 })
-                            else:
-                                carriles_data.append({
-                                    "Carril": i,
-                                    "Nombre": "---",
-                                    "Equipo": "---",
-                                    "Edad": "---",
-                                    "Categoría": "---",
-                                    "Tiempo Inscripción": "---",
-                                    "Tiempo Competencia": "---"
-                                })
+                    
+                    if all_carriles_data:
+                        df_evento = pd.DataFrame(all_carriles_data)
                         
-                        df_serie = pd.DataFrame(carriles_data)
-                        st.dataframe(df_serie, use_container_width=True, hide_index=True)
+                        # Tabla editable con solo la columna Tiempo Competencia editable
+                        edited_df = st.data_editor(
+                            df_evento,
+                            column_config={
+                                "Serie": st.column_config.NumberColumn("Serie", disabled=True),
+                                "Carril": st.column_config.NumberColumn("Carril", disabled=True),
+                                "Nombre": st.column_config.TextColumn("Nombre", disabled=True),
+                                "Equipo": st.column_config.TextColumn("Equipo", disabled=True),
+                                "Edad": st.column_config.NumberColumn("Edad", disabled=True),
+                                "Categoría": st.column_config.TextColumn("Categoría", disabled=True),
+                                "Tiempo Inscripción": st.column_config.TextColumn("Tiempo Inscripción", disabled=True),
+                                "Tiempo Competencia": st.column_config.TextColumn(
+                                    "Tiempo Competencia ✏️",
+                                    help="Ingresa el tiempo real de la competencia (formato: MM:SS.dd)",
+                                    placeholder="MM:SS.dd"
+                                )
+                            },
+                            use_container_width=True,
+                            hide_index=True,
+                            key=f"editor_time_{evento_seleccionado}"
+                        )
+                        
+                        # Botones de acción
+                        col_save, col_download, col_process, col_info = st.columns([1, 1, 1, 1])
+                        
+                        with col_save:
+                            if st.button("💾 Guardar Cambios", type="primary", help="Guardar los tiempos editados", key="save_time"):
+                                # Actualizar session_state con los cambios
+                                updated_key = f"updated_seeding_time_{evento_seleccionado}"
+                                st.session_state[updated_key] = edited_df
+                                st.success("✅ Cambios guardados en memoria")
+                        
+                        with col_download:
+                            if st.button("⬇️ Descargar Excel", help="Descargar archivo Excel con los tiempos actualizados", key="download_time"):
+                                # Generar archivo Excel con los datos editados
+                                excel_buffer = generate_seeding_excel(edited_df, evento_seleccionado, "tiempo")
+                                st.download_button(
+                                    label="📥 Descargar Sembrado Actualizado",
+                                    data=excel_buffer,
+                                    file_name=f"sembrado_{evento_seleccionado.replace(' ', '_').replace('-', '_')}_editado.xlsx",
+                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                    key="dl_time"
+                                )
+                        
+                        with col_process:
+                            if st.button("🏆 Procesar a Resultados", help="Convertir a formato de resultados para procesamiento", key="process_time"):
+                                # Verificar si hay tiempos de competencia
+                                tiempos_comp = [t for t in edited_df["Tiempo Competencia"] if t and t.strip()]
+                                if len(tiempos_comp) > 0:
+                                    # Guardar archivo temporalmente y procesarlo
+                                    temp_file = f"temp_seeding_time_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+                                    excel_data = generate_seeding_excel(edited_df, evento_seleccionado, "tiempo")
+                                    
+                                    with open(temp_file, "wb") as f:
+                                        f.write(excel_data)
+                                    
+                                    try:
+                                        # Procesar con el script de resultados
+                                        import importlib.util
+                                        spec = importlib.util.spec_from_file_location("processor", "5-procesar_sembrado_tiempos.py")
+                                        processor = importlib.util.module_from_spec(spec)
+                                        spec.loader.exec_module(processor)
+                                        
+                                        success, message = processor.process_seeding_with_times(temp_file)
+                                        
+                                        if success:
+                                            st.success(f"✅ {message}")
+                                            st.info("📄 Archivo de resultados disponible en gestión de archivos")
+                                        else:
+                                            st.error(f"❌ {message}")
+                                    
+                                    except Exception as e:
+                                        st.error(f"❌ Error al procesar: {e}")
+                                    
+                                    finally:
+                                        # Limpiar archivo temporal
+                                        if os.path.exists(temp_file):
+                                            os.remove(temp_file)
+                                else:
+                                    st.warning("⚠️ Debes agregar al menos un tiempo de competencia")
+                        
+                        with col_info:
+                            tiempos_completados = len([t for t in edited_df["Tiempo Competencia"] if t and t.strip()])
+                            total_nadadores = len([n for n in edited_df["Nombre"] if n != "---"])
+                            st.info(f"⏱️ Tiempos: {tiempos_completados}/{total_nadadores}")
         
-        # Sección para procesar sembrado con tiempos
-        st.markdown("---")
-        st.markdown("### 🔄 Procesar Sembrado con Tiempos de Competencia")
-        st.markdown("""
-        Si ya tienes un archivo de sembrado con los tiempos de competencia agregados,
-        puedes convertirlo a formato de resultados aquí.
-        """)
-        
-        col_upload, col_process = st.columns([2, 1])
-        
-        with col_upload:
-            uploaded_seeding = st.file_uploader(
-                "Sube tu archivo de sembrado con tiempos agregados:",
-                type=['xlsx'],
-                key="seeding_with_times_upload",
-                help="Archivo Excel de sembrado donde ya agregaste los tiempos en la columna 'Tiempo Competencia'"
-            )
-        
-        with col_process:
-            if uploaded_seeding is not None:
-                if st.button("🔄 Convertir a Resultados", type="secondary"):
-                    with st.spinner("Procesando tiempos..."):
-                        try:
-                            # Guardar archivo temporalmente
-                            temp_file = f"temp_seeding_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-                            with open(temp_file, "wb") as f:
-                                f.write(uploaded_seeding.getbuffer())
-                            
-                            # Importar y usar la función de procesamiento
-                            import importlib.util
-                            spec = importlib.util.spec_from_file_location("processor", "5-procesar_sembrado_tiempos.py")
-                            processor = importlib.util.module_from_spec(spec)
-                            spec.loader.exec_module(processor)
-                            
-                            success, message = processor.process_seeding_with_times(temp_file)
-                            
-                            # Limpiar archivo temporal
-                            if os.path.exists(temp_file):
-                                os.remove(temp_file)
-                            
-                            if success:
-                                st.success(f"✅ {message}")
-                                st.info("📄 El archivo de resultados está disponible para descarga en la sección de gestión de archivos")
-                            else:
-                                st.error(f"❌ {message}")
-                                
-                        except Exception as e:
-                            st.error(f"❌ Error al procesar archivo: {e}")
-                            # Limpiar archivo temporal en caso de error
-                            if os.path.exists(temp_file):
-                                os.remove(temp_file)
     
     with tab3:
         st.markdown("### ✍️ Sembrado Manual")
