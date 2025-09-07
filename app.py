@@ -9,10 +9,26 @@ import sys
 # Importar las funciones de los scripts existentes
 #import importlib.util # No longer needed
 
-# Importar los scripts directly
-import generar_sembrado as script1
-import generar_sembrado_por_tiempo as script2
-import procesar_resultados as script3
+# Importar los scripts directly  
+import importlib.util
+
+# Importar el módulo de inscripción con el nuevo nombre
+spec = importlib.util.spec_from_file_location("inscripcion_nadadores", "1-inscripcion_nadadores.py")
+inscripcion_nadadores = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(inscripcion_nadadores)
+
+# Importar los otros módulos con sus nuevos nombres
+spec1 = importlib.util.spec_from_file_location("generar_sembrado", "2-generar_sembrado.py")
+script1 = importlib.util.module_from_spec(spec1)
+spec1.loader.exec_module(script1)
+
+spec2 = importlib.util.spec_from_file_location("generar_sembrado_por_tiempo", "3-generar_sembrado_por_tiempo.py")
+script2 = importlib.util.module_from_spec(spec2)
+spec2.loader.exec_module(script2)
+
+spec3 = importlib.util.spec_from_file_location("procesar_resultados", "4-procesar_resultados.py")
+script3 = importlib.util.module_from_spec(spec3)
+spec3.loader.exec_module(script3)
 
 #Configuración de la página
 st.set_page_config(
@@ -153,6 +169,7 @@ def main():
         "Selecciona una operación:",
         [
             "🏠 Inicio",
+            "✍️ Inscripción de Nadadores",
             "📊 Generar Sembrado por Categoría",
             "⏱️ Generar Sembrado por Tiempo",
             "🏆 Procesar Resultados",
@@ -162,6 +179,8 @@ def main():
     
     if opcion == "🏠 Inicio":
         mostrar_inicio()
+    elif opcion == "✍️ Inscripción de Nadadores":
+        inscripcion_nadadores_interface()
     elif opcion == "📊 Generar Sembrado por Categoría":
         generar_sembrado_categoria()
     elif opcion == "⏱️ Generar Sembrado por Tiempo":
@@ -177,6 +196,13 @@ def mostrar_inicio():
     col1, col2 = st.columns(2)
     
     with col1:
+        st.markdown("""
+        <div class="feature-card">
+            <h3>✍️ Inscripción de Nadadores</h3>
+            <p>Registra nuevos nadadores con sus datos personales y tiempos de inscripción por prueba.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
         st.markdown("""
         <div class="feature-card">
             <h3>📊 Sembrado por Categoría</h3>
@@ -210,11 +236,12 @@ def mostrar_inicio():
     <div class="info-message">
         <h4>📋 Flujo de trabajo recomendado:</h4>
         <ol>
-            <li>Sube tu archivo <strong>planilla_inscripcion.xlsx</strong> en "Gestión de Archivos"</li>
+            <li><strong>Inscribe nadadores</strong> usando el formulario de inscripción integrado</li>
             <li>Genera el sembrado (por categoría o tiempo)</li>
             <li>Después de la competencia, procesa los resultados</li>
             <li>Descarga los reportes generados</li>
         </ol>
+        <p><em>Alternativamente, puedes subir un archivo <strong>planilla_inscripcion.xlsx</strong> existente en "Gestión de Archivos"</em></p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -506,6 +533,176 @@ def gestion_archivos():
                         key=f"download_{archivo}",
                         help="Descargar archivo"
                     )
+
+def inscripcion_nadadores_interface():
+    st.markdown("## ✍️ Inscripción de Nadadores")
+    
+    # Inicializar el sistema de inscripción
+    registration_system = inscripcion_nadadores.SwimmerRegistration()
+    
+    # Tabs para diferentes funciones
+    tab1, tab2, tab3 = st.tabs(["➕ Nuevo Nadador", "📝 Nadadores Inscritos", "⚙️ Gestión"])
+    
+    with tab1:
+        st.markdown("### Registrar Nuevo Nadador")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            name = st.text_input("Nombre y Apellidos", placeholder="Ej: Juan Pérez García")
+            team = st.text_input("Equipo", placeholder="Ej: Club Natación TEN")
+            age = st.number_input("Edad", min_value=6, max_value=99, value=12)
+            
+        with col2:
+            gender = st.selectbox("Sexo", ["M", "F"], format_func=lambda x: "Masculino" if x == "M" else "Femenino")
+            category = registration_system.get_category_by_age(age, gender)
+            st.info(f"Categoría automática: **{category}**")
+            
+        st.markdown("### Pruebas de Inscripción")
+        st.markdown("*Ingresa los tiempos de inscripción en formato MM:SS.dd o SS.dd. Deja en blanco las pruebas en las que no participa.*")
+        
+        events_data = {}
+        col1, col2, col3 = st.columns(3)
+        
+        for i, event in enumerate(registration_system.swimming_events):
+            with [col1, col2, col3][i % 3]:
+                time_input = st.text_input(
+                    event,
+                    key=f"event_{i}",
+                    placeholder="MM:SS.dd",
+                    help="Ejemplo: 1:25.30 o 85.30"
+                )
+                
+                if time_input:
+                    is_valid, error_msg = registration_system.validate_time_format(time_input)
+                    if not is_valid:
+                        st.error(error_msg)
+                    else:
+                        events_data[event] = time_input
+        
+        if st.button("🏊‍♂️ Registrar Nadador", type="primary"):
+            if not name.strip():
+                st.error("El nombre es obligatorio")
+            elif not team.strip():
+                st.error("El equipo es obligatorio")
+            elif not events_data:
+                st.warning("Debe inscribirse en al menos una prueba")
+            else:
+                swimmer_data = {
+                    'name': name.strip(),
+                    'team': team.strip(),
+                    'age': age,
+                    'category': category,
+                    'gender': gender,
+                    'events': events_data
+                }
+                
+                success, message = registration_system.add_swimmer(swimmer_data)
+                if success:
+                    st.success(message)
+                    st.balloons()
+                    st.rerun()
+                else:
+                    st.error(message)
+    
+    with tab2:
+        st.markdown("### Nadadores Inscritos")
+        
+        swimmers = registration_system.get_swimmers_list()
+        
+        if not swimmers:
+            st.info("No hay nadadores inscritos aún. Usa la pestaña 'Nuevo Nadador' para registrar.")
+        else:
+            st.success(f"Total de nadadores inscritos: **{len(swimmers)}**")
+            
+            for i, swimmer in enumerate(swimmers):
+                with st.expander(f"🏊‍♂️ {swimmer['name']} - {swimmer['team']} ({swimmer['age']} años)"):
+                    col1, col2 = st.columns([3, 1])
+                    
+                    with col1:
+                        st.write(f"**Categoría:** {swimmer['category']}")
+                        st.write(f"**Sexo:** {'Masculino' if swimmer['gender'] == 'M' else 'Femenino'}")
+                        
+                        if swimmer['events']:
+                            st.write("**Pruebas inscritas:**")
+                            for event in swimmer['events']:
+                                st.write(f"• {event}")
+                        else:
+                            st.write("*Sin pruebas registradas*")
+                    
+                    with col2:
+                        if st.button("🗑️ Eliminar", key=f"delete_{i}"):
+                            success, message = registration_system.delete_swimmer(swimmer['index'])
+                            if success:
+                                st.success(message)
+                                st.rerun()
+                            else:
+                                st.error(message)
+    
+    with tab3:
+        st.markdown("### Gestión del Sistema")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("#### 📊 Estadísticas")
+            swimmers = registration_system.get_swimmers_list()
+            
+            if swimmers:
+                teams = {}
+                categories = {}
+                genders = {"M": 0, "F": 0}
+                
+                for swimmer in swimmers:
+                    teams[swimmer['team']] = teams.get(swimmer['team'], 0) + 1
+                    categories[swimmer['category']] = categories.get(swimmer['category'], 0) + 1
+                    genders[swimmer['gender']] += 1
+                
+                st.metric("Total Nadadores", len(swimmers))
+                st.metric("Equipos", len(teams))
+                st.metric("Masculino/Femenino", f"{genders['M']}/{genders['F']}")
+                
+                if st.checkbox("Ver distribución por categorías"):
+                    st.bar_chart(categories)
+                
+                if st.checkbox("Ver distribución por equipos"):
+                    st.bar_chart(teams)
+            else:
+                st.info("No hay datos para mostrar estadísticas")
+        
+        with col2:
+            st.markdown("#### 🔧 Acciones del Sistema")
+            
+            if st.button("📋 Crear Archivo Vacío"):
+                success, message = registration_system.create_empty_registration_file()
+                if success:
+                    st.success(message)
+                else:
+                    st.error(message)
+            
+            if os.path.exists(registration_system.archivo_inscripcion):
+                with open(registration_system.archivo_inscripcion, "rb") as file:
+                    st.download_button(
+                        label="📥 Descargar Planilla de Inscripción",
+                        data=file.read(),
+                        file_name="planilla_inscripcion.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+            
+            st.markdown("#### ℹ️ Información")
+            st.info("""
+            **Categorías por edad:**
+            - PRE-INFANTIL A: ≤8 años
+            - PRE-INFANTIL B: ≤9 años  
+            - INFANTIL A: ≤10 años
+            - INFANTIL B: ≤11 años
+            - JUVENIL A: ≤12 años
+            - JUVENIL B: ≤13 años
+            - JUNIOR A: ≤14 años
+            - JUNIOR B: ≤15 años
+            - SENIOR: ≤17 años
+            - MASTER: >17 años
+            """)
 
 if __name__ == "__main__":
     main()
