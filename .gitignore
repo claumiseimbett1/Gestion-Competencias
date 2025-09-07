@@ -1,6 +1,7 @@
 # Archivos de Excel generados por la aplicación
 *.xlsx
 !planilla_inscripcion_template.xlsx
+!BASE-DE-DATOS.xlsx
 
 # Archivos CSV temporales
 *.csv
