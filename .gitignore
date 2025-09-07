@@ -3,6 +3,10 @@
 !planilla_inscripcion_template.xlsx
 !BASE-DE-DATOS.xlsx
 
+# Archivos temporales y respaldos de base de datos
+BASE-DE-DATOS-TEMP.xlsx
+BASE-DE-DATOS-BACKUP.xlsx
+
 # Archivos CSV temporales
 *.csv
 

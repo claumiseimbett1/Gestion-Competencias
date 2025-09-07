@@ -43,7 +43,7 @@ The application will start a web interface accessible at `http://localhost:8501`
 
 4. **`1-inscripcion_nadadores.py`** - Swimmer registration system
    - Complete registration interface with manual and database search methods
-   - Database integration with `BASE-DE-DATOS.xlsx` (FPROYECCION 2025T sheet)
+   - Database integration with `BASE-DE-DATOS.xlsx` (FPROYECCION 2025T and M. PROYECCION 2025 sheets)
    - Duplicate validation with override options
    - PDF report generation with company logo
    - Event mapping and time validation
@@ -55,8 +55,9 @@ The application will start a web interface accessible at `http://localhost:8501`
 - **`resultados_con_tiempos.xlsx`** - Final race results (needed for results processing only)
   - Structured format with race times by event and category
 - **`BASE-DE-DATOS.xlsx`** - Swimmer database (needed for registration only)
-  - Contains FPROYECCION 2025T sheet with swimmer history
-  - Expected columns: ATLETA (column D), PRUEBA, TIEMPO, F. COMPETENCIA
+  - Contains FPROYECCION 2025T sheet (female swimmers) and M. PROYECCION 2025 sheet (male swimmers)
+  - Expected columns: ATLETA, EQUIPO, CATEGORIA, SEXO, EDAD, PRUEBA, TIEMPO, F. COMPETENCIA
+  - System automatically combines both sheets for comprehensive athlete search
 
 ## Key Data Processing Logic
 

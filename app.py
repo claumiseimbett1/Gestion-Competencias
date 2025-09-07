@@ -496,16 +496,114 @@ def gestion_archivos():
                 f.write(uploaded_resultados.getbuffer())
             st.success("✅ Archivo de resultados subido correctamente")
     
+    # Nueva sección para base de datos
+    st.markdown("### 💾 Base de Datos de Atletas")
+    
+    col3, col4 = st.columns(2)
+    
+    with col3:
+        st.markdown("#### 📊 Base de Datos Local")
+        if os.path.exists("BASE-DE-DATOS.xlsx"):
+            st.success("✅ Base de datos local disponible")
+            # Mostrar información de la base de datos local
+            try:
+                xl_file = pd.ExcelFile("BASE-DE-DATOS.xlsx")
+                target_sheets = ['FPROYECCION 2025T', 'M. PROYECCION 2025']
+                available_sheets = [s for s in target_sheets if s in xl_file.sheet_names]
+                st.info(f"🔍 Hojas disponibles: {', '.join(available_sheets)}")
+                
+                # Contar registros totales
+                total_records = 0
+                for sheet in available_sheets:
+                    try:
+                        df = pd.read_excel("BASE-DE-DATOS.xlsx", sheet_name=sheet)
+                        total_records += len(df)
+                    except:
+                        pass
+                st.info(f"📈 Total de registros: {total_records:,}")
+                
+            except Exception as e:
+                st.warning("⚠️ Error al leer información de la base de datos local")
+        else:
+            st.warning("⚠️ No se encuentra base de datos local")
+    
+    with col4:
+        st.markdown("#### 🔄 Cargar Base de Datos Externa")
+        uploaded_database = st.file_uploader(
+            "Sube tu propia base de datos",
+            type=['xlsx'],
+            key="database",
+            help="Archivo Excel con base de datos de atletas (debe contener hojas FPROYECCION 2025T y M. PROYECCION 2025)"
+        )
+        
+        if uploaded_database:
+            try:
+                # Guardar como archivo temporal y verificar estructura
+                with open("BASE-DE-DATOS-TEMP.xlsx", "wb") as f:
+                    f.write(uploaded_database.getbuffer())
+                
+                # Verificar estructura
+                xl_file = pd.ExcelFile("BASE-DE-DATOS-TEMP.xlsx")
+                target_sheets = ['FPROYECCION 2025T', 'M. PROYECCION 2025']
+                available_sheets = [s for s in target_sheets if s in xl_file.sheet_names]
+                
+                if available_sheets:
+                    # Reemplazar base de datos actual
+                    if os.path.exists("BASE-DE-DATOS.xlsx"):
+                        os.rename("BASE-DE-DATOS.xlsx", "BASE-DE-DATOS-BACKUP.xlsx")
+                    os.rename("BASE-DE-DATOS-TEMP.xlsx", "BASE-DE-DATOS.xlsx")
+                    
+                    st.success("✅ Base de datos externa cargada correctamente")
+                    st.info(f"🔍 Hojas encontradas: {', '.join(available_sheets)}")
+                    
+                    # Contar registros
+                    total_records = 0
+                    for sheet in available_sheets:
+                        try:
+                            df = pd.read_excel("BASE-DE-DATOS.xlsx", sheet_name=sheet)
+                            total_records += len(df)
+                        except:
+                            pass
+                    st.info(f"📈 Total de registros cargados: {total_records:,}")
+                    st.rerun()
+                else:
+                    os.remove("BASE-DE-DATOS-TEMP.xlsx")
+                    st.error("❌ El archivo no contiene las hojas requeridas (FPROYECCION 2025T o M. PROYECCION 2025)")
+                    
+            except Exception as e:
+                st.error(f"❌ Error al procesar la base de datos: {e}")
+                if os.path.exists("BASE-DE-DATOS-TEMP.xlsx"):
+                    os.remove("BASE-DE-DATOS-TEMP.xlsx")
+    
+    # Opción para restaurar base de datos original
+    if os.path.exists("BASE-DE-DATOS-BACKUP.xlsx"):
+        st.markdown("#### 🔄 Restaurar Base de Datos Original")
+        col5, col6 = st.columns([2, 1])
+        
+        with col5:
+            st.info("📁 Se encontró un respaldo de la base de datos original")
+        
+        with col6:
+            if st.button("♻️ Restaurar Original", help="Restaurar la base de datos original del repositorio"):
+                try:
+                    if os.path.exists("BASE-DE-DATOS.xlsx"):
+                        os.remove("BASE-DE-DATOS.xlsx")
+                    os.rename("BASE-DE-DATOS-BACKUP.xlsx", "BASE-DE-DATOS.xlsx")
+                    st.success("✅ Base de datos original restaurada")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error al restaurar: {e}")
+    
     # Mostrar archivos existentes
     st.markdown("### 📄 Archivos Disponibles")
     
     archivos = {
         "planilla_inscripcion.xlsx": "📋 Planilla de Inscripción",
+        "BASE-DE-DATOS.xlsx": "🗄️ Base de Datos de Atletas",
         "sembrado_competencia.xlsx": "📊 Sembrado por Categoría",
         "sembrado_competencia_POR_TIEMPO.xlsx": "⏱️ Sembrado por Tiempo",
         "resultados_con_tiempos.xlsx": "🏆 Resultados de Competencia",
-        "reporte_premiacion_final_CORREGIDO.xlsx": "🏅 Reporte de Premiación",
-        "NUEVA BASE DE DATOS.xlsx": "🗄️ Base de Datos"
+        "reporte_premiacion_final_CORREGIDO.xlsx": "🏅 Reporte de Premiación"
     }
     
     for archivo, descripcion in archivos.items():

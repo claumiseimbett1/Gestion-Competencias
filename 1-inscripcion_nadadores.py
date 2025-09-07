@@ -283,28 +283,58 @@ class SwimmerRegistration:
     # ===== MÉTODOS PARA BÚSQUEDA EN BASE DE DATOS =====
     
     def load_database(self):
-        """Cargar la base de datos desde FPROYECCION 2025T con estructura de múltiples registros por atleta"""
+        """Cargar la base de datos desde FPROYECCION 2025T y M. PROYECCION 2025 combinadas"""
         if not os.path.exists(self.archivo_base_datos):
             return None, f"No se encontró el archivo {self.archivo_base_datos}"
         
         try:
-            # Leer con encabezados en la primera fila
-            try:
-                df = pd.read_excel(self.archivo_base_datos, sheet_name='FPROYECCION 2025T', header=0)
-            except:
-                # Buscar hoja alternativa
-                xl_file = pd.ExcelFile(self.archivo_base_datos)
-                target_sheet = None
-                for sheet in xl_file.sheet_names:
-                    if 'PROYECCION' in sheet.upper() or '2025' in sheet:
-                        target_sheet = sheet
-                        break
-                if target_sheet:
-                    df = pd.read_excel(self.archivo_base_datos, sheet_name=target_sheet, header=0)
-                else:
-                    df = pd.read_excel(self.archivo_base_datos, sheet_name=0, header=0)
+            dfs_to_combine = []
+            sheets_loaded = []
             
-            return df, f"Base de datos cargada: {len(df)} registros encontrados"
+            # Hojas objetivo (femenino y masculino)
+            target_sheets = ['FPROYECCION 2025T', 'M. PROYECCION 2025']
+            
+            xl_file = pd.ExcelFile(self.archivo_base_datos)
+            
+            for sheet_name in target_sheets:
+                try:
+                    if sheet_name in xl_file.sheet_names:
+                        df_sheet = pd.read_excel(self.archivo_base_datos, sheet_name=sheet_name, header=0)
+                        
+                        # Filtrar columnas relevantes (evitar duplicaciones)
+                        relevant_columns = ['ATLETA', 'EQUIPO', 'CATEGORIA', 'SEXO', 'EDAD', 'PRUEBA', 'TIEMPO', 'F. COMPETENCIA']
+                        available_columns = [col for col in relevant_columns if col in df_sheet.columns]
+                        
+                        if available_columns and len(df_sheet) > 0:
+                            df_filtered = df_sheet[available_columns].copy()
+                            dfs_to_combine.append(df_filtered)
+                            sheets_loaded.append(sheet_name)
+                except Exception as e:
+                    print(f"Error al cargar hoja {sheet_name}: {e}")
+                    continue
+            
+            # Si no se pudieron cargar las hojas objetivo, buscar alternativas
+            if not dfs_to_combine:
+                for sheet in xl_file.sheet_names:
+                    if any(keyword in sheet.upper() for keyword in ['PROYECCION', '2025', 'FPROYECCION']):
+                        try:
+                            df = pd.read_excel(self.archivo_base_datos, sheet_name=sheet, header=0)
+                            if 'ATLETA' in df.columns:
+                                dfs_to_combine.append(df)
+                                sheets_loaded.append(sheet)
+                                break
+                        except:
+                            continue
+            
+            # Combinar las hojas cargadas
+            if dfs_to_combine:
+                combined_df = pd.concat(dfs_to_combine, ignore_index=True)
+                # Eliminar duplicados basados en atleta, prueba y tiempo
+                combined_df = combined_df.drop_duplicates(subset=['ATLETA', 'PRUEBA', 'TIEMPO'], keep='first')
+                
+                return combined_df, f"Base de datos cargada: {len(combined_df)} registros de {len(sheets_loaded)} hojas ({', '.join(sheets_loaded)})"
+            else:
+                return None, "No se pudieron cargar datos de las hojas de la base de datos"
                 
         except Exception as e:
             return None, f"Error al cargar base de datos: {e}"
