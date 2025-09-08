@@ -452,6 +452,65 @@ def generate_seeding_excel(df_evento, evento_nombre, tipo_sembrado):
     
     return buffer.getvalue()
 
+def generate_seeding_excel_from_manual(seeding_data, event_name, gender):
+    """
+    Genera un archivo Excel desde datos de sembrado manual
+    """
+    from io import BytesIO
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sembrado Manual"
+    
+    # Título
+    ws.cell(row=1, column=1, value=f"{event_name} - {gender}").font = Font(bold=True, size=16)
+    
+    current_row = 3
+    for serie in seeding_data['series']:
+        # Título de serie
+        ws.cell(row=current_row, column=1, value=f"Serie {serie['serie']}").font = Font(bold=True, size=14)
+        current_row += 1
+        
+        # Headers
+        headers = ["Carril", "Nombre", "Equipo", "Edad", "Categoría", "Tiempo Inscripción", "Tiempo Competencia"]
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=current_row, column=col, value=header)
+            cell.font = Font(bold=True)
+            if header == "Tiempo Competencia":
+                cell.font = Font(bold=True, color="FF0000")
+        current_row += 1
+        
+        # Datos de carriles
+        for lane_idx, swimmer in enumerate(serie['carriles']):
+            ws.cell(row=current_row, column=1, value=lane_idx + 1)
+            if swimmer:
+                ws.cell(row=current_row, column=2, value=swimmer['nombre'])
+                ws.cell(row=current_row, column=3, value=swimmer['equipo'])
+                ws.cell(row=current_row, column=4, value=swimmer['edad'])
+                ws.cell(row=current_row, column=5, value=swimmer['categoria'])
+                ws.cell(row=current_row, column=6, value=swimmer['tiempo'])
+                # Tiempo competencia vacío para llenar después
+                comp_cell = ws.cell(row=current_row, column=7, value="")
+                comp_cell.font = Font(color="0000FF")
+            current_row += 1
+        
+        current_row += 1  # Espacio entre series
+    
+    # Ajustar columnas
+    ws.column_dimensions['B'].width = 30
+    ws.column_dimensions['C'].width = 25
+    ws.column_dimensions['F'].width = 18
+    ws.column_dimensions['G'].width = 18
+    
+    # Guardar en buffer
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    
+    return buffer.getvalue()
+
 def sembrado_competencia_interface():
     st.markdown("## 📊 Sembrado de Competencia")
     
@@ -814,22 +873,343 @@ def sembrado_competencia_interface():
     with tab3:
         st.markdown("### ✍️ Sembrado Manual")
         st.markdown("""
-        **¿Cuándo usar este método?**
-        - Competencias con criterios especiales
-        - Eventos ceremoniales o de exhibición
-        - Cuando necesitas control total sobre la organización
+        **Crea sembrados personalizados con total control:**
+        - 🎯 Arrastra nadadores entre carriles y series
+        - 🔄 Combina diferentes categorías  
+        - 📊 Vista en tiempo real del sembrado
+        - 💾 Guarda tu organización personalizada
         """)
         
-        st.info("🚧 **Próximamente**: Interfaz para crear sembrados manuales con drag & drop y organización personalizada.")
+        # Verificar si hay inscripciones
+        if not os.path.exists("planilla_inscripcion.xlsx"):
+            st.warning("⚠️ Necesitas tener nadadores inscritos para crear un sembrado manual.")
+            st.info("👉 Ve a la sección **Inscripción de Nadadores** para registrar participantes primero.")
+            return
         
-        # Placeholder para funcionalidad futura
-        st.markdown("""
-        **Funcionalidades planeadas:**
-        - 📋 Vista de todas las pruebas inscritas
-        - 🔄 Organización manual de series y carriles
-        - 👥 Agrupación personalizada de nadadores
-        - 📊 Vista previa del sembrado antes de generar
-        """)
+        try:
+            # Cargar datos de inscripción
+            df = pd.read_excel("planilla_inscripcion.xlsx")
+            info_cols = ['NOMBRE Y AP', 'EQUIPO', 'EDAD', 'CAT.', 'SEXO']
+            event_cols = [col for col in df.columns if col not in info_cols and 'Nø' not in col and 'FECHA DE NA' not in col]
+            
+            if len(event_cols) == 0:
+                st.error("❌ No se encontraron eventos en la planilla de inscripción")
+                return
+                
+        except Exception as e:
+            st.error(f"❌ Error al leer inscripciones: {e}")
+            return
+        
+        # Selector de evento
+        st.markdown("#### 📋 Seleccionar Evento")
+        col_event, col_gender = st.columns([2, 1])
+        
+        with col_event:
+            selected_event = st.selectbox(
+                "Selecciona el evento para crear sembrado manual:",
+                event_cols,
+                key="manual_event_select"
+            )
+        
+        with col_gender:
+            gender_filter = st.selectbox(
+                "Género:",
+                ["Todos", "Masculino", "Femenino"],
+                key="manual_gender_filter"
+            )
+        
+        if selected_event:
+            # Filtrar nadadores para el evento seleccionado
+            swimmers_for_event = []
+            for index, row in df.iterrows():
+                if pd.notna(row[selected_event]) and pd.notna(row['NOMBRE Y AP']):
+                    swimmer_gender = "Masculino" if row['SEXO'].upper() == 'M' else "Femenino"
+                    if gender_filter == "Todos" or gender_filter == swimmer_gender:
+                        swimmers_for_event.append({
+                            'id': index,
+                            'nombre': row['NOMBRE Y AP'],
+                            'equipo': row['EQUIPO'],
+                            'edad': row['EDAD'],
+                            'categoria': row['CAT.'],
+                            'sexo': swimmer_gender,
+                            'tiempo': str(row[selected_event])
+                        })
+            
+            if len(swimmers_for_event) == 0:
+                st.warning(f"⚠️ No hay nadadores inscritos en {selected_event} con el filtro seleccionado")
+                return
+            
+            st.success(f"✅ {len(swimmers_for_event)} nadadores encontrados en **{selected_event}**")
+            
+            # Inicializar sembrado en session state
+            seeding_key = f"manual_seeding_{selected_event}_{gender_filter}"
+            if seeding_key not in st.session_state:
+                # Crear sembrado inicial automático
+                sorted_swimmers = sorted(swimmers_for_event, key=lambda x: float('inf') if x['tiempo'] == 'nan' else float(x['tiempo'].replace(':', '').replace('.', '')) if ':' in x['tiempo'] else float(x['tiempo']) if x['tiempo'].replace('.', '').isdigit() else float('inf'))
+                
+                # Distribución en series de 8 carriles
+                series = []
+                swimmers_per_series = 8
+                num_series = (len(sorted_swimmers) + swimmers_per_series - 1) // swimmers_per_series
+                
+                for serie_num in range(num_series):
+                    serie_swimmers = sorted_swimmers[serie_num * swimmers_per_series:(serie_num + 1) * swimmers_per_series]
+                    lane_assignment = [4, 5, 3, 6, 2, 7, 1, 8]  # Orden standard de carriles
+                    
+                    serie = {"serie": serie_num + 1, "carriles": [None] * 8}
+                    for i, swimmer in enumerate(serie_swimmers):
+                        if i < len(lane_assignment):
+                            lane_idx = lane_assignment[i] - 1
+                            serie["carriles"][lane_idx] = swimmer
+                    
+                    series.append(serie)
+                
+                st.session_state[seeding_key] = {
+                    'evento': selected_event,
+                    'genero': gender_filter, 
+                    'series': series,
+                    'nadadores_disponibles': []
+                }
+            
+            seeding_data = st.session_state[seeding_key]
+            
+            # Interfaz de edición manual
+            st.markdown("#### 🎯 Editor de Sembrado Manual")
+            
+            # Mostrar nadadores disponibles (no asignados)
+            if seeding_data['nadadores_disponibles']:
+                st.markdown("##### 👥 Nadadores Disponibles")
+                cols_available = st.columns(min(len(seeding_data['nadadores_disponibles']), 4))
+                category_colors = {
+                    'MENORES': '#FFB6C1',  'JUVENIL A': '#87CEEB',  'JUVENIL B': '#98FB98',
+                    'JUNIOR': '#DDA0DD',    'SENIOR': '#F0E68C',    'MASTER': '#FFA07A'
+                }
+                for i, swimmer in enumerate(seeding_data['nadadores_disponibles']):
+                    with cols_available[i % 4]:
+                        bg_color = category_colors.get(swimmer['categoria'], '#E6E6FA')
+                        st.markdown(f"""
+                        <div style="background-color: {bg_color}; padding: 6px; border-radius: 4px; border: 1px solid #ccc; margin: 2px 0;">
+                            <strong>{swimmer['nombre']}</strong><br>
+                            <small>{swimmer['equipo']} - {swimmer['categoria']}</small>
+                        </div>
+                        """, unsafe_allow_html=True)
+            
+            # Leyenda de colores
+            st.markdown("##### 🎨 Leyenda de Categorías")
+            category_colors = {
+                'MENORES': '#FFB6C1',  'JUVENIL A': '#87CEEB',  'JUVENIL B': '#98FB98',
+                'JUNIOR': '#DDA0DD',    'SENIOR': '#F0E68C',    'MASTER': '#FFA07A'
+            }
+            
+            legend_cols = st.columns(len(category_colors))
+            for i, (cat, color) in enumerate(category_colors.items()):
+                with legend_cols[i]:
+                    st.markdown(f"""
+                    <div style="background-color: {color}; padding: 4px; border-radius: 3px; text-align: center; border: 1px solid #ccc;">
+                        <small><strong>{cat}</strong></small>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            # Editor por series
+            st.markdown("##### 🏊 Series y Carriles")
+            
+            for serie_idx, serie in enumerate(seeding_data['series']):
+                st.markdown(f"**Serie {serie['serie']}**")
+                
+                # Crear columnas para los 8 carriles
+                lane_cols = st.columns(8)
+                
+                for lane_idx in range(8):
+                    with lane_cols[lane_idx]:
+                        st.markdown(f"**Carril {lane_idx + 1}**")
+                        
+                        current_swimmer = serie['carriles'][lane_idx]
+                        
+                        if current_swimmer:
+                            # Mostrar nadador actual con color por categoría
+                            category_colors = {
+                                'MENORES': '#FFB6C1',  # Rosa claro
+                                'JUVENIL A': '#87CEEB',  # Azul cielo
+                                'JUVENIL B': '#98FB98',  # Verde claro
+                                'JUNIOR': '#DDA0DD',    # Violeta claro
+                                'SENIOR': '#F0E68C',    # Amarillo claro
+                                'MASTER': '#FFA07A'     # Salmón
+                            }
+                            bg_color = category_colors.get(current_swimmer['categoria'], '#E6E6FA')
+                            
+                            st.markdown(f"""
+                            <div style="background-color: {bg_color}; padding: 8px; border-radius: 5px; border: 1px solid #ccc; margin: 2px 0;">
+                                <strong>{current_swimmer['nombre']}</strong><br>
+                                <small>{current_swimmer['equipo']} | {current_swimmer['categoria']}<br>
+                                Tiempo: {current_swimmer['tiempo']}</small>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                            # Botón para remover nadador
+                            if st.button("❌", key=f"remove_{serie_idx}_{lane_idx}", help="Remover nadador"):
+                                # Mover a disponibles
+                                seeding_data['nadadores_disponibles'].append(current_swimmer)
+                                seeding_data['series'][serie_idx]['carriles'][lane_idx] = None
+                                st.rerun()
+                        else:
+                            # Carril vacío - mostrar opciones para asignar
+                            st.info("🔘 Carril vacío")
+                            
+                            # Crear lista de nadadores para asignar
+                            available_swimmers = seeding_data['nadadores_disponibles'].copy()
+                            
+                            # Agregar nadadores de otros carriles para intercambio
+                            for s_idx, s in enumerate(seeding_data['series']):
+                                for l_idx, swimmer in enumerate(s['carriles']):
+                                    if swimmer and not (s_idx == serie_idx and l_idx == lane_idx):
+                                        available_swimmers.append({**swimmer, '_from_serie': s_idx, '_from_lane': l_idx})
+                            
+                            if available_swimmers:
+                                swimmer_options = ["Seleccionar nadador..."] + [
+                                    f"{swimmer['nombre']} ({swimmer['equipo']} - {swimmer['categoria']})" 
+                                    for swimmer in available_swimmers
+                                ]
+                                
+                                selected_swimmer_idx = st.selectbox(
+                                    "Asignar:",
+                                    range(len(swimmer_options)),
+                                    format_func=lambda x: swimmer_options[x],
+                                    key=f"assign_{serie_idx}_{lane_idx}"
+                                )
+                                
+                                if selected_swimmer_idx > 0:
+                                    selected_swimmer = available_swimmers[selected_swimmer_idx - 1]
+                                    
+                                    if st.button("✅ Asignar", key=f"confirm_{serie_idx}_{lane_idx}"):
+                                        # Asignar nadador al carril
+                                        if '_from_serie' in selected_swimmer:
+                                            # Mover de otro carril (intercambio)
+                                            from_serie = selected_swimmer['_from_serie']
+                                            from_lane = selected_swimmer['_from_lane']
+                                            clean_swimmer = {k: v for k, v in selected_swimmer.items() if not k.startswith('_')}
+                                            
+                                            seeding_data['series'][serie_idx]['carriles'][lane_idx] = clean_swimmer
+                                            seeding_data['series'][from_serie]['carriles'][from_lane] = None
+                                        else:
+                                            # Mover de disponibles
+                                            seeding_data['series'][serie_idx]['carriles'][lane_idx] = selected_swimmer
+                                            seeding_data['nadadores_disponibles'].remove(selected_swimmer)
+                                        
+                                        st.rerun()
+                
+                st.markdown("---")
+            
+            # Controles adicionales
+            st.markdown("#### ⚙️ Controles Avanzados")
+            col_add_series, col_category_info = st.columns([1, 2])
+            
+            with col_add_series:
+                col_add, col_remove = st.columns([1, 1])
+                with col_add:
+                    if st.button("➕ Nueva Serie"):
+                        new_serie_num = len(seeding_data['series']) + 1
+                        new_serie = {"serie": new_serie_num, "carriles": [None] * 8}
+                        seeding_data['series'].append(new_serie)
+                        st.rerun()
+                
+                with col_remove:
+                    if len(seeding_data['series']) > 1:
+                        if st.button("🗑️ Eliminar Serie", help="Eliminar última serie vacía"):
+                            # Verificar si la última serie está vacía
+                            last_serie = seeding_data['series'][-1]
+                            if all(swimmer is None for swimmer in last_serie['carriles']):
+                                seeding_data['series'].pop()
+                                st.rerun()
+                            else:
+                                st.error("❌ Solo se pueden eliminar series vacías")
+            
+            with col_category_info:
+                # Mostrar distribución de categorías
+                categories_in_seeding = {}
+                total_swimmers = 0
+                for serie in seeding_data['series']:
+                    for swimmer in serie['carriles']:
+                        if swimmer:
+                            cat = swimmer['categoria']
+                            categories_in_seeding[cat] = categories_in_seeding.get(cat, 0) + 1
+                            total_swimmers += 1
+                
+                if categories_in_seeding:
+                    st.info(f"📊 **Nadadores por categoría:** " + 
+                           ", ".join([f"{cat}: {count}" for cat, count in sorted(categories_in_seeding.items())]) +
+                           f" | **Total: {total_swimmers}**")
+            
+            # Botones de acción
+            st.markdown("#### 💾 Acciones")
+            col_save, col_download, col_reset = st.columns([1, 1, 1])
+            
+            with col_save:
+                if st.button("💾 Guardar Sembrado", type="primary"):
+                    # Generar archivo Excel con sembrado manual
+                    manual_filename = f"sembrado_manual_{selected_event}_{gender_filter}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+                    
+                    wb = Workbook()
+                    ws = wb.active
+                    ws.title = "Sembrado Manual"
+                    
+                    # Título
+                    ws.cell(row=1, column=1, value=f"{selected_event} - {gender_filter}").font = Font(bold=True, size=16)
+                    
+                    current_row = 3
+                    for serie in seeding_data['series']:
+                        # Título de serie
+                        ws.cell(row=current_row, column=1, value=f"Serie {serie['serie']}").font = Font(bold=True, size=14)
+                        current_row += 1
+                        
+                        # Headers
+                        headers = ["Carril", "Nombre", "Equipo", "Edad", "Categoría", "Tiempo Inscripción", "Tiempo Competencia"]
+                        for col, header in enumerate(headers, 1):
+                            cell = ws.cell(row=current_row, column=col, value=header)
+                            cell.font = Font(bold=True)
+                            if header == "Tiempo Competencia":
+                                cell.font = Font(bold=True, color="FF0000")
+                        current_row += 1
+                        
+                        # Datos de carriles
+                        for lane_idx, swimmer in enumerate(serie['carriles']):
+                            ws.cell(row=current_row, column=1, value=lane_idx + 1)
+                            if swimmer:
+                                ws.cell(row=current_row, column=2, value=swimmer['nombre'])
+                                ws.cell(row=current_row, column=3, value=swimmer['equipo'])
+                                ws.cell(row=current_row, column=4, value=swimmer['edad'])
+                                ws.cell(row=current_row, column=5, value=swimmer['categoria'])
+                                ws.cell(row=current_row, column=6, value=swimmer['tiempo'])
+                                comp_cell = ws.cell(row=current_row, column=7, value="")
+                                comp_cell.font = Font(color="0000FF")
+                            current_row += 1
+                        
+                        current_row += 1  # Espacio entre series
+                    
+                    # Ajustar columnas
+                    ws.column_dimensions['B'].width = 30
+                    ws.column_dimensions['C'].width = 25
+                    ws.column_dimensions['F'].width = 18
+                    ws.column_dimensions['G'].width = 18
+                    
+                    wb.save(manual_filename)
+                    st.success(f"✅ Sembrado manual guardado: {manual_filename}")
+            
+            with col_download:
+                if st.button("⬇️ Descargar Excel"):
+                    # Crear archivo temporal para descarga
+                    manual_buffer = generate_seeding_excel_from_manual(seeding_data, selected_event, gender_filter)
+                    st.download_button(
+                        label="📥 Descargar Sembrado Manual",
+                        data=manual_buffer,
+                        file_name=f"sembrado_manual_{selected_event}_{gender_filter}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+            
+            with col_reset:
+                if st.button("🔄 Resetear", help="Volver al sembrado automático inicial"):
+                    if seeding_key in st.session_state:
+                        del st.session_state[seeding_key]
+                    st.rerun()
     
     # Sección de limpieza de sembrados
     st.markdown("---")
