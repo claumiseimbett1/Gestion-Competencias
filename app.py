@@ -531,6 +531,23 @@ def sembrado_competencia_interface():
         """, unsafe_allow_html=True)
         return
     
+    # Verificar si hay sembrados cacheados y mostrar advertencia si puede haber cambios
+    cached_seedings = []
+    if 'seeding_preview_cat' in st.session_state:
+        cached_seedings.append("Por Categorías")
+    if 'seeding_preview_time' in st.session_state:
+        cached_seedings.append("Por Tiempo")
+    if any(key.startswith('manual_seeding_') for key in st.session_state.keys()):
+        cached_seedings.append("Manual")
+    
+    if cached_seedings:
+        st.markdown(f"""
+        <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; padding: 12px; margin-bottom: 20px;">
+            <strong>💡 Recordatorio:</strong> Tienes sembrados cargados ({', '.join(cached_seedings)}). 
+            Si agregaste nuevas inscripciones, usa el botón <strong>🔄</strong> para actualizar.
+        </div>
+        """, unsafe_allow_html=True)
+    
     # Pestañas para diferentes métodos de sembrado
     tab1, tab2, tab3 = st.tabs(["📊 Por Categorías", "⏱️ Por Tiempo", "✍️ Manual"])
     
@@ -566,17 +583,35 @@ def sembrado_competencia_interface():
                         st.error(f"Error al generar sembrado: {e}")
         
         with col2:
-            if st.button("👁️ Visualizar Sembrado", help="Ver preview del sembrado antes de descargar"):
-                with st.spinner("Cargando visualización..."):
-                    try:
-                        seeding_data, message = script1.get_seeding_data()
-                        if seeding_data:
-                            st.session_state['seeding_preview_cat'] = seeding_data
-                            st.success("✅ Visualización cargada")
-                        else:
-                            st.error(message)
-                    except Exception as e:
-                        st.error(f"Error al cargar visualización: {e}")
+            col_view, col_refresh = st.columns([2, 1])
+            with col_view:
+                if st.button("👁️ Visualizar Sembrado", help="Ver preview del sembrado antes de descargar"):
+                    with st.spinner("Cargando visualización..."):
+                        try:
+                            seeding_data, message = script1.get_seeding_data()
+                            if seeding_data:
+                                st.session_state['seeding_preview_cat'] = seeding_data
+                                st.success("✅ Visualización cargada")
+                            else:
+                                st.error(message)
+                        except Exception as e:
+                            st.error(f"Error al cargar visualización: {e}")
+            
+            with col_refresh:
+                if st.button("🔄", help="Actualizar con nuevas inscripciones"):
+                    # Limpiar cache y recargar
+                    if 'seeding_preview_cat' in st.session_state:
+                        del st.session_state['seeding_preview_cat']
+                    with st.spinner("Actualizando sembrado..."):
+                        try:
+                            seeding_data, message = script1.get_seeding_data()
+                            if seeding_data:
+                                st.session_state['seeding_preview_cat'] = seeding_data
+                                st.success("✅ Sembrado actualizado")
+                            else:
+                                st.error(message)
+                        except Exception as e:
+                            st.error(f"Error al actualizar: {e}")
         
         with col3:
             if os.path.exists("sembrado_competencia.xlsx"):
@@ -733,17 +768,35 @@ def sembrado_competencia_interface():
                         st.error(f"Error al generar sembrado: {e}")
         
         with col2:
-            if st.button("👁️ Visualizar Sembrado", help="Ver preview del sembrado antes de descargar", key="view_tiempo"):
-                with st.spinner("Cargando visualización..."):
-                    try:
-                        seeding_data, message = script2.get_seeding_data()
-                        if seeding_data:
-                            st.session_state['seeding_preview_time'] = seeding_data
-                            st.success("✅ Visualización cargada")
-                        else:
-                            st.error(message)
-                    except Exception as e:
-                        st.error(f"Error al cargar visualización: {e}")
+            col_view, col_refresh = st.columns([2, 1])
+            with col_view:
+                if st.button("👁️ Visualizar Sembrado", help="Ver preview del sembrado antes de descargar", key="view_tiempo"):
+                    with st.spinner("Cargando visualización..."):
+                        try:
+                            seeding_data, message = script2.get_seeding_data()
+                            if seeding_data:
+                                st.session_state['seeding_preview_time'] = seeding_data
+                                st.success("✅ Visualización cargada")
+                            else:
+                                st.error(message)
+                        except Exception as e:
+                            st.error(f"Error al cargar visualización: {e}")
+            
+            with col_refresh:
+                if st.button("🔄", key="refresh_time", help="Actualizar con nuevas inscripciones"):
+                    # Limpiar cache y recargar
+                    if 'seeding_preview_time' in st.session_state:
+                        del st.session_state['seeding_preview_time']
+                    with st.spinner("Actualizando sembrado..."):
+                        try:
+                            seeding_data, message = script2.get_seeding_data()
+                            if seeding_data:
+                                st.session_state['seeding_preview_time'] = seeding_data
+                                st.success("✅ Sembrado actualizado")
+                            else:
+                                st.error(message)
+                        except Exception as e:
+                            st.error(f"Error al actualizar: {e}")
         
         with col3:
             if os.path.exists("sembrado_competencia_POR_TIEMPO.xlsx"):
@@ -941,11 +994,24 @@ def sembrado_competencia_interface():
             
             st.success(f"✅ {len(swimmers_for_event)} nadadores encontrados en **{selected_event}**")
             
+            # Botón para actualizar sembrado con nuevas inscripciones
+            col_refresh, col_info = st.columns([1, 3])
+            with col_refresh:
+                if st.button("🔄 Actualizar Sembrado", help="Cargar nuevas inscripciones"):
+                    seeding_key = f"manual_seeding_{selected_event}_{gender_filter}"
+                    if seeding_key in st.session_state:
+                        del st.session_state[seeding_key]
+                    st.rerun()
+            
+            with col_info:
+                st.info("💡 Usa 'Actualizar Sembrado' si agregaste nuevas inscripciones")
+
             # Inicializar sembrado en session state
             seeding_key = f"manual_seeding_{selected_event}_{gender_filter}"
-            if seeding_key not in st.session_state:
-                # Crear sembrado inicial automático
-                sorted_swimmers = sorted(swimmers_for_event, key=lambda x: float('inf') if x['tiempo'] == 'nan' else float(x['tiempo'].replace(':', '').replace('.', '')) if ':' in x['tiempo'] else float(x['tiempo']) if x['tiempo'].replace('.', '').isdigit() else float('inf'))
+            
+            def create_initial_seeding(swimmers_list):
+                """Crear sembrado inicial automático"""
+                sorted_swimmers = sorted(swimmers_list, key=lambda x: float('inf') if x['tiempo'] == 'nan' else float(x['tiempo'].replace(':', '').replace('.', '')) if ':' in x['tiempo'] else float(x['tiempo']) if x['tiempo'].replace('.', '').isdigit() else float('inf'))
                 
                 # Distribución en series de 8 carriles
                 series = []
@@ -964,12 +1030,22 @@ def sembrado_competencia_interface():
                     
                     series.append(serie)
                 
-                st.session_state[seeding_key] = {
+                return {
                     'evento': selected_event,
                     'genero': gender_filter, 
                     'series': series,
-                    'nadadores_disponibles': []
+                    'nadadores_disponibles': [],
+                    'total_nadadores': len(swimmers_list)  # Para detectar cambios
                 }
+            
+            # Verificar si necesita actualización automática
+            if seeding_key not in st.session_state:
+                st.session_state[seeding_key] = create_initial_seeding(swimmers_for_event)
+            else:
+                # Verificar si el número de nadadores cambió
+                current_total = st.session_state[seeding_key].get('total_nadadores', 0)
+                if current_total != len(swimmers_for_event):
+                    st.warning(f"⚠️ Se detectaron {len(swimmers_for_event) - current_total} nuevas inscripciones. Usa 'Actualizar Sembrado' para cargarlas.")
             
             seeding_data = st.session_state[seeding_key]
             
