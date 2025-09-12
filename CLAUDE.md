@@ -35,13 +35,19 @@ The application will start a web interface accessible at `http://localhost:8501`
    - Used for open competitions or qualifying events
    - Outputs: `sembrado_competencia_POR_TIEMPO.xlsx`
 
-3. **`procesar_resultados.py`** - Results processing and scoring
+3. **`generar_papeletas.py`** - Judge scoresheets generation
+   - Creates PDF scoresheets for judges with lane assignments, series, and events
+   - Includes blank spaces for recording race times during competition
+   - Professional format with headers, swimmer details, and competition info
+   - Outputs: `papeletas_jueces.pdf`
+
+4. **`procesar_resultados.py`** - Results processing and scoring
    - Reads final race times and calculates rankings
    - Applies point system: 1st=9pts, 2nd=7pts, 3rd=6pts, 4th=5pts, 5th=4pts, 6th=3pts, 7th=2pts, 8th=1pt
    - Generates three reports: by event/category, individual rankings, team rankings
    - Outputs: `reporte_premiacion_final_CORREGIDO.xlsx`
 
-4. **`1-inscripcion_nadadores.py`** - Swimmer registration system
+5. **`1-inscripcion_nadadores.py`** - Swimmer registration system
    - Complete registration interface with manual and database search methods
    - Database integration with `BASE-DE-DATOS.xlsx` (FPROYECCION 2025T and M. PROYECCION 2025 sheets)
    - Duplicate validation with override options
@@ -85,6 +91,7 @@ The application will start a web interface accessible at `http://localhost:8501`
 ├── 2-generar_sembrado.py     # Category-based seeding (renamed)
 ├── 3-generar_sembrado_por_tiempo.py  # Time-based seeding (renamed)
 ├── 4-procesar_resultados.py  # Results processing (renamed)
+├── generar_papeletas.py      # Judge scoresheets PDF generation
 ├── img/TEN.png              # Organization logo
 ├── requirements.txt         # Python dependencies
 ├── *.xlsx                   # Input/output Excel files
@@ -168,3 +175,29 @@ The registration system (`1-inscripcion_nadadores.py`) includes:
 - File operations include safety checks for required input files
 - Registration system integrates seamlessly with existing seeding and results modules
 - PDF generation requires ReportLab library (included in requirements.txt)
+- Judge scoresheets system creates professional PDF forms for competition time recording
+
+## Judge Scoresheets Feature
+
+### Overview
+The system now includes automatic generation of PDF scoresheets for judges after generating the seeding. These papeletas provide:
+
+- **Lane assignments**: Each swimmer's assigned lane clearly displayed
+- **Series information**: Heat/series numbers for each race  
+- **Event details**: Event name, category, and gender division
+- **Time recording spaces**: Blank fields for judges to write competition times
+- **Professional layout**: Formatted tables with swimmer details (name, team)
+
+### Usage Workflow
+1. **Generate seeding** (by category or time) in the main application
+2. **Click "Generar Papeletas PDF"** button that appears after successful seeding
+3. **Download the PDF file** (`papeletas_jueces.pdf`) 
+4. **Print the scoresheets** and distribute to judges during competition
+5. **Record times** in the blank spaces provided during races
+6. **Input recorded times** back into the system for results processing
+
+### Technical Details
+- **PDF format**: Landscape A4 orientation for better readability
+- **One sheet per series**: Each heat gets its own dedicated page
+- **Standard lane layout**: Uses swimming competition standard (lanes 4,5,3,6,2,7,1,8)
+- **Error handling**: Validates required files and provides clear error messages

@@ -31,6 +31,11 @@ spec3 = importlib.util.spec_from_file_location("procesar_resultados", "4-procesa
 script3 = importlib.util.module_from_spec(spec3)
 spec3.loader.exec_module(script3)
 
+# Importar el módulo de papeletas
+spec4 = importlib.util.spec_from_file_location("generar_papeletas", "generar_papeletas.py")
+papeletas_module = importlib.util.module_from_spec(spec4)
+spec4.loader.exec_module(papeletas_module)
+
 #Configuración de la página
 st.set_page_config(
     page_title="TEN - Gestión de Competencias",
@@ -294,6 +299,16 @@ def generar_sembrado_categoria():
                         </div>
                         """, unsafe_allow_html=True)
                     
+                    # Botón para generar papeletas
+                    st.markdown("### 📋 Generar Papeletas para Jueces")
+                    if st.button("📄 Generar Papeletas PDF", type="secondary"):
+                        with st.spinner("Generando papeletas..."):
+                            success, message = papeletas_module.generar_papeletas_pdf()
+                            if success:
+                                st.success(message)
+                            else:
+                                st.error(message)
+                    
                     # Mostrar output
                     #if result.stdout:
                     #    st.text("Output:")
@@ -317,6 +332,17 @@ def generar_sembrado_categoria():
                     file_name="sembrado_competencia.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
+            
+            # Botón de descarga para papeletas si existe
+            if os.path.exists("papeletas_jueces.pdf"):
+                st.info("📄 Papeletas de jueces disponibles")
+                with open("papeletas_jueces.pdf", "rb") as file:
+                    st.download_button(
+                        label="⬇️ Descargar Papeletas PDF",
+                        data=file.read(),
+                        file_name="papeletas_jueces.pdf",
+                        mime="application/pdf"
+                    )
 
 def generar_sembrado_tiempo():
     st.markdown("## ⏱️ Generar Sembrado por Tiempo")
@@ -362,6 +388,16 @@ def generar_sembrado_tiempo():
                         </div>
                         """, unsafe_allow_html=True)
                     
+                    # Botón para generar papeletas
+                    st.markdown("### 📋 Generar Papeletas para Jueces")
+                    if st.button("📄 Generar Papeletas PDF", type="secondary", key="papeletas_tiempo"):
+                        with st.spinner("Generando papeletas..."):
+                            success, message = papeletas_module.generar_papeletas_pdf()
+                            if success:
+                                st.success(message)
+                            else:
+                                st.error(message)
+                    
                     #if result.stdout:
                     #    st.text("Output:")
                     #    st.text(result.stdout)
@@ -383,6 +419,17 @@ def generar_sembrado_tiempo():
                     file_name="sembrado_competencia_POR_TIEMPO.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
+            
+            # Botón de descarga para papeletas si existe
+            if os.path.exists("papeletas_jueces.pdf"):
+                st.info("📄 Papeletas de jueces disponibles")
+                with open("papeletas_jueces.pdf", "rb") as file:
+                    st.download_button(
+                        label="⬇️ Descargar Papeletas PDF",
+                        data=file.read(),
+                        file_name="papeletas_jueces.pdf",
+                        mime="application/pdf"
+                    )
 
 def generate_seeding_excel(df_evento, evento_nombre, tipo_sembrado):
     """
