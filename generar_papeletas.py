@@ -103,149 +103,185 @@ def leer_datos_sembrado():
         print(f"Error al leer datos del sembrado: {e}")
         return []
 
-def crear_papeleta_individual(papeleta_data, styles):
-    """Crea una papeleta individual para un nadador específico"""
+def crear_papeleta_compacta(papeleta_data, styles):
+    """Crea una papeleta compacta para múltiples por página"""
     elements = []
     
-    # Título de la prueba
+    # Título de la prueba (más compacto)
     title_style = ParagraphStyle(
         'PruebaTitle',
         parent=styles['Heading2'],
-        fontSize=18,
+        fontSize=10,
         textColor=colors.black,
         alignment=TA_CENTER,
-        spaceAfter=20,
+        spaceAfter=8,
         fontName='Helvetica-Bold'
     )
     
     elements.append(Paragraph(f"PRUEBA: {papeleta_data['prueba']}", title_style))
-    elements.append(Spacer(1, 15))
     
-    # Información del nadador con fondo
+    # Información del nadador (más compacta)
     nadador_style = ParagraphStyle(
         'NadadorInfo',
         parent=styles['Normal'],
-        fontSize=14,
+        fontSize=9,
         alignment=TA_CENTER,
-        spaceAfter=20,
-        fontName='Helvetica-Bold',
-        backColor=colors.HexColor('#F0F0F0'),
-        borderPadding=10
+        spaceAfter=8,
+        fontName='Helvetica-Bold'
     )
     
-    nadador_info = f"{papeleta_data['nombre']} - {papeleta_data['equipo']} - {papeleta_data['categoria']}"
+    nadador_info = f"{papeleta_data['nombre']}<br/>{papeleta_data['equipo']} - {papeleta_data['categoria']}"
     elements.append(Paragraph(nadador_info, nadador_style))
-    elements.append(Spacer(1, 25))
     
-    # Crear tabla para Serie y Carril (lado a lado)
+    # Serie y Carril en tabla compacta
     serie_carril_data = [
         ['SERIE:', 'CARRIL:'],
         [str(papeleta_data['serie']), str(papeleta_data['carril'])]
     ]
     
-    serie_carril_table = Table(serie_carril_data, colWidths=[2*inch, 2*inch])
+    serie_carril_table = Table(serie_carril_data, colWidths=[0.8*inch, 0.8*inch])
     serie_carril_table.setStyle(TableStyle([
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 12),
+        ('FONTSIZE', (0, 0), (-1, 0), 8),
         ('FONTNAME', (0, 1), (-1, 1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 1), (-1, 1), 14),
-        ('BOX', (0, 1), (0, 1), 2, colors.black),
-        ('BOX', (1, 1), (1, 1), 2, colors.black),
+        ('FONTSIZE', (0, 1), (-1, 1), 12),
+        ('BOX', (0, 1), (0, 1), 1, colors.black),
+        ('BOX', (1, 1), (1, 1), 1, colors.black),
         ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor('#e8f5e8')),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING', (0, 1), (-1, 1), 8),
-        ('BOTTOMPADDING', (0, 1), (-1, 1), 8)
+        ('TOPPADDING', (0, 1), (-1, 1), 4),
+        ('BOTTOMPADDING', (0, 1), (-1, 1), 4)
     ]))
     
     elements.append(serie_carril_table)
-    elements.append(Spacer(1, 30))
+    elements.append(Spacer(1, 8))
     
-    # Título "TIEMPO DE COMPETENCIA"
+    # Título "TIEMPO" (más compacto)
     tiempo_title_style = ParagraphStyle(
         'TiempoTitle',
         parent=styles['Heading1'],
-        fontSize=20,
+        fontSize=10,
         textColor=colors.HexColor('#FF0000'),
         alignment=TA_CENTER,
-        spaceAfter=20,
+        spaceAfter=6,
         fontName='Helvetica-Bold'
     )
     
     elements.append(Paragraph("TIEMPO DE COMPETENCIA:", tiempo_title_style))
     
-    # Caja grande para el tiempo
-    tiempo_style = ParagraphStyle(
-        'TiempoLinea',
-        parent=styles['Normal'],
-        fontSize=28,
-        alignment=TA_CENTER,
-        fontName='Courier-Bold',
-        spaceAfter=30
-    )
-    
-    # Crear una tabla para el tiempo con borde grueso
+    # Caja para el tiempo (más compacta)
     tiempo_data = [['_____ : _____ . _____']]
-    tiempo_table = Table(tiempo_data, colWidths=[4*inch])
+    tiempo_table = Table(tiempo_data, colWidths=[2*inch])
     tiempo_table.setStyle(TableStyle([
         ('ALIGN', (0, 0), (0, 0), 'CENTER'),
         ('VALIGN', (0, 0), (0, 0), 'MIDDLE'),
         ('FONTNAME', (0, 0), (0, 0), 'Courier-Bold'),
-        ('FONTSIZE', (0, 0), (0, 0), 28),
-        ('BOX', (0, 0), (0, 0), 4, colors.black),
+        ('FONTSIZE', (0, 0), (0, 0), 16),
+        ('BOX', (0, 0), (0, 0), 2, colors.black),
         ('BACKGROUND', (0, 0), (0, 0), colors.white),
-        ('TOPPADDING', (0, 0), (0, 0), 20),
-        ('BOTTOMPADDING', (0, 0), (0, 0), 20)
+        ('TOPPADDING', (0, 0), (0, 0), 8),
+        ('BOTTOMPADDING', (0, 0), (0, 0), 8)
     ]))
     
     elements.append(tiempo_table)
-    elements.append(Spacer(1, 40))
+    elements.append(Spacer(1, 6))
     
-    # Información del juez (más pequeña, en gris)
+    # Línea para juez (más pequeña)
     info_style = ParagraphStyle(
         'Info',
         parent=styles['Normal'],
-        fontSize=10,
+        fontSize=7,
         textColor=colors.HexColor('#666666'),
-        alignment=TA_LEFT,
-        spaceAfter=5
+        alignment=TA_CENTER,
+        spaceAfter=2
     )
     
-    elements.append(Paragraph("Juez: ________________________________", info_style))
-    elements.append(Paragraph("Fecha: ______________    Hora: ______________", info_style))
-    elements.append(PageBreak())
+    elements.append(Paragraph("Juez: _________________", info_style))
     
     return elements
 
+def crear_pagina_con_3_papeletas(papeletas_grupo, styles):
+    """Crea una página con 3 papeletas organizadas verticalmente"""
+    elements = []
+    
+    for i, papeleta in enumerate(papeletas_grupo):
+        if i > 0:
+            elements.append(Spacer(1, 15))  # Separador entre papeletas
+        
+        # Crear una tabla que contenga toda la papeleta
+        papeleta_elements = crear_papeleta_compacta(papeleta, styles)
+        
+        # Convertir elementos en una tabla para mejor control
+        papeleta_content = []
+        for element in papeleta_elements:
+            if hasattr(element, 'text'):  # Es un Paragraph
+                papeleta_content.append([element])
+            elif hasattr(element, '_argW'):  # Es una Table
+                papeleta_content.append([element])
+            # Ignorar Spacers ya que controlamos el espaciado con la tabla
+        
+        # Crear tabla contenedora para la papeleta
+        if papeleta_content:
+            papeleta_table = Table(papeleta_content, colWidths=[6*inch])
+            papeleta_table.setStyle(TableStyle([
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('BOX', (0, 0), (-1, -1), 1, colors.black),
+                ('BACKGROUND', (0, 0), (-1, -1), colors.white),
+                ('TOPPADDING', (0, 0), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 8)
+            ]))
+            elements.append(papeleta_table)
+    
+    elements.append(PageBreak())
+    return elements
+
 def generar_papeletas_pdf():
-    """Genera el archivo PDF con papeletas individuales"""
+    """Genera el archivo PDF con 3 papeletas por página, optimizado para impresión"""
     papeletas_sembrado = leer_datos_sembrado()
     
     if not papeletas_sembrado:
         return False, "No se pudieron leer los datos del sembrado"
     
     try:
-        # Crear documento PDF en orientación vertical (portrait)
+        # Crear documento PDF en orientación vertical (portrait) con márgenes optimizados
         doc = SimpleDocTemplate(
             ARCHIVO_PAPELETAS,
             pagesize=A4,
-            rightMargin=20*mm,
-            leftMargin=20*mm,
-            topMargin=20*mm,
-            bottomMargin=20*mm
+            rightMargin=15*mm,
+            leftMargin=15*mm,
+            topMargin=15*mm,
+            bottomMargin=15*mm
         )
         
         styles = getSampleStyleSheet()
         elements = []
         
-        # Generar papeletas individuales (una por página)
-        for papeleta_data in papeletas_sembrado:
-            papeleta_elements = crear_papeleta_individual(papeleta_data, styles)
-            elements.extend(papeleta_elements)
+        # Título del documento
+        title_style = ParagraphStyle(
+            'DocumentTitle',
+            parent=styles['Heading1'],
+            fontSize=16,
+            textColor=colors.black,
+            alignment=TA_CENTER,
+            spaceAfter=20,
+            fontName='Helvetica-Bold'
+        )
+        elements.append(Paragraph("PAPELETAS DE JUECES - COMPETENCIA DE NATACIÓN", title_style))
+        elements.append(Spacer(1, 10))
+        
+        # Agrupar papeletas de 3 en 3 para cada página
+        for i in range(0, len(papeletas_sembrado), 3):
+            grupo_papeletas = papeletas_sembrado[i:i+3]
+            pagina_elements = crear_pagina_con_3_papeletas(grupo_papeletas, styles)
+            elements.extend(pagina_elements)
         
         # Construir el PDF
         doc.build(elements)
-        return True, f"Papeletas individuales generadas exitosamente: {ARCHIVO_PAPELETAS}"
+        return True, f"Papeletas PDF generadas exitosamente: {ARCHIVO_PAPELETAS} ({len(papeletas_sembrado)} papeletas en {math.ceil(len(papeletas_sembrado)/3)} páginas)"
         
     except Exception as e:
         return False, f"Error al generar papeletas: {e}"

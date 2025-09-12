@@ -135,17 +135,24 @@ def generar_papeletas_excel():
             bottom=Side(style='thick')
         )
         
-        # Configurar anchos de columna para 3 papeletas por fila
+        # Configurar anchos de columna para mejor distribución (3 papeletas por fila)
         for col in range(1, 10):  # A hasta I (3 papeletas × 3 columnas cada una)
-            ws.column_dimensions[get_column_letter(col)].width = 12
+            ws.column_dimensions[get_column_letter(col)].width = 11
         
+        # Agregar título del documento
+        ws.merge_cells('A1:I1')
+        title_cell = ws.cell(row=1, column=1, value="PAPELETAS DE JUECES - COMPETENCIA DE NATACIÓN TEN")
+        title_cell.font = Font(bold=True, size=14, color='1E88E5')
+        title_cell.alignment = Alignment(horizontal='center')
+        
+        fila_actual = 3  # Empezar después del título
         contador_papeletas = 0
         
         for papeleta in papeletas_sembrado:
             # Calcular posición (3 papeletas por fila)
             pos_en_fila = contador_papeletas % 3  # 0, 1, 2
             if pos_en_fila == 0 and contador_papeletas > 0:
-                fila_actual += 10  # Nueva fila de papeletas
+                fila_actual += 8  # Espacio entre filas de papeletas (reducido)
             
             col_inicio = pos_en_fila * 3 + 1  # 1, 4, 7
             
@@ -189,29 +196,52 @@ def generar_papeletas_excel():
             cell.alignment = Alignment(horizontal='center')
             cell.border = border_thin
             
-            # QUINTA FILA: Línea para anotación (EN BLANCO)
+            # QUINTA FILA: Línea para anotación (EN BLANCO) - más compacta
             fila_base += 1
             ws.merge_cells(start_row=fila_base, start_column=col_inicio,
-                         end_row=fila_base + 1, end_column=col_inicio + 2)
+                         end_row=fila_base, end_column=col_inicio + 2)
             cell = ws.cell(row=fila_base, column=col_inicio, value="_____ : _____ . _____")
-            cell.font = Font(bold=True, size=16)
+            cell.font = Font(bold=True, size=14)
             cell.alignment = Alignment(horizontal='center', vertical='center')
             cell.border = border_thick
             
-            # Ajustar altura de las filas de tiempo
-            ws.row_dimensions[fila_base].height = 35
-            ws.row_dimensions[fila_base + 1].height = 35
+            # SEXTA FILA: Juez (más compacta)
+            fila_base += 1
+            ws.merge_cells(start_row=fila_base, start_column=col_inicio,
+                         end_row=fila_base, end_column=col_inicio + 2)
+            cell = ws.cell(row=fila_base, column=col_inicio, value="Juez: ___________________")
+            cell.font = Font(size=8, color='666666')
+            cell.alignment = Alignment(horizontal='center')
+            cell.border = border_thin
+            
+            # Ajustar altura de las filas
+            ws.row_dimensions[fila_base - 1].height = 25  # Fila de tiempo
+            ws.row_dimensions[fila_base].height = 15      # Fila de juez
             
             contador_papeletas += 1
         
-        # Configurar márgenes de página para impresión
-        ws.page_margins.left = 0.5
-        ws.page_margins.right = 0.5
-        ws.page_margins.top = 0.5 
-        ws.page_margins.bottom = 0.5
+        # Configurar márgenes de página para impresión optimizada
+        ws.page_margins.left = 0.3
+        ws.page_margins.right = 0.3
+        ws.page_margins.top = 0.4 
+        ws.page_margins.bottom = 0.3
+        ws.page_margins.header = 0.2
+        ws.page_margins.footer = 0.2
         
-        # Configurar orientación horizontal
+        # Configurar orientación horizontal para mejor aprovechamiento
         ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE
+        ws.page_setup.paperSize = ws.PAPERSIZE_A4
+        
+        # Configurar escala de impresión para que quepa todo
+        ws.page_setup.fitToWidth = 1
+        ws.page_setup.fitToHeight = 0  # Sin límite de altura
+        
+        # Configurar repetir filas en la parte superior (título)
+        ws.print_title_rows = '1:2'
+        
+        # Configurar líneas de cuadrícula para impresión
+        ws.print_options.gridLines = True
+        ws.print_options.gridLinesSet = True
         
         wb.save(ARCHIVO_PAPELETAS_EXCEL)
         return True, f"Papeletas Excel generadas exitosamente: {ARCHIVO_PAPELETAS_EXCEL}"
