@@ -1561,41 +1561,58 @@ def generar_papeletas_interface():
         # Mostrar papeleta seleccionada
         nadador_actual = papeletas_data[papeleta_index]
         
-        st.markdown(f"""
-        <div style="border: 3px solid #1E88E5; padding: 25px; margin: 20px 0; border-radius: 12px; background: linear-gradient(135deg, #f8f9ff 0%, #e3f2fd 100%); box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-            <div style="text-align: center; font-weight: bold; font-size: 18px; color: #1E88E5; margin-bottom: 15px; border-bottom: 2px solid #1E88E5; padding-bottom: 10px;">
-                PRUEBA: {nadador_actual['prueba']}
-            </div>
+        # Mostrar papeleta usando componentes nativos de Streamlit
+        with st.container():
+            st.markdown("---")
             
-            <div style="text-align: center; font-size: 14px; margin-bottom: 20px; background-color: rgba(255,255,255,0.7); padding: 10px; border-radius: 8px;">
-                <strong>{nadador_actual['nombre']}</strong> - {nadador_actual['equipo']} - {nadador_actual['categoria']}
-            </div>
+            # Título de la prueba
+            st.markdown(f"### 🏊‍♂️ PRUEBA: {nadador_actual['prueba']}")
             
-            <div style="display: flex; justify-content: space-around; margin-bottom: 25px; background-color: rgba(255,255,255,0.5); padding: 15px; border-radius: 8px;">
-                <div style="text-align: center;">
-                    <div style="font-weight: bold; font-size: 12px; margin-bottom: 5px;">SERIE:</div>
-                    <div style="border: 2px solid #333; padding: 8px 15px; background-color: #e8f5e8; font-size: 14px; font-weight: bold;">{nadador_actual['serie']}</div>
-                </div>
-                <div style="text-align: center;">
-                    <div style="font-weight: bold; font-size: 12px; margin-bottom: 5px;">CARRIL:</div>
-                    <div style="border: 2px solid #333; padding: 8px 15px; background-color: #e8f5e8; font-size: 14px; font-weight: bold;">{nadador_actual['carril']}</div>
-                </div>
-            </div>
+            # Información del nadador
+            st.markdown(f"**👤 Nadador:** {nadador_actual['nombre']}")
+            st.markdown(f"**🏢 Equipo:** {nadador_actual['equipo']}")
+            st.markdown(f"**📊 Categoría:** {nadador_actual['categoria']}")
             
-            <div style="text-align: center; font-weight: bold; font-size: 20px; color: #FF0000; margin-bottom: 20px; text-transform: uppercase;">
-                TIEMPO DE COMPETENCIA:
-            </div>
+            # Serie y Carril en columnas
+            col_serie, col_carril = st.columns(2)
+            with col_serie:
+                st.metric("🏁 SERIE", nadador_actual['serie'])
+            with col_carril:
+                st.metric("🛤️ CARRIL", nadador_actual['carril'])
             
-            <div style="text-align: center; font-weight: bold; font-size: 28px; border: 4px solid #000; padding: 20px; background-color: #fff; border-radius: 8px; letter-spacing: 3px; font-family: 'Courier New', monospace;">
+            # Sección de tiempo prominente
+            st.markdown("---")
+            st.markdown("### ⏱️ TIEMPO DE COMPETENCIA")
+            
+            # Crear un espacio visual para el tiempo con CSS más simple
+            st.markdown("""
+            <div style="
+                text-align: center; 
+                font-size: 24px; 
+                font-weight: bold; 
+                font-family: monospace;
+                border: 3px solid #000000; 
+                padding: 20px; 
+                margin: 10px 0;
+                background-color: #ffffff;
+                color: #000000;
+                letter-spacing: 4px;
+            ">
                 _____ : _____ . _____
             </div>
+            """, unsafe_allow_html=True)
             
-            <div style="margin-top: 20px; font-size: 10px; color: #666; border-top: 1px solid #ccc; padding-top: 10px;">
-                <div style="margin-bottom: 5px;">Juez: ________________________________</div>
-                <div>Fecha: ______________    Hora: ______________</div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+            # Información del juez
+            st.markdown("---")
+            st.markdown("**👨‍⚖️ Juez:** ________________________________")
+            
+            col_fecha, col_hora = st.columns(2)
+            with col_fecha:
+                st.markdown("**📅 Fecha:** ______________")
+            with col_hora:
+                st.markdown("**🕐 Hora:** ______________")
+            
+            st.markdown("---")
         
         # Información adicional de la papeleta actual
         col_info1, col_info2, col_info3, col_info4 = st.columns(4)
@@ -1610,42 +1627,72 @@ def generar_papeletas_interface():
         
         # Botón para vista rápida de impresión
         if st.button("🖨️ Vista de Impresión", key="print_preview"):
-            st.markdown("### Vista de Impresión - Tamaño Real")
-            st.markdown(f"""
-            <div style="width: 21cm; border: 1px solid #000; padding: 1cm; margin: 0 auto; background: white; font-family: Arial, sans-serif;">
-                <div style="text-align: center; font-size: 20px; font-weight: bold; color: #1E88E5; margin-bottom: 1cm; border-bottom: 2px solid #1E88E5; padding-bottom: 0.5cm;">
-                    PRUEBA: {nadador_actual['prueba']}
-                </div>
+            st.markdown("### 🖨️ Vista de Impresión - Simulación Tamaño Real")
+            
+            # Vista de impresión usando componentes Streamlit nativos
+            with st.container():
+                # Crear un borde visual con CSS simple
+                st.markdown("""
+                <div style="
+                    border: 2px solid #000000; 
+                    padding: 20px; 
+                    margin: 10px; 
+                    background-color: #ffffff;
+                ">
+                """, unsafe_allow_html=True)
                 
-                <div style="text-align: center; font-size: 16px; margin-bottom: 1.5cm;">
-                    <strong>{nadador_actual['nombre']}</strong> - {nadador_actual['equipo']} - {nadador_actual['categoria']}
-                </div>
+                # Contenido de la papeleta
+                st.markdown(f"## 🏊‍♂️ PRUEBA: {nadador_actual['prueba']}")
+                st.markdown("---")
                 
-                <div style="display: flex; justify-content: space-around; margin-bottom: 2cm;">
-                    <div style="text-align: center;">
-                        <div style="font-size: 14px; margin-bottom: 0.5cm;">SERIE:</div>
-                        <div style="border: 3px solid #000; padding: 1cm 2cm; font-size: 18px;">______</div>
-                    </div>
-                    <div style="text-align: center;">
-                        <div style="font-size: 14px; margin-bottom: 0.5cm;">CARRIL:</div>
-                        <div style="border: 3px solid #000; padding: 1cm 2cm; font-size: 18px;">______</div>
-                    </div>
-                </div>
+                col1, col2, col3 = st.columns([1, 2, 1])
+                with col2:
+                    st.markdown(f"### 👤 {nadador_actual['nombre']}")
+                    st.markdown(f"**🏢 {nadador_actual['equipo']} - 📊 {nadador_actual['categoria']}**")
                 
-                <div style="text-align: center; font-size: 24px; font-weight: bold; color: #FF0000; margin-bottom: 1.5cm;">
-                    TIEMPO DE COMPETENCIA:
-                </div>
+                st.markdown("---")
                 
-                <div style="text-align: center; font-size: 36px; font-weight: bold; border: 4px solid #000; padding: 1.5cm; background: #f9f9f9; letter-spacing: 5px;">
+                # Serie y Carril grandes
+                col_s, col_c = st.columns(2)
+                with col_s:
+                    st.markdown("#### 🏁 SERIE:")
+                    st.markdown(f"# {nadador_actual['serie']}")
+                with col_c:
+                    st.markdown("#### 🛤️ CARRIL:")
+                    st.markdown(f"# {nadador_actual['carril']}")
+                
+                st.markdown("---")
+                st.markdown("## ⏱️ TIEMPO DE COMPETENCIA:")
+                
+                # Tiempo en formato grande
+                st.markdown("""
+                <div style="
+                    text-align: center; 
+                    font-size: 36px; 
+                    font-weight: bold; 
+                    font-family: monospace;
+                    border: 4px solid #000000; 
+                    padding: 30px; 
+                    margin: 20px 0;
+                    background-color: #f9f9f9;
+                    letter-spacing: 8px;
+                ">
                     _____ : _____ . _____
                 </div>
+                """, unsafe_allow_html=True)
                 
-                <div style="margin-top: 2cm; font-size: 12px; color: #666;">
-                    <div style="margin-bottom: 1cm;">Juez: ________________________________</div>
-                    <div>Fecha: ______________    Hora: ______________</div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+                st.markdown("---")
+                st.markdown("**👨‍⚖️ Juez:** ________________________________")
+                
+                col_f, col_h = st.columns(2)
+                with col_f:
+                    st.markdown("**📅 Fecha:** ______________")
+                with col_h:
+                    st.markdown("**🕐 Hora:** ______________")
+                
+                # Cerrar el div del borde
+                st.markdown("</div>", unsafe_allow_html=True)
+            
             st.markdown("*Esta vista simula el tamaño real de impresión*")
         
         # Lista compacta de todas las papeletas
