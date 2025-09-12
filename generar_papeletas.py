@@ -28,9 +28,8 @@ def parse_time(time_val):
     except (ValueError, IndexError): return float('inf')
 
 def leer_datos_sembrado():
-    """Lee los datos del sembrado desde el archivo Excel generado"""
+    """Lee los datos del sembrado con series y carriles asignados"""
     try:
-        # Leer desde la planilla de inscripción directamente
         df = pd.read_excel('planilla_inscripcion.xlsx')
         info_cols = ['NOMBRE Y AP', 'EQUIPO', 'EDAD', 'CAT.', 'SEXO']
         event_cols = [col for col in df.columns if col not in info_cols and 'Nø' not in col and 'FECHA DE NA' not in col]
@@ -50,13 +49,14 @@ def leer_datos_sembrado():
                         "equipo": row['EQUIPO'], 
                         "edad": int(row['EDAD']),
                         "categoria": row['CAT.'],
+                        "sexo": sexo,
                         "tiempo_inscripcion": row[prueba], 
                         "tiempo_en_segundos": parse_time(row[prueba])
                     }
                     eventos[nombre_prueba].append(nadador_info)
         
-        # Agrupar por categoría y crear series
-        sembrado_estructurado = []
+        # Agrupar por categoría y crear series con carriles asignados
+        papeletas_con_carriles = []
         for nombre_prueba, nadadores in eventos.items():
             nadadores_por_categoria = {}
             for nadador in nadadores:
@@ -80,106 +80,114 @@ def leer_datos_sembrado():
                     
                     # Asignar carriles usando el orden estándar
                     lane_order = [4, 5, 3, 6, 2, 7, 1, 8]
-                    carriles_serie = [None] * 8
                     
                     for i, nadador in enumerate(nadadores_serie):
                         if i < len(lane_order):
-                            carril_pos = lane_order[i] - 1
-                            carriles_serie[carril_pos] = nadador
-                    
-                    sembrado_estructurado.append({
-                        'prueba': nombre_prueba,
-                        'categoria': categoria,
-                        'serie': serie_num,
-                        'carriles': carriles_serie
-                    })
+                            carril_asignado = lane_order[i]
+                            
+                            papeleta = {
+                                "nombre": nadador['nombre'],
+                                "equipo": nadador['equipo'],
+                                "categoria": nadador['categoria'],
+                                "sexo": nadador['sexo'],
+                                "prueba": nombre_prueba,
+                                "serie": serie_num,
+                                "carril": carril_asignado,
+                                "tiempo_inscripcion": nadador['tiempo_inscripcion']
+                            }
+                            papeletas_con_carriles.append(papeleta)
         
-        return sembrado_estructurado
+        return papeletas_con_carriles
     
     except Exception as e:
         print(f"Error al leer datos del sembrado: {e}")
         return []
 
-def crear_papeleta_serie(serie_data, styles):
-    """Crea una papeleta para una serie específica"""
+def crear_serie_con_papeletas(serie_data, styles):
+    """Crea una página con múltiples papeletas de una serie"""
     elements = []
+    
+    if not serie_data:
+        return elements
+    
+    # Información de la serie (primera papeleta como referencia)
+    primera_papeleta = serie_data[0]
     
     # Título de la serie
     title_style = ParagraphStyle(
         'SerieTitle',
-        parent=styles['Heading2'],
+        parent=styles['Heading1'],
         fontSize=16,
         textColor=colors.HexColor('#1E88E5'),
         alignment=TA_CENTER,
-        spaceAfter=12
+        spaceAfter=10
     )
     
-    serie_title = f"{serie_data['prueba']} - {serie_data['categoria']} - Serie {serie_data['serie']}"
-    elements.append(Paragraph(serie_title, title_style))
-    elements.append(Spacer(1, 6))
+    elements.append(Paragraph(f"SERIE {primera_papeleta['serie']} - {primera_papeleta['prueba']}", title_style))
+    elements.append(Spacer(1, 10))
     
-    # Crear tabla con carriles
-    data = [['CARRIL', 'NADADOR', 'EQUIPO', 'TIEMPO COMPETENCIA']]
+    # Crear tabla con todas las papeletas de la serie
+    data = [['CARRIL', 'NADADOR', 'EQUIPO', 'CAT.', 'TIEMPO COMP.']]
     
-    for carril_num in range(1, 9):  # Carriles 1-8
-        nadador = serie_data['carriles'][carril_num - 1]
-        if nadador:
-            nombre = nadador['nombre'][:25] + "..." if len(nadador['nombre']) > 25 else nadador['nombre']
-            equipo = nadador['equipo'][:15] + "..." if len(nadador['equipo']) > 15 else nadador['equipo']
-            data.append([str(carril_num), nombre, equipo, '___:___.__'])
-        else:
-            data.append([str(carril_num), '', '', ''])
+    # Ordenar por carril para mostrar en orden
+    serie_ordenada = sorted(serie_data, key=lambda x: x['carril'])
     
-    # Configurar la tabla
-    table = Table(data, colWidths=[0.8*inch, 3.2*inch, 2*inch, 1.5*inch])
+    for papeleta in serie_ordenada:
+        data.append([
+            str(papeleta['carril']),
+            papeleta['nombre'],
+            papeleta['equipo'], 
+            papeleta['categoria'],
+            '___:___.___'
+        ])
+    
+    # Rellenar carriles vacíos hasta 8
+    while len(data) < 9:  # 8 carriles + header
+        carril_num = len(data)
+        data.append([str(carril_num), '(vacío)', '', '', ''])
+    
+    # Crear tabla
+    table = Table(data, colWidths=[1*inch, 2.5*inch, 1.8*inch, 0.8*inch, 1.5*inch])
+    
+    # Estilo de la tabla
     table.setStyle(TableStyle([
-        # Encabezados
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1E88E5')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 11),
-        
-        # Celdas de datos
+        ('FONTSIZE', (0, 0), (-1, 0), 12),
         ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 1), (-1, -1), 9),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F5F5F5')]),
-        
-        # Bordes
+        ('FONTSIZE', (0, 1), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
         ('GRID', (0, 0), (-1, -1), 1, colors.black),
-        ('LINEBELOW', (0, 0), (-1, 0), 2, colors.black),
-        
-        # Columna de tiempo más destacada
-        ('BACKGROUND', (3, 1), (3, -1), colors.HexColor('#FFF3E0')),
-        ('FONTNAME', (3, 1), (3, -1), 'Helvetica-Bold'),
-        
-        # Altura de filas
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F5F5F5')])
     ]))
     
     elements.append(table)
-    elements.append(Spacer(1, 15))
+    elements.append(Spacer(1, 20))
     
-    # Información adicional
+    # Información adicional del juez
     info_style = ParagraphStyle(
         'Info',
         parent=styles['Normal'],
-        fontSize=8,
-        textColor=colors.grey,
-        alignment=TA_LEFT
+        fontSize=12,
+        alignment=TA_LEFT,
+        spaceAfter=10
     )
     
-    info_text = f"Juez: __________________ Fecha: __________ Hora: __________"
-    elements.append(Paragraph(info_text, info_style))
+    elements.append(Paragraph("Juez: ________________________________    Fecha: ________________    Hora: ________________", info_style))
+    elements.append(Spacer(1, 15))
+    elements.append(Paragraph("Observaciones: ____________________________________________________________________________________", info_style))
     elements.append(PageBreak())
     
     return elements
 
 def generar_papeletas_pdf():
-    """Genera el archivo PDF con todas las papeletas"""
-    datos_sembrado = leer_datos_sembrado()
+    """Genera el archivo PDF con papeletas organizadas por serie"""
+    papeletas_sembrado = leer_datos_sembrado()
     
-    if not datos_sembrado:
+    if not papeletas_sembrado:
         return False, "No se pudieron leer los datos del sembrado"
     
     try:
@@ -187,10 +195,10 @@ def generar_papeletas_pdf():
         doc = SimpleDocTemplate(
             ARCHIVO_PAPELETAS,
             pagesize=landscape(A4),
-            rightMargin=20*mm,
-            leftMargin=20*mm,
-            topMargin=20*mm,
-            bottomMargin=20*mm
+            rightMargin=15*mm,
+            leftMargin=15*mm,
+            topMargin=15*mm,
+            bottomMargin=15*mm
         )
         
         styles = getSampleStyleSheet()
@@ -200,7 +208,7 @@ def generar_papeletas_pdf():
         title_style = ParagraphStyle(
             'MainTitle',
             parent=styles['Title'],
-            fontSize=20,
+            fontSize=18,
             textColor=colors.HexColor('#1E88E5'),
             alignment=TA_CENTER,
             spaceAfter=20
@@ -210,14 +218,22 @@ def generar_papeletas_pdf():
         elements.append(Spacer(1, 12))
         elements.append(PageBreak())
         
-        # Generar papeletas para cada serie
-        for serie_data in datos_sembrado:
-            papeleta_elements = crear_papeleta_serie(serie_data, styles)
-            elements.extend(papeleta_elements)
+        # Agrupar papeletas por serie
+        series = {}
+        for papeleta in papeletas_sembrado:
+            clave_serie = f"{papeleta['prueba']}_S{papeleta['serie']}"
+            if clave_serie not in series:
+                series[clave_serie] = []
+            series[clave_serie].append(papeleta)
+        
+        # Generar una página por serie
+        for clave_serie, papeletas_serie in sorted(series.items()):
+            serie_elements = crear_serie_con_papeletas(papeletas_serie, styles)
+            elements.extend(serie_elements)
         
         # Construir el PDF
         doc.build(elements)
-        return True, f"Papeletas generadas exitosamente: {ARCHIVO_PAPELETAS}"
+        return True, f"Papeletas de jueces generadas exitosamente: {ARCHIVO_PAPELETAS}"
         
     except Exception as e:
         return False, f"Error al generar papeletas: {e}"
@@ -237,9 +253,10 @@ def main():
     print(message)
     
     if success:
-        total_series = len(leer_datos_sembrado())
-        print(f"Total de series generadas: {total_series}")
+        total_papeletas = len(leer_datos_sembrado())
+        print(f"Total de papeletas generadas: {total_papeletas}")
         print(f"Archivo guardado como: {ARCHIVO_PAPELETAS}")
+        print(f"Formato: Una serie por página con series y carriles asignados")
 
 if __name__ == "__main__":
     main()

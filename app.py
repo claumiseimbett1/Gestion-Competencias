@@ -31,10 +31,14 @@ spec3 = importlib.util.spec_from_file_location("procesar_resultados", "4-procesa
 script3 = importlib.util.module_from_spec(spec3)
 spec3.loader.exec_module(script3)
 
-# Importar el módulo de papeletas
+# Importar ambos módulos de papeletas
 spec4 = importlib.util.spec_from_file_location("generar_papeletas", "generar_papeletas.py")
-papeletas_module = importlib.util.module_from_spec(spec4)
-spec4.loader.exec_module(papeletas_module)
+papeletas_pdf_module = importlib.util.module_from_spec(spec4)
+spec4.loader.exec_module(papeletas_pdf_module)
+
+spec5 = importlib.util.spec_from_file_location("generar_papeletas_excel", "generar_papeletas_excel.py")
+papeletas_excel_module = importlib.util.module_from_spec(spec5)
+spec5.loader.exec_module(papeletas_excel_module)
 
 #Configuración de la página
 st.set_page_config(
@@ -177,6 +181,7 @@ def main():
             "🏠 Inicio",
             "✍️ Inscripción de Nadadores",
             "📊 Sembrado de Competencia",
+            "📋 Generar Papeletas",
             "🏆 Procesar Resultados",
             "📁 Gestión de Archivos"
         ]
@@ -188,6 +193,8 @@ def main():
         inscripcion_nadadores_interface()
     elif opcion == "📊 Sembrado de Competencia":
         sembrado_competencia_interface()
+    elif opcion == "📋 Generar Papeletas":
+        generar_papeletas_interface()
     elif opcion == "🏆 Procesar Resultados":
         procesar_resultados()
     elif opcion == "📁 Gestión de Archivos":
@@ -299,16 +306,6 @@ def generar_sembrado_categoria():
                         </div>
                         """, unsafe_allow_html=True)
                     
-                    # Botón para generar papeletas
-                    st.markdown("### 📋 Generar Papeletas para Jueces")
-                    if st.button("📄 Generar Papeletas PDF", type="secondary"):
-                        with st.spinner("Generando papeletas..."):
-                            success, message = papeletas_module.generar_papeletas_pdf()
-                            if success:
-                                st.success(message)
-                            else:
-                                st.error(message)
-                    
                     # Mostrar output
                     #if result.stdout:
                     #    st.text("Output:")
@@ -333,15 +330,27 @@ def generar_sembrado_categoria():
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
             
-            # Botón de descarga para papeletas si existe
-            if os.path.exists("papeletas_jueces.pdf"):
-                st.info("📄 Papeletas de jueces disponibles")
-                with open("papeletas_jueces.pdf", "rb") as file:
+            # Sección de papeletas para jueces
+            st.markdown("### 📋 Generar Papeletas para Jueces")
+            st.info("Las papeletas se generan en formato Excel con rectángulos imprimibles")
+            
+            if st.button("📄 Generar Papeletas Excel", type="secondary", key="papeletas_excel_cat"):
+                with st.spinner("Generando papeletas en Excel..."):
+                    success, message = papeletas_excel_module.generar_papeletas_excel()
+                    if success:
+                        st.success(message)
+                    else:
+                        st.error(message)
+            
+            # Botón de descarga para papeletas Excel si existe
+            if os.path.exists("papeletas_jueces.xlsx"):
+                st.info("📄 Papeletas Excel disponibles")
+                with open("papeletas_jueces.xlsx", "rb") as file:
                     st.download_button(
-                        label="⬇️ Descargar Papeletas PDF",
+                        label="⬇️ Descargar Papeletas Excel",
                         data=file.read(),
-                        file_name="papeletas_jueces.pdf",
-                        mime="application/pdf"
+                        file_name="papeletas_jueces.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
 
 def generar_sembrado_tiempo():
@@ -388,16 +397,6 @@ def generar_sembrado_tiempo():
                         </div>
                         """, unsafe_allow_html=True)
                     
-                    # Botón para generar papeletas
-                    st.markdown("### 📋 Generar Papeletas para Jueces")
-                    if st.button("📄 Generar Papeletas PDF", type="secondary", key="papeletas_tiempo"):
-                        with st.spinner("Generando papeletas..."):
-                            success, message = papeletas_module.generar_papeletas_pdf()
-                            if success:
-                                st.success(message)
-                            else:
-                                st.error(message)
-                    
                     #if result.stdout:
                     #    st.text("Output:")
                     #    st.text(result.stdout)
@@ -420,15 +419,27 @@ def generar_sembrado_tiempo():
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
             
-            # Botón de descarga para papeletas si existe
-            if os.path.exists("papeletas_jueces.pdf"):
-                st.info("📄 Papeletas de jueces disponibles")
-                with open("papeletas_jueces.pdf", "rb") as file:
+            # Sección de papeletas para jueces
+            st.markdown("### 📋 Generar Papeletas para Jueces")
+            st.info("Las papeletas se generan en formato Excel con rectángulos imprimibles")
+            
+            if st.button("📄 Generar Papeletas Excel", type="secondary", key="papeletas_excel_tiempo"):
+                with st.spinner("Generando papeletas en Excel..."):
+                    success, message = papeletas_excel_module.generar_papeletas_excel()
+                    if success:
+                        st.success(message)
+                    else:
+                        st.error(message)
+            
+            # Botón de descarga para papeletas Excel si existe
+            if os.path.exists("papeletas_jueces.xlsx"):
+                st.info("📄 Papeletas Excel disponibles")
+                with open("papeletas_jueces.xlsx", "rb") as file:
                     st.download_button(
-                        label="⬇️ Descargar Papeletas PDF",
+                        label="⬇️ Descargar Papeletas Excel",
                         data=file.read(),
-                        file_name="papeletas_jueces.pdf",
-                        mime="application/pdf"
+                        file_name="papeletas_jueces.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
 
 def generate_seeding_excel(df_evento, evento_nombre, tipo_sembrado):
@@ -1489,6 +1500,223 @@ def procesar_resultados():
                     st.error(f"❌ Error: {e}")
             else:
                 st.info("ℹ️ No hay reporte que eliminar")
+
+def generar_papeletas_interface():
+    """Interfaz independiente para generar papeletas PDF y Excel con vista previa"""
+    st.markdown("## 📋 Generar Papeletas para Jueces")
+    
+    st.markdown("""
+    <div class="info-message">
+        <p>Genera papeletas <strong>individuales por nadador</strong> para que los jueces registren los tiempos durante la competencia.</p>
+        <p><strong>Requisito:</strong> Debes tener el archivo de inscripción cargado.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Verificar archivo de entrada
+    if not os.path.exists("planilla_inscripcion.xlsx"):
+        st.markdown("""
+        <div class="warning-message">
+            ⚠️ No se encontró el archivo <strong>planilla_inscripcion.xlsx</strong>. 
+            Por favor, súbelo en la sección "Gestión de Archivos" o registra nadadores primero.
+        </div>
+        """, unsafe_allow_html=True)
+        return
+    
+    # Leer y mostrar vista previa de papeletas
+    try:
+        papeletas_data = papeletas_excel_module.leer_datos_sembrado()
+        if not papeletas_data:
+            st.error("No se encontraron datos del sembrado")
+            return
+        
+        st.success(f"✅ Se generarán {len(papeletas_data)} papeletas individuales")
+        
+        # Vista previa de papeletas
+        st.markdown("### 👁️ Vista Previa de Papeletas")
+        
+        # Navegador de papeletas
+        col_nav1, col_nav2, col_nav3 = st.columns([1, 2, 1])
+        
+        with col_nav2:
+            # Selector de papeleta
+            papeleta_index = st.selectbox(
+                f"Selecciona papeleta (1-{len(papeletas_data)}):",
+                range(len(papeletas_data)),
+                format_func=lambda x: f"Papeleta {x+1}: {papeletas_data[x]['nombre']} - {papeletas_data[x]['prueba'].split(' - ')[0]}",
+                key="papeleta_selector"
+            )
+        
+        with col_nav1:
+            if st.button("⬅️ Anterior", disabled=(papeleta_index == 0)):
+                if papeleta_index > 0:
+                    st.session_state.papeleta_selector = papeleta_index - 1
+                    st.rerun()
+        
+        with col_nav3:
+            if st.button("Siguiente ➡️", disabled=(papeleta_index == len(papeletas_data)-1)):
+                if papeleta_index < len(papeletas_data)-1:
+                    st.session_state.papeleta_selector = papeleta_index + 1
+                    st.rerun()
+        
+        # Mostrar papeleta seleccionada
+        nadador_actual = papeletas_data[papeleta_index]
+        
+        st.markdown(f"""
+        <div style="border: 3px solid #1E88E5; padding: 25px; margin: 20px 0; border-radius: 12px; background: linear-gradient(135deg, #f8f9ff 0%, #e3f2fd 100%); box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <div style="text-align: center; font-weight: bold; font-size: 18px; color: #1E88E5; margin-bottom: 15px; border-bottom: 2px solid #1E88E5; padding-bottom: 10px;">
+                PRUEBA: {nadador_actual['prueba']}
+            </div>
+            
+            <div style="text-align: center; font-size: 14px; margin-bottom: 20px; background-color: rgba(255,255,255,0.7); padding: 10px; border-radius: 8px;">
+                <strong>{nadador_actual['nombre']}</strong> - {nadador_actual['equipo']} - {nadador_actual['categoria']}
+            </div>
+            
+            <div style="display: flex; justify-content: space-around; margin-bottom: 25px; background-color: rgba(255,255,255,0.5); padding: 15px; border-radius: 8px;">
+                <div style="text-align: center;">
+                    <div style="font-weight: bold; font-size: 12px; margin-bottom: 5px;">SERIE:</div>
+                    <div style="border: 2px solid #333; padding: 8px 15px; background-color: #e8f5e8; font-size: 14px; font-weight: bold;">{nadador_actual['serie']}</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-weight: bold; font-size: 12px; margin-bottom: 5px;">CARRIL:</div>
+                    <div style="border: 2px solid #333; padding: 8px 15px; background-color: #e8f5e8; font-size: 14px; font-weight: bold;">{nadador_actual['carril']}</div>
+                </div>
+            </div>
+            
+            <div style="text-align: center; font-weight: bold; font-size: 20px; color: #FF0000; margin-bottom: 20px; text-transform: uppercase;">
+                TIEMPO DE COMPETENCIA:
+            </div>
+            
+            <div style="text-align: center; font-weight: bold; font-size: 28px; border: 4px solid #000; padding: 20px; background-color: #fff; border-radius: 8px; letter-spacing: 3px; font-family: 'Courier New', monospace;">
+                _____ : _____ . _____
+            </div>
+            
+            <div style="margin-top: 20px; font-size: 10px; color: #666; border-top: 1px solid #ccc; padding-top: 10px;">
+                <div style="margin-bottom: 5px;">Juez: ________________________________</div>
+                <div>Fecha: ______________    Hora: ______________</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Información adicional de la papeleta actual
+        col_info1, col_info2, col_info3, col_info4 = st.columns(4)
+        with col_info1:
+            st.metric("Papeleta", f"{papeleta_index + 1} de {len(papeletas_data)}")
+        with col_info2:
+            st.metric("Serie Asignada", f"{nadador_actual['serie']}")
+        with col_info3:
+            st.metric("Carril Asignado", f"{nadador_actual['carril']}")
+        with col_info4:
+            st.metric("Tiempo Inscripción", f"{nadador_actual['tiempo_inscripcion']}")
+        
+        # Botón para vista rápida de impresión
+        if st.button("🖨️ Vista de Impresión", key="print_preview"):
+            st.markdown("### Vista de Impresión - Tamaño Real")
+            st.markdown(f"""
+            <div style="width: 21cm; border: 1px solid #000; padding: 1cm; margin: 0 auto; background: white; font-family: Arial, sans-serif;">
+                <div style="text-align: center; font-size: 20px; font-weight: bold; color: #1E88E5; margin-bottom: 1cm; border-bottom: 2px solid #1E88E5; padding-bottom: 0.5cm;">
+                    PRUEBA: {nadador_actual['prueba']}
+                </div>
+                
+                <div style="text-align: center; font-size: 16px; margin-bottom: 1.5cm;">
+                    <strong>{nadador_actual['nombre']}</strong> - {nadador_actual['equipo']} - {nadador_actual['categoria']}
+                </div>
+                
+                <div style="display: flex; justify-content: space-around; margin-bottom: 2cm;">
+                    <div style="text-align: center;">
+                        <div style="font-size: 14px; margin-bottom: 0.5cm;">SERIE:</div>
+                        <div style="border: 3px solid #000; padding: 1cm 2cm; font-size: 18px;">______</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="font-size: 14px; margin-bottom: 0.5cm;">CARRIL:</div>
+                        <div style="border: 3px solid #000; padding: 1cm 2cm; font-size: 18px;">______</div>
+                    </div>
+                </div>
+                
+                <div style="text-align: center; font-size: 24px; font-weight: bold; color: #FF0000; margin-bottom: 1.5cm;">
+                    TIEMPO DE COMPETENCIA:
+                </div>
+                
+                <div style="text-align: center; font-size: 36px; font-weight: bold; border: 4px solid #000; padding: 1.5cm; background: #f9f9f9; letter-spacing: 5px;">
+                    _____ : _____ . _____
+                </div>
+                
+                <div style="margin-top: 2cm; font-size: 12px; color: #666;">
+                    <div style="margin-bottom: 1cm;">Juez: ________________________________</div>
+                    <div>Fecha: ______________    Hora: ______________</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            st.markdown("*Esta vista simula el tamaño real de impresión*")
+        
+        # Lista compacta de todas las papeletas
+        with st.expander(f"📊 Ver lista completa ({len(papeletas_data)} papeletas)"):
+            df_preview = pd.DataFrame(papeletas_data)
+            st.dataframe(
+                df_preview[['nombre', 'prueba', 'equipo', 'categoria', 'tiempo_inscripcion']], 
+                use_container_width=True,
+                hide_index=True
+            )
+        
+    except Exception as e:
+        st.error(f"Error al leer el archivo: {e}")
+        return
+    
+    st.markdown("---")
+    
+    # Dos columnas para las dos opciones de generación
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("### 📄 Papeletas PDF")
+        st.info("Formato: Una papeleta por página en orientación horizontal")
+        
+        if st.button("🚀 Generar Papeletas PDF", type="primary", key="gen_pdf"):
+            with st.spinner("Generando papeletas PDF..."):
+                try:
+                    success, message = papeletas_pdf_module.generar_papeletas_pdf()
+                    if success:
+                        st.success(message)
+                    else:
+                        st.error(message)
+                except Exception as e:
+                    st.error(f"Error al generar papeletas PDF: {e}")
+        
+        # Descarga PDF
+        if os.path.exists("papeletas_jueces.pdf"):
+            with open("papeletas_jueces.pdf", "rb") as file:
+                st.download_button(
+                    label="⬇️ Descargar Papeletas PDF",
+                    data=file.read(),
+                    file_name="papeletas_jueces.pdf",
+                    mime="application/pdf",
+                    key="download_pdf"
+                )
+    
+    with col2:
+        st.markdown("### 📊 Papeletas Excel") 
+        st.info("Formato: Rectángulos individuales por nadador, ideal para recortar")
+        
+        if st.button("🚀 Generar Papeletas Excel", type="primary", key="gen_excel"):
+            with st.spinner("Generando papeletas Excel..."):
+                try:
+                    success, message = papeletas_excel_module.generar_papeletas_excel()
+                    if success:
+                        st.success(message)
+                    else:
+                        st.error(message)
+                except Exception as e:
+                    st.error(f"Error al generar papeletas Excel: {e}")
+        
+        # Descarga Excel
+        if os.path.exists("papeletas_jueces.xlsx"):
+            with open("papeletas_jueces.xlsx", "rb") as file:
+                st.download_button(
+                    label="⬇️ Descargar Papeletas Excel",
+                    data=file.read(),
+                    file_name="papeletas_jueces.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="download_excel"
+                )
 
 def gestion_archivos():
     st.markdown("## 📁 Gestión de Archivos")
