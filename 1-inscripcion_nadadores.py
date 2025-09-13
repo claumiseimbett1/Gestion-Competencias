@@ -22,12 +22,12 @@ class SwimmerRegistration:
         self.archivo_base_datos = 'BASE-DE-DATOS.xlsx'
         self.swimming_events = [
             "50M CROLL",
-            "100M CROLL", 
+            "100M CROLL",
             "200M CROLL",
             "400M CROLL",
             "50M ESPALDA",
             "100M ESPALDA",
-            "200M ESPALDA", 
+            "200M ESPALDA",
             "50M PECHO",
             "100M PECHO",
             "200M PECHO",
@@ -37,6 +37,12 @@ class SwimmerRegistration:
             "200M COMBINADO INDIVIDUAL",
             "400M COMBINADO INDIVIDUAL"
         ]
+        # Importar el gestor de eventos
+        try:
+            from event_manager import EventManager
+            self.event_manager = EventManager()
+        except ImportError:
+            self.event_manager = None
         
         self.categories = [
             "PRE-INFANTIL A",
@@ -148,10 +154,19 @@ class SwimmerRegistration:
                 return None
         return None
     
+    def get_available_events(self):
+        """Obtener las pruebas disponibles para el evento"""
+        if self.event_manager:
+            selected_events = self.event_manager.get_selected_events()
+            if selected_events:
+                return selected_events
+        return self.swimming_events
+
     def create_empty_registration_file(self):
-        columns = ['NOMBRE Y AP', 'EQUIPO', 'EDAD', 'CAT.', 'SEXO'] + self.swimming_events
+        available_events = self.get_available_events()
+        columns = ['NOMBRE Y AP', 'EQUIPO', 'EDAD', 'CAT.', 'SEXO'] + available_events
         df = pd.DataFrame(columns=columns)
-        
+
         try:
             df.to_excel(self.archivo_inscripcion, index=False)
             return True, "Archivo de inscripción creado exitosamente"
@@ -260,14 +275,15 @@ class SwimmerRegistration:
         df = self.load_existing_data()
         if df is None or df.empty:
             return []
-        
+
+        available_events = self.get_available_events()
         swimmers = []
         for index, row in df.iterrows():
             events_registered = []
-            for event in self.swimming_events:
+            for event in available_events:
                 if pd.notna(row.get(event)):
                     events_registered.append(f"{event}: {row[event]}")
-            
+
             swimmers.append({
                 'index': index,
                 'name': row['NOMBRE Y AP'],
@@ -277,7 +293,7 @@ class SwimmerRegistration:
                 'gender': row['SEXO'],
                 'events': events_registered
             })
-        
+
         return swimmers
     
     # ===== MÉTODOS PARA BÚSQUEDA EN BASE DE DATOS =====
@@ -377,18 +393,18 @@ class SwimmerRegistration:
         df, message = self.load_database()
         if df is None:
             return {}, message
-        
+
         # Buscar todos los registros del atleta
         mask = df['ATLETA'].astype(str).str.lower().str.contains(swimmer_data['name'].lower(), na=False, regex=False)
         swimmer_records = df[mask]
-        
+
         if swimmer_records.empty:
             return {}, f"No se encontraron registros para {swimmer_data['name']}"
-        
+
         # Mapear pruebas de la base de datos a eventos del sistema
         prueba_mappings = {
             '50M CROLL': '50m LIBRE',
-            '100M CROLL': '100m LIBRE', 
+            '100M CROLL': '100m LIBRE',
             '200M CROLL': '200m LIBRE',
             '400M CROLL': '400m LIBRE',
             '50M ESPALDA': '50m ESPALDA',
@@ -403,29 +419,33 @@ class SwimmerRegistration:
             '200M COMBINADO INDIVIDUAL': '200m COMBINADO',
             '400M COMBINADO INDIVIDUAL': '400m COMBINADO'
         }
-        
+
+        # Obtener pruebas disponibles del evento
+        available_events = self.get_available_events()
+
         # Procesar cada registro y extraer tiempos
         times_by_event = {}
-        
+
         for _, record in swimmer_records.iterrows():
             prueba = record.get('PRUEBA', '')
             tiempo = record.get('TIEMPO', '')
             fecha = record.get('F. COMPETENCIA', '')
-            
+
             if pd.notna(prueba) and pd.notna(tiempo):
                 prueba_str = str(prueba).strip()
                 tiempo_str = str(tiempo).strip()
-                
+
                 # Buscar el evento del sistema que coincide
                 system_event = None
                 for sys_event, db_prueba in prueba_mappings.items():
-                    if (prueba_str.upper() == db_prueba.upper() or 
+                    if (prueba_str.upper() == db_prueba.upper() or
                         prueba_str.upper().replace(' ', '') == db_prueba.upper().replace(' ', '') or
                         db_prueba.upper() in prueba_str.upper()):
                         system_event = sys_event
                         break
-                
-                if system_event and tiempo_str and tiempo_str not in ['0', '0.0', 'nan']:
+
+                # Solo incluir si el evento está disponible en el evento actual
+                if system_event and system_event in available_events and tiempo_str and tiempo_str not in ['0', '0.0', 'nan']:
                     # Convertir tiempo a formato simple (MM:SS.dd)
                     clean_time = self._clean_time_format(tiempo_str)
                     if clean_time:
@@ -444,10 +464,10 @@ class SwimmerRegistration:
                                 'fecha': fecha,
                                 'prueba_original': prueba_str
                             }
-        
+
         # Extraer solo los tiempos para retornar
         latest_times = {event: data['tiempo'] for event, data in times_by_event.items()}
-        
+
         return latest_times, f"Se encontraron {len(latest_times)} tiempos para {swimmer_data['name']}"
     
     def _clean_time_format(self, time_str):
@@ -613,15 +633,16 @@ class SwimmerRegistration:
         df = self.load_existing_data()
         if df is None or index >= len(df):
             return None, "Nadador no encontrado"
-        
+
         row = df.iloc[index]
-        
+        available_events = self.get_available_events()
+
         # Extraer eventos inscritos
         events_data = {}
-        for event in self.swimming_events:
+        for event in available_events:
             if pd.notna(row.get(event)):
                 events_data[event] = str(row[event])
-        
+
         swimmer_data = {
             'name': row['NOMBRE Y AP'],
             'team': row['EQUIPO'],
@@ -630,7 +651,7 @@ class SwimmerRegistration:
             'gender': row['SEXO'],
             'events': events_data
         }
-        
+
         return swimmer_data, "Datos del nadador obtenidos"
     
     def generate_pdf_report(self, swimmers, teams, categories, genders, events_stats):
@@ -881,50 +902,53 @@ class SwimmerRegistration:
         try:
             # Leer archivo Excel
             df = pd.read_excel(uploaded_file)
-            
+
             # Validar columnas requeridas
             required_columns = ['NOMBRE Y AP', 'EQUIPO', 'EDAD', 'CAT.', 'SEXO']
             missing_columns = [col for col in required_columns if col not in df.columns]
             if missing_columns:
                 return False, f"Faltan columnas requeridas: {', '.join(missing_columns)}"
-            
+
             # Filtrar filas con datos válidos
             df = df.dropna(subset=['NOMBRE Y AP'])
-            
+
             if len(df) == 0:
                 return False, "No se encontraron nadadores válidos en el archivo"
-            
+
+            # Obtener pruebas disponibles del evento
+            available_events = self.get_available_events()
+
             imported_swimmers = []
             errors = []
             duplicates = []
             imported_names = []
-            
+
             # Procesar cada nadador
             for index, row in df.iterrows():
                 try:
                     swimmer_name = str(row['NOMBRE Y AP']).strip()
                     if not swimmer_name or swimmer_name.lower() == 'nan':
                         continue
-                        
+
                     # Datos básicos del nadador
                     team = str(row['EQUIPO']).strip() if pd.notna(row['EQUIPO']) else ""
                     age = int(row['EDAD']) if pd.notna(row['EDAD']) else 0
                     category = str(row['CAT.']).strip() if pd.notna(row['CAT.']) else ""
                     gender = str(row['SEXO']).strip().upper() if pd.notna(row['SEXO']) else ""
-                    
+
                     # Validar datos básicos
                     if age <= 0:
                         errors.append(f"Fila {index + 2}: Edad inválida para {swimmer_name}")
                         continue
-                    
+
                     if gender not in ['M', 'F']:
                         errors.append(f"Fila {index + 2}: Sexo debe ser M o F para {swimmer_name}")
                         continue
-                    
+
                     # Auto-generar categoría si no se proporciona
                     if not category:
                         category = self.get_category_by_age(age, gender)
-                    
+
                     # Verificar si ya existe el nadador
                     if os.path.exists(self.archivo_inscripcion):
                         existing_df = pd.read_excel(self.archivo_inscripcion)
@@ -932,13 +956,13 @@ class SwimmerRegistration:
                             duplicates.append(swimmer_name)
                             errors.append(f"Fila {index + 2}: {swimmer_name} ya existe en la base de datos")
                             continue
-                    
-                    # Procesar tiempos de las pruebas
+
+                    # Procesar tiempos de las pruebas (solo las disponibles en el evento)
                     events_data = {}
-                    for event in self.swimming_events:
+                    for event in available_events:
                         if event in df.columns and pd.notna(row[event]):
                             time_value = row[event]
-                            
+
                             # Convertir a string y normalizar formato
                             if isinstance(time_value, (int, float)):
                                 # Si es numérico (segundos totales), convertir a MM:SS.CS
@@ -946,7 +970,7 @@ class SwimmerRegistration:
                             else:
                                 # Si es texto, normalizar formato (coma a punto)
                                 time_str = str(time_value).strip().replace(',', '.')
-                            
+
                             # Validar formato de tiempo
                             is_valid, validated_time = self.validate_time_format(time_str)
                             if is_valid:
@@ -954,7 +978,7 @@ class SwimmerRegistration:
                             else:
                                 # Agregar información de error más específica
                                 errors.append(f"Fila {index + 2}: Formato de tiempo inválido '{time_value}' en {event} para {swimmer_name}")
-                    
+
                     # Solo agregar nadadores con al menos una prueba
                     if events_data:
                         # Crear nuevo nadador
@@ -964,27 +988,27 @@ class SwimmerRegistration:
                             'EDAD': age,
                             'CAT.': category,
                             'SEXO': gender,
-                            **{event: events_data.get(event, "") for event in self.swimming_events}
+                            **{event: events_data.get(event, "") for event in available_events}
                         }
-                        
+
                         imported_swimmers.append(new_swimmer)
                         imported_names.append(swimmer_name)
                     else:
                         errors.append(f"Fila {index + 2}: {swimmer_name} no tiene pruebas válidas")
-                        
+
                 except Exception as e:
                     errors.append(f"Fila {index + 2}: Error procesando datos - {str(e)}")
                     continue
-            
+
             # Determinar el resultado final
             total_processed = len(imported_swimmers) + len(duplicates) + (len(errors) - len(duplicates))
-            
+
             if imported_swimmers:
                 # Hay nadadores para importar
                 success = self.save_swimmers_to_excel(imported_swimmers)
                 if success:
                     result_msg = f"✅ **Importación exitosa:** {len(imported_swimmers)} nadadores agregados"
-                    
+
                     # Mostrar nadadores importados
                     result_msg += f"\n\n📝 **Nadadores AGREGADOS ({len(imported_names)}):**"
                     if len(imported_names) <= 10:
@@ -992,7 +1016,7 @@ class SwimmerRegistration:
                     else:
                         result_msg += f"\n• " + "\n• ".join(imported_names[:10])
                         result_msg += f"\n• ... y {len(imported_names) - 10} más"
-                    
+
                     # Mostrar duplicados omitidos
                     if duplicates:
                         result_msg += f"\n\n⚠️ **Duplicados OMITIDOS ({len(duplicates)}):**"
@@ -1001,7 +1025,7 @@ class SwimmerRegistration:
                         else:
                             result_msg += f"\n• " + "\n• ".join(duplicates[:10])
                             result_msg += f"\n• ... y {len(duplicates) - 10} más"
-                    
+
                     # Mostrar otros errores
                     if len(errors) > len(duplicates):  # Hay otros errores además de duplicados
                         other_errors = [e for e in errors if "ya existe en la base de datos" not in e]
@@ -1011,11 +1035,11 @@ class SwimmerRegistration:
                                 result_msg += f"\n• " + "\n• ".join(other_errors)
                             else:
                                 result_msg += f"\n• " + "\n• ".join(other_errors[:3]) + f"\n• ... y {len(other_errors) - 3} más"
-                    
+
                     return True, result_msg
                 else:
                     return False, "Error guardando los datos importados"
-                    
+
             elif duplicates and len(errors) == len(duplicates):
                 # Solo hay duplicados, ningún nadador nuevo
                 result_msg = f"⚠️ **Todos los nadadores ya existen en la base de datos**"
@@ -1026,11 +1050,11 @@ class SwimmerRegistration:
                     result_msg += f"\n• " + "\n• ".join(duplicates[:10])
                     result_msg += f"\n• ... y {len(duplicates) - 10} más"
                 return False, result_msg
-                
+
             else:
                 # Solo errores, sin duplicados o con otros errores
                 return False, f"❌ No se pudo importar ningún nadador. Errores encontrados:\n• " + "\n• ".join(errors[:10])
-                
+
         except Exception as e:
             return False, f"Error leyendo el archivo: {str(e)}"
     
@@ -1044,20 +1068,21 @@ class SwimmerRegistration:
                 combined_df = pd.concat([existing_df, new_df], ignore_index=True)
             else:
                 combined_df = pd.DataFrame(swimmers_data)
-            
+
             # Asegurar que todas las columnas estén presentes
-            all_columns = ['NOMBRE Y AP', 'EQUIPO', 'EDAD', 'CAT.', 'SEXO'] + self.swimming_events
+            available_events = self.get_available_events()
+            all_columns = ['NOMBRE Y AP', 'EQUIPO', 'EDAD', 'CAT.', 'SEXO'] + available_events
             for col in all_columns:
                 if col not in combined_df.columns:
                     combined_df[col] = ""
-            
+
             # Reordenar columnas
             combined_df = combined_df[all_columns]
-            
+
             # Guardar archivo
             combined_df.to_excel(self.archivo_inscripcion, index=False)
             return True
-            
+
         except Exception as e:
             print(f"Error guardando nadadores: {str(e)}")
             return False

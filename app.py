@@ -40,6 +40,11 @@ spec5 = importlib.util.spec_from_file_location("generar_papeletas_excel", "gener
 papeletas_excel_module = importlib.util.module_from_spec(spec5)
 spec5.loader.exec_module(papeletas_excel_module)
 
+# Importar el gestor de eventos
+spec6 = importlib.util.spec_from_file_location("event_manager", "event_manager.py")
+event_manager_module = importlib.util.module_from_spec(spec6)
+spec6.loader.exec_module(event_manager_module)
+
 #Configuración de la página
 st.set_page_config(
     page_title="TEN - Gestión de Competencias",
@@ -175,20 +180,38 @@ def main():
     st.sidebar.markdown("## 📋 Panel de Control")
     
     # Selector de funciones
-    opcion = st.sidebar.selectbox(
-        "Selecciona una operación:",
-        [
+    default_index = 0
+    if 'selected_option' in st.session_state:
+        options = [
             "🏠 Inicio",
+            "🎯 Creación del Evento",
             "✍️ Inscripción de Nadadores",
             "📊 Sembrado de Competencia",
             "📋 Generar Papeletas",
             "🏆 Procesar Resultados",
             "📁 Gestión de Archivos"
         ]
+        if st.session_state.selected_option in options:
+            default_index = options.index(st.session_state.selected_option)
+
+    opcion = st.sidebar.selectbox(
+        "Selecciona una operación:",
+        [
+            "🏠 Inicio",
+            "🎯 Creación del Evento",
+            "✍️ Inscripción de Nadadores",
+            "📊 Sembrado de Competencia",
+            "📋 Generar Papeletas",
+            "🏆 Procesar Resultados",
+            "📁 Gestión de Archivos"
+        ],
+        index=default_index
     )
     
     if opcion == "🏠 Inicio":
         mostrar_inicio()
+    elif opcion == "🎯 Creación del Evento":
+        mostrar_creacion_evento()
     elif opcion == "✍️ Inscripción de Nadadores":
         inscripcion_nadadores_interface()
     elif opcion == "📊 Sembrado de Competencia":
@@ -208,18 +231,18 @@ def mostrar_inicio():
     with col1:
         st.markdown("""
         <div class="feature-card">
-            <h3>✍️ Inscripción de Nadadores</h3>
-            <p>Registra nuevos nadadores con sus datos personales y tiempos de inscripción por prueba.</p>
+            <h3>🎯 Creación del Evento</h3>
+            <p>Configure el nombre, pruebas disponibles y rango de edades para su competencia de natación.</p>
         </div>
         """, unsafe_allow_html=True)
-        
+
         st.markdown("""
         <div class="feature-card">
             <h3>📊 Sembrado por Categoría</h3>
             <p>Organiza las series agrupando nadadores por categoría de edad y luego por tiempo dentro de cada categoría.</p>
         </div>
         """, unsafe_allow_html=True)
-        
+
         st.markdown("""
         <div class="feature-card">
             <h3>🏆 Procesamiento de Resultados</h3>
@@ -230,11 +253,18 @@ def mostrar_inicio():
     with col2:
         st.markdown("""
         <div class="feature-card">
+            <h3>✍️ Inscripción de Nadadores</h3>
+            <p>Registra nuevos nadadores con sus datos personales y tiempos de inscripción por prueba.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("""
+        <div class="feature-card">
             <h3>⏱️ Sembrado por Tiempo</h3>
             <p>Crea series basándose únicamente en los tiempos de inscripción, sin importar la categoría.</p>
         </div>
         """, unsafe_allow_html=True)
-        
+
         st.markdown("""
         <div class="feature-card">
             <h3>📁 Gestión de Archivos</h3>
@@ -246,6 +276,7 @@ def mostrar_inicio():
     <div class="info-message">
         <h4>📋 Flujo de trabajo recomendado:</h4>
         <ol>
+            <li><strong>Crea el evento</strong> definiendo nombre, pruebas y rango de edades</li>
             <li><strong>Inscribe nadadores</strong> usando el formulario de inscripción integrado</li>
             <li>Genera el sembrado (por categoría o tiempo)</li>
             <li>Después de la competencia, procesa los resultados</li>
@@ -254,6 +285,142 @@ def mostrar_inicio():
         <p><em>Alternativamente, puedes subir un archivo <strong>planilla_inscripcion.xlsx</strong> existente en "Gestión de Archivos"</em></p>
     </div>
     """, unsafe_allow_html=True)
+
+def mostrar_creacion_evento():
+    st.markdown("## 🎯 Creación del Evento")
+
+    event_manager = event_manager_module.EventManager()
+
+    # Verificar si ya existe un evento configurado
+    event_info = event_manager.get_event_info()
+
+    if event_info:
+        st.markdown(f"""
+        <div class="success-message">
+            <h4>✅ Evento configurado: {event_info['name']}</h4>
+            <p><strong>Pruebas seleccionadas:</strong> {len(event_info['events'])}</p>
+            <p><strong>Rango de edades:</strong> {event_info['min_age']} - {event_info['max_age']} años</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Mostrar detalles del evento en expandible
+        with st.expander("Ver detalles del evento"):
+            st.write("**Pruebas incluidas:**")
+            for i, event in enumerate(event_info['events'], 1):
+                st.write(f"{i}. {event}")
+
+        # Opciones para modificar o eliminar
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            if st.button("🔄 Modificar Evento", type="secondary"):
+                st.session_state.modificar_evento = True
+
+        with col2:
+            if st.button("🗑️ Eliminar Evento", type="secondary"):
+                success, message = event_manager.delete_event_config()
+                if success:
+                    st.success(message)
+                    st.rerun()
+                else:
+                    st.error(message)
+
+        with col3:
+            if st.button("➡️ Ir a Inscripción", type="primary"):
+                st.session_state.selected_option = "✍️ Inscripción de Nadadores"
+                st.rerun()
+
+    # Formulario para crear/modificar evento
+    if not event_info or st.session_state.get('modificar_evento', False):
+        if event_info:
+            st.markdown("### 🔄 Modificar Evento Existente")
+        else:
+            st.markdown("### ➕ Crear Nuevo Evento")
+            st.markdown("""
+            <div class="info-message">
+                Configure los detalles de su evento de natación. Solo las pruebas seleccionadas
+                estarán disponibles durante la inscripción de nadadores.
+            </div>
+            """, unsafe_allow_html=True)
+
+        with st.form("evento_form"):
+            # Nombre del evento
+            event_name = st.text_input(
+                "📝 Nombre del Evento",
+                value=event_info['name'] if event_info else "",
+                placeholder="Ej: Campeonato Nacional de Natación 2024"
+            )
+
+            # Rango de edades
+            col1, col2 = st.columns(2)
+            with col1:
+                min_age = st.number_input(
+                    "🧒 Edad Mínima",
+                    min_value=5,
+                    max_value=80,
+                    value=event_info['min_age'] if event_info else 8,
+                    step=1
+                )
+
+            with col2:
+                max_age = st.number_input(
+                    "🧓 Edad Máxima",
+                    min_value=5,
+                    max_value=80,
+                    value=event_info['max_age'] if event_info else 18,
+                    step=1
+                )
+
+            # Selección de pruebas
+            st.markdown("### 🏊‍♀️ Selección de Pruebas")
+            st.markdown("Marque las pruebas que estarán disponibles en su evento:")
+
+            all_events = event_manager.get_available_events()
+            selected_events = event_info['events'] if event_info else []
+
+            # Crear checkboxes en 3 columnas
+            col1, col2, col3 = st.columns(3)
+            pruebas_seleccionadas = []
+
+            for i, event in enumerate(all_events):
+                col = [col1, col2, col3][i % 3]
+                with col:
+                    if st.checkbox(event, value=event in selected_events, key=f"event_{i}"):
+                        pruebas_seleccionadas.append(event)
+
+            # Botones de acción
+            col1, col2, col3 = st.columns([1, 1, 1])
+
+            with col1:
+                if st.form_submit_button("💾 Guardar Evento", type="primary"):
+                    if not event_name.strip():
+                        st.error("❌ El nombre del evento es requerido")
+                    elif min_age >= max_age:
+                        st.error("❌ La edad mínima debe ser menor que la máxima")
+                    elif not pruebas_seleccionadas:
+                        st.error("❌ Debe seleccionar al menos una prueba")
+                    else:
+                        success, message = event_manager.save_event_config(
+                            event_name.strip(),
+                            pruebas_seleccionadas,
+                            min_age,
+                            max_age
+                        )
+                        if success:
+                            st.success(message)
+                            st.session_state.modificar_evento = False
+                            st.rerun()
+                        else:
+                            st.error(message)
+
+            with col2:
+                if st.form_submit_button("🔄 Seleccionar Todas"):
+                    st.rerun()
+
+            with col3:
+                if st.form_submit_button("❌ Limpiar Selección"):
+                    st.rerun()
+
 
 def generar_sembrado_categoria():
     st.markdown("## 📊 Generar Sembrado por Categoría")
