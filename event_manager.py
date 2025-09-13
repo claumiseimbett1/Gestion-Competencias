@@ -26,7 +26,8 @@ class EventManager:
         ]
 
     def save_event_config(self, event_name, categories, event_order, category_events, min_age, max_age,
-                         swimmer_fee=None, team_fee=None, welcome_message=None, event_logo=None):
+                         swimmer_fee=None, team_fee=None, welcome_message=None, event_logo=None,
+                         start_date=None, end_date=None):
         """Guardar la configuración del evento"""
         config = {
             'event_name': event_name,
@@ -39,6 +40,8 @@ class EventManager:
             'team_fee': team_fee or 0,
             'welcome_message': welcome_message or '',
             'event_logo': event_logo,
+            'start_date': start_date.isoformat() if start_date else None,
+            'end_date': end_date.isoformat() if end_date else None,
             'created_date': datetime.now().isoformat(),
             'modified_date': datetime.now().isoformat()
         }
@@ -120,7 +123,7 @@ class EventManager:
 
     def update_event_config(self, event_name=None, categories=None, event_order=None, category_events=None,
                           min_age=None, max_age=None, swimmer_fee=None, team_fee=None,
-                          welcome_message=None, event_logo=None):
+                          welcome_message=None, event_logo=None, start_date=None, end_date=None):
         """Actualizar configuración existente"""
         config = self.load_event_config()
         if not config:
@@ -146,6 +149,10 @@ class EventManager:
             config['welcome_message'] = welcome_message
         if event_logo is not None:
             config['event_logo'] = event_logo
+        if start_date is not None:
+            config['start_date'] = start_date.isoformat() if start_date else None
+        if end_date is not None:
+            config['end_date'] = end_date.isoformat() if end_date else None
 
         config['modified_date'] = datetime.now().isoformat()
 
@@ -521,13 +528,32 @@ class EventManager:
             general_data = [
                 ['Campo', 'Valor'],
                 ['Nombre del Evento', event_info['name']],
+            ]
+
+            # Agregar fechas si están disponibles
+            if event_info.get('start_date'):
+                try:
+                    from datetime import datetime
+                    start_date = datetime.fromisoformat(event_info['start_date']).strftime('%d/%m/%Y')
+                    general_data.append(['Fecha de Inicio', start_date])
+                except:
+                    general_data.append(['Fecha de Inicio', event_info.get('start_date', '')])
+
+            if event_info.get('end_date'):
+                try:
+                    end_date = datetime.fromisoformat(event_info['end_date']).strftime('%d/%m/%Y')
+                    general_data.append(['Fecha de Finalización', end_date])
+                except:
+                    general_data.append(['Fecha de Finalización', event_info.get('end_date', '')])
+
+            general_data.extend([
                 ['Rango de Edades', f"{event_info['min_age']} - {event_info['max_age']} años"],
                 ['Valor por Nadador', f"${event_info.get('swimmer_fee', 0):,.0f}"],
                 ['Valor por Equipo', f"${event_info.get('team_fee', 0):,.0f}"],
                 ['Total de Categorías', str(len(event_info['categories']))],
                 ['Total de Pruebas', str(len(event_info['events']))],
                 ['Fecha de Creación', event_info.get('created_date', '').split('T')[0]],
-            ]
+            ])
 
             general_table = Table(general_data, colWidths=[2.5*inch, 3*inch])
             general_table.setStyle(TableStyle([

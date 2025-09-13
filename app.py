@@ -438,6 +438,40 @@ def mostrar_paso_datos_basicos(event_manager, event_info):
         key="evento_name"
     )
 
+    # Fechas del evento
+    st.markdown("**📅 Fechas del Evento:**")
+    col1, col2 = st.columns(2)
+
+    # Parsear fechas existentes si están disponibles
+    from datetime import date
+    default_start_date = date.today()
+    default_end_date = date.today()
+
+    if event_info:
+        try:
+            if event_info.get('start_date'):
+                default_start_date = datetime.fromisoformat(event_info['start_date']).date()
+            if event_info.get('end_date'):
+                default_end_date = datetime.fromisoformat(event_info['end_date']).date()
+        except:
+            pass
+
+    with col1:
+        start_date = st.date_input(
+            "Fecha de Inicio",
+            value=default_start_date,
+            key="evento_start_date",
+            help="Fecha de inicio del evento"
+        )
+
+    with col2:
+        end_date = st.date_input(
+            "Fecha de Finalización",
+            value=default_end_date,
+            key="evento_end_date",
+            help="Fecha de finalización del evento"
+        )
+
     # Rango de edades
     st.markdown("**🎂 Rango de Edades Permitido:**")
     col1, col2 = st.columns(2)
@@ -866,6 +900,12 @@ def mostrar_paso_finalizar(event_manager, event_info):
     if min_age >= max_age:
         errors.append("El rango de edades no es válido")
 
+    # Validar fechas
+    start_date = st.session_state.get('evento_start_date')
+    end_date = st.session_state.get('evento_end_date')
+    if start_date and end_date and start_date > end_date:
+        errors.append("La fecha de inicio no puede ser posterior a la fecha de finalización")
+
     # Validar categorías
     if not st.session_state.evento_categories:
         errors.append("Debe configurar al menos una categoría")
@@ -887,7 +927,25 @@ def mostrar_paso_finalizar(event_manager, event_info):
     with col1:
         st.markdown("**📋 Resumen de Configuración:**")
         st.write(f"**Nombre:** {event_name}")
+
+        # Mostrar fechas si están disponibles
+        if start_date and end_date:
+            st.write(f"**Fechas:** {start_date.strftime('%d/%m/%Y')} - {end_date.strftime('%d/%m/%Y')}")
+        elif start_date:
+            st.write(f"**Fecha de inicio:** {start_date.strftime('%d/%m/%Y')}")
+        elif end_date:
+            st.write(f"**Fecha de finalización:** {end_date.strftime('%d/%m/%Y')}")
+
         st.write(f"**Edades:** {min_age} - {max_age} años")
+
+        # Mostrar valores de inscripción
+        swimmer_fee = st.session_state.get('evento_swimmer_fee', 0)
+        team_fee = st.session_state.get('evento_team_fee', 0)
+        if swimmer_fee > 0:
+            st.write(f"**Valor por nadador:** ${swimmer_fee:,}")
+        if team_fee > 0:
+            st.write(f"**Valor por equipo:** ${team_fee:,}")
+
         st.write(f"**Categorías:** {len(st.session_state.evento_categories)}")
         st.write(f"**Pruebas del evento:** {len(st.session_state.evento_event_order)}")
 
@@ -916,6 +974,8 @@ def mostrar_paso_finalizar(event_manager, event_info):
             team_fee = st.session_state.get('evento_team_fee', 0)
             welcome_message = st.session_state.get('evento_welcome_message', '')
             uploaded_logo = st.session_state.get('evento_logo_upload')
+            start_date = st.session_state.get('evento_start_date')
+            end_date = st.session_state.get('evento_end_date')
 
             # Procesar logo si se subió uno nuevo
             event_logo = None
@@ -940,7 +1000,9 @@ def mostrar_paso_finalizar(event_manager, event_info):
                 swimmer_fee,
                 team_fee,
                 welcome_message,
-                event_logo
+                event_logo,
+                start_date,
+                end_date
             )
 
             if success:
