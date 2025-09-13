@@ -949,6 +949,12 @@ def mostrar_paso_finalizar(event_manager, event_info):
         st.write(f"**Categorías:** {len(st.session_state.evento_categories)}")
         st.write(f"**Pruebas del evento:** {len(st.session_state.evento_event_order)}")
 
+        # Mostrar mensaje de bienvenida si existe
+        welcome_message = st.session_state.get('evento_welcome_message', '').strip()
+        if welcome_message:
+            st.write("**📝 Mensaje de bienvenida:**")
+            st.write(f"*{welcome_message}*")
+
     with col2:
         st.markdown("**🎯 Categorías y sus pruebas:**")
         for category in st.session_state.evento_categories:
