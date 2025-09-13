@@ -338,7 +338,7 @@ def mostrar_creacion_evento():
                     st.write(f"**{cat_name}:** {', '.join(events) if events else 'Sin pruebas asignadas'}")
 
         # Opciones para modificar o eliminar
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
 
         with col1:
             if st.button("🔄 Modificar Evento", type="secondary"):
@@ -346,6 +346,21 @@ def mostrar_creacion_evento():
                 st.rerun()
 
         with col2:
+            if st.button("📄 Generar PDF", type="secondary"):
+                with st.spinner("Generando reporte PDF..."):
+                    pdf_data, filename = event_manager.generate_event_pdf_report()
+                    if pdf_data:
+                        st.download_button(
+                            label="📥 Descargar Reporte PDF",
+                            data=pdf_data,
+                            file_name=filename,
+                            mime="application/pdf"
+                        )
+                        st.success("✅ Reporte PDF generado exitosamente")
+                    else:
+                        st.error(f"❌ Error generando PDF: {filename}")
+
+        with col3:
             if st.button("🗑️ Eliminar Evento", type="secondary"):
                 success, message = event_manager.delete_event_config()
                 if success:
@@ -354,7 +369,7 @@ def mostrar_creacion_evento():
                 else:
                     st.error(message)
 
-        with col3:
+        with col4:
             if st.button("➡️ Ir a Inscripción", type="primary", disabled=not is_complete):
                 if is_complete:
                     st.session_state.selected_option = "✍️ Inscripción de Nadadores"
@@ -415,20 +430,20 @@ def mostrar_paso_datos_basicos(event_manager, event_info):
     """Paso 1: Datos básicos del evento"""
     st.markdown("### 📝 Información Básica del Evento")
 
-    col1, col2 = st.columns([3, 1])
+    # Nombre del evento
+    event_name = st.text_input(
+        "Nombre del Evento",
+        value=event_info['name'] if event_info else "",
+        placeholder="Ej: Campeonato Nacional de Natación 2024",
+        key="evento_name"
+    )
 
-    with col1:
-        event_name = st.text_input(
-            "Nombre del Evento",
-            value=event_info['name'] if event_info else "",
-            placeholder="Ej: Campeonato Nacional de Natación 2024",
-            key="evento_name"
-        )
-
+    # Rango de edades
+    st.markdown("**🎂 Rango de Edades Permitido:**")
     col1, col2 = st.columns(2)
     with col1:
         min_age = st.number_input(
-            "🧒 Edad Mínima",
+            "Edad Mínima",
             min_value=5,
             max_value=80,
             value=event_info['min_age'] if event_info else 8,
@@ -438,7 +453,7 @@ def mostrar_paso_datos_basicos(event_manager, event_info):
 
     with col2:
         max_age = st.number_input(
-            "🧓 Edad Máxima",
+            "Edad Máxima",
             min_value=5,
             max_value=80,
             value=event_info['max_age'] if event_info else 18,
@@ -446,13 +461,76 @@ def mostrar_paso_datos_basicos(event_manager, event_info):
             key="evento_max_age"
         )
 
+    # Valores de inscripción
+    st.markdown("**💰 Valores de Inscripción:**")
+    col1, col2 = st.columns(2)
+    with col1:
+        swimmer_fee = st.number_input(
+            "Valor por Nadador ($)",
+            min_value=0,
+            value=event_info.get('swimmer_fee', 0) if event_info else 0,
+            step=1000,
+            key="evento_swimmer_fee",
+            help="Costo de inscripción por cada nadador"
+        )
+
+    with col2:
+        team_fee = st.number_input(
+            "Valor por Equipo ($)",
+            min_value=0,
+            value=event_info.get('team_fee', 0) if event_info else 0,
+            step=5000,
+            key="evento_team_fee",
+            help="Costo de inscripción por equipo/club"
+        )
+
+    # Mensaje de bienvenida
+    st.markdown("**📝 Mensaje de Bienvenida (Opcional):**")
+    welcome_message = st.text_area(
+        "Mensaje de bienvenida para el evento",
+        value=event_info.get('welcome_message', '') if event_info else '',
+        max_chars=1000,
+        height=100,
+        key="evento_welcome_message",
+        help="Mensaje que aparecerá en los reportes y documentos del evento (máximo 1000 caracteres)",
+        placeholder="Escriba aquí un mensaje de bienvenida para los participantes del evento..."
+    )
+
+    # Logo del evento
+    st.markdown("**🖼️ Logo del Evento (Opcional):**")
+    uploaded_logo = st.file_uploader(
+        "Subir logo del evento",
+        type=['png', 'jpg', 'jpeg', 'gif'],
+        key="evento_logo_upload",
+        help="Imagen que aparecerá en los reportes y documentos del evento"
+    )
+
+    # Mostrar logo actual si existe
+    if event_info and event_info.get('event_logo'):
+        logo_path = f"event_logos/{event_info['event_logo']}"
+        if os.path.exists(logo_path):
+            st.image(logo_path, caption="Logo actual del evento", width=200)
+
     # Validaciones básicas
+    errors = []
     if event_name and len(event_name.strip()) < 3:
-        st.error("El nombre del evento debe tener al menos 3 caracteres")
-    elif min_age >= max_age:
-        st.error("La edad mínima debe ser menor que la máxima")
+        errors.append("El nombre del evento debe tener al menos 3 caracteres")
+    if min_age >= max_age:
+        errors.append("La edad mínima debe ser menor que la máxima")
+
+    if errors:
+        for error in errors:
+            st.error(f"❌ {error}")
     elif event_name and event_name.strip() and min_age < max_age:
         st.success("✅ Datos básicos completados correctamente")
+
+    # Información del mensaje de bienvenida
+    if welcome_message:
+        char_count = len(welcome_message)
+        if char_count > 1000:
+            st.warning(f"⚠️ El mensaje excede el límite de 1000 caracteres ({char_count}/1000)")
+        else:
+            st.info(f"📊 Caracteres utilizados: {char_count}/1000")
 
 
 def mostrar_paso_categorias(event_manager):
@@ -478,36 +556,48 @@ def mostrar_creacion_manual_categorias():
     """Interfaz para creación manual de categorías"""
     st.markdown("**Agregar nueva categoría:**")
 
-    col1, col2, col3 = st.columns([2, 2, 1])
+    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
 
     with col1:
         new_category_name = st.text_input("Nombre de la categoría", placeholder="Ej: Juvenil A", key="new_cat_name")
 
     with col2:
-        new_category_age = st.text_input("Rango de edad (opcional)", placeholder="Ej: 12-13 años", key="new_cat_age")
+        min_age_cat = st.number_input("Edad inicial", min_value=5, max_value=80, value=12, key="new_cat_min_age")
 
     with col3:
+        max_age_cat = st.number_input("Edad final", min_value=5, max_value=80, value=13, key="new_cat_max_age")
+
+    with col4:
         if st.button("➕ Agregar", type="primary"):
             if new_category_name.strip():
-                # Validar nombre único
-                is_valid, message = event_manager_module.EventManager().validate_category_name(
-                    new_category_name.strip(),
-                    st.session_state.evento_categories
-                )
-
-                if is_valid:
-                    new_category = {
-                        'name': new_category_name.strip(),
-                        'age_range': new_category_age.strip()
-                    }
-                    st.session_state.evento_categories.append(new_category)
-                    st.success(f"Categoría '{new_category_name}' agregada")
-                    # Limpiar campos
-                    st.session_state.new_cat_name = ""
-                    st.session_state.new_cat_age = ""
-                    st.rerun()
+                # Validar rango de edad
+                if min_age_cat > max_age_cat:
+                    st.error("La edad inicial debe ser menor o igual que la final")
                 else:
-                    st.error(message)
+                    # Crear rango de edad formateado
+                    age_range = event_manager_module.EventManager().format_age_range(min_age_cat, max_age_cat)
+
+                    # Validar nombre único
+                    is_valid, message = event_manager_module.EventManager().validate_category_name(
+                        new_category_name.strip(),
+                        st.session_state.evento_categories
+                    )
+
+                    if is_valid:
+                        new_category = {
+                            'name': new_category_name.strip(),
+                            'age_range': age_range
+                        }
+                        st.session_state.evento_categories.append(new_category)
+                        # Ordenar categorías por edad
+                        st.session_state.evento_categories = event_manager_module.EventManager().sort_categories_by_age(
+                            st.session_state.evento_categories)
+                        st.success(f"Categoría '{new_category_name}' agregada")
+                        # Limpiar campos
+                        st.session_state.new_cat_name = ""
+                        st.rerun()
+                    else:
+                        st.error(message)
             else:
                 st.error("El nombre de la categoría es requerido")
 
@@ -543,8 +633,12 @@ def mostrar_carga_excel_categorias(event_manager):
 
 def mostrar_lista_categorias_editable():
     """Mostrar lista de categorías con opciones de edición"""
+    # Ordenar categorías antes de mostrar
+    st.session_state.evento_categories = event_manager_module.EventManager().sort_categories_by_age(
+        st.session_state.evento_categories)
+
     for i, category in enumerate(st.session_state.evento_categories):
-        col1, col2, col3, col4 = st.columns([2, 2, 1, 1])
+        col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 1, 1])
 
         with col1:
             # Campo editable para nombre
@@ -555,40 +649,65 @@ def mostrar_lista_categorias_editable():
                 label_visibility="collapsed"
             )
 
+        # Parsear el rango de edad actual
+        event_mgr = event_manager_module.EventManager()
+        min_age, max_age = event_mgr.parse_age_range(category.get('age_range', '12-13'))
+        if min_age is None or max_age is None:
+            min_age, max_age = 12, 13
+
         with col2:
-            # Campo editable para edad
-            new_age = st.text_input(
-                f"Edad {i+1}",
-                value=category['age_range'],
-                key=f"cat_age_{i}",
-                placeholder="Rango de edad",
+            # Campo para edad inicial
+            new_min_age = st.number_input(
+                f"Min {i+1}",
+                min_value=5,
+                max_value=80,
+                value=min_age,
+                key=f"cat_min_age_{i}",
                 label_visibility="collapsed"
             )
 
         with col3:
+            # Campo para edad final
+            new_max_age = st.number_input(
+                f"Max {i+1}",
+                min_value=5,
+                max_value=80,
+                value=max_age,
+                key=f"cat_max_age_{i}",
+                label_visibility="collapsed"
+            )
+
+        with col4:
             # Botón actualizar
             if st.button("💾", key=f"update_cat_{i}", help="Actualizar categoría"):
                 if new_name.strip():
-                    # Validar nombre único (excluyendo la actual)
-                    is_valid, message = event_manager_module.EventManager().validate_category_name(
-                        new_name.strip(),
-                        st.session_state.evento_categories,
-                        exclude_index=i
-                    )
-
-                    if is_valid:
-                        st.session_state.evento_categories[i] = {
-                            'name': new_name.strip(),
-                            'age_range': new_age.strip()
-                        }
-                        st.success(f"Categoría {i+1} actualizada")
-                        st.rerun()
+                    if new_min_age > new_max_age:
+                        st.error("La edad inicial debe ser menor o igual que la final")
                     else:
-                        st.error(message)
+                        # Validar nombre único (excluyendo la actual)
+                        is_valid, message = event_mgr.validate_category_name(
+                            new_name.strip(),
+                            st.session_state.evento_categories,
+                            exclude_index=i
+                        )
+
+                        if is_valid:
+                            new_age_range = event_mgr.format_age_range(new_min_age, new_max_age)
+                            st.session_state.evento_categories[i] = {
+                                'name': new_name.strip(),
+                                'age_range': new_age_range
+                            }
+                            # Reordenar después de la actualización
+                            st.session_state.evento_categories = event_mgr.sort_categories_by_age(
+                                st.session_state.evento_categories)
+                            st.success(f"Categoría {i+1} actualizada")
+                            st.rerun()
+                        else:
+                            st.error(message)
                 else:
                     st.error("El nombre no puede estar vacío")
 
-        with col4:
+        with col5:
             # Botón eliminar
             if st.button("🗑️", key=f"delete_cat_{i}", help="Eliminar categoría"):
                 st.session_state.evento_categories.pop(i)
@@ -792,13 +911,36 @@ def mostrar_paso_finalizar(event_manager, event_info):
 
     with col1:
         if st.button("💾 Guardar Evento", type="primary", disabled=bool(errors)):
+            # Obtener valores adicionales
+            swimmer_fee = st.session_state.get('evento_swimmer_fee', 0)
+            team_fee = st.session_state.get('evento_team_fee', 0)
+            welcome_message = st.session_state.get('evento_welcome_message', '')
+            uploaded_logo = st.session_state.get('evento_logo_upload')
+
+            # Procesar logo si se subió uno nuevo
+            event_logo = None
+            if uploaded_logo and event_name:
+                logo_success, logo_result = event_manager.save_event_logo(uploaded_logo, event_name)
+                if logo_success:
+                    event_logo = logo_result
+                    st.info(f"✅ Logo guardado: {logo_result}")
+                else:
+                    st.warning(f"⚠️ Error guardando logo: {logo_result}")
+            elif event_info and event_info.get('event_logo'):
+                # Mantener logo existente si no se subió uno nuevo
+                event_logo = event_info['event_logo']
+
             success, message = event_manager.save_event_config(
                 event_name,
                 st.session_state.evento_categories,
                 st.session_state.evento_event_order,
                 st.session_state.evento_category_events,
                 min_age,
-                max_age
+                max_age,
+                swimmer_fee,
+                team_fee,
+                welcome_message,
+                event_logo
             )
 
             if success:

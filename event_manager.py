@@ -25,7 +25,8 @@ class EventManager:
             "400M COMBINADO INDIVIDUAL"
         ]
 
-    def save_event_config(self, event_name, categories, event_order, category_events, min_age, max_age):
+    def save_event_config(self, event_name, categories, event_order, category_events, min_age, max_age,
+                         swimmer_fee=None, team_fee=None, welcome_message=None, event_logo=None):
         """Guardar la configuración del evento"""
         config = {
             'event_name': event_name,
@@ -34,6 +35,10 @@ class EventManager:
             'category_events': category_events,
             'min_age': min_age,
             'max_age': max_age,
+            'swimmer_fee': swimmer_fee or 0,
+            'team_fee': team_fee or 0,
+            'welcome_message': welcome_message or '',
+            'event_logo': event_logo,
             'created_date': datetime.now().isoformat(),
             'modified_date': datetime.now().isoformat()
         }
@@ -113,7 +118,9 @@ class EventManager:
         selected_events = self.get_selected_events()
         return event in selected_events if selected_events else True
 
-    def update_event_config(self, event_name=None, categories=None, event_order=None, category_events=None, min_age=None, max_age=None):
+    def update_event_config(self, event_name=None, categories=None, event_order=None, category_events=None,
+                          min_age=None, max_age=None, swimmer_fee=None, team_fee=None,
+                          welcome_message=None, event_logo=None):
         """Actualizar configuración existente"""
         config = self.load_event_config()
         if not config:
@@ -131,6 +138,14 @@ class EventManager:
             config['min_age'] = min_age
         if max_age is not None:
             config['max_age'] = max_age
+        if swimmer_fee is not None:
+            config['swimmer_fee'] = swimmer_fee
+        if team_fee is not None:
+            config['team_fee'] = team_fee
+        if welcome_message is not None:
+            config['welcome_message'] = welcome_message
+        if event_logo is not None:
+            config['event_logo'] = event_logo
 
         config['modified_date'] = datetime.now().isoformat()
 
@@ -350,3 +365,306 @@ class EventManager:
             return self.get_selected_events()
 
         return self.get_events_for_category(category_name)
+
+    def parse_age_range(self, age_range_str):
+        """Parsear un string de rango de edad y retornar min_age, max_age"""
+        try:
+            if not age_range_str or not age_range_str.strip():
+                return None, None
+
+            age_range = age_range_str.strip()
+
+            # Patrón para rango: "12-13", "12 a 13", "12 - 13"
+            import re
+            range_pattern = r'(\d+)[\s]*[-aA]\s*(\d+)'
+            match = re.search(range_pattern, age_range)
+
+            if match:
+                min_age = int(match.group(1))
+                max_age = int(match.group(2))
+                return min_age, max_age
+
+            # Patrón para edad específica: "12", "12 años"
+            single_pattern = r'(\d+)'
+            match = re.search(single_pattern, age_range)
+
+            if match:
+                age = int(match.group(1))
+                return age, age
+
+        except (ValueError, AttributeError):
+            pass
+
+        return None, None
+
+    def validate_category_age_range(self, age_range_str):
+        """Validar que el rango de edad sea válido"""
+        if not age_range_str or not age_range_str.strip():
+            return False, "El rango de edad es requerido"
+
+        min_age, max_age = self.parse_age_range(age_range_str)
+
+        if min_age is None or max_age is None:
+            return False, "Formato de edad inválido. Use: '12-13' o '12 a 13' o '12'"
+
+        if min_age < 5 or max_age > 80:
+            return False, "Las edades deben estar entre 5 y 80 años"
+
+        if min_age > max_age:
+            return False, "La edad inicial debe ser menor o igual que la final"
+
+        return True, f"{min_age}-{max_age}" if min_age != max_age else str(min_age)
+
+    def sort_categories_by_age(self, categories):
+        """Ordenar categorías por rango de edad (menor a mayor)"""
+        def get_sort_key(category):
+            min_age, max_age = self.parse_age_range(category.get('age_range', ''))
+            return min_age if min_age is not None else 999
+
+        return sorted(categories, key=get_sort_key)
+
+    def format_age_range(self, min_age, max_age):
+        """Formatear rango de edad en string estándar"""
+        if min_age == max_age:
+            return str(min_age)
+        else:
+            return f"{min_age}-{max_age}"
+
+    def generate_event_pdf_report(self):
+        """Generar reporte PDF del evento configurado"""
+        if not REPORTLAB_AVAILABLE:
+            return None, "ReportLab no está disponible"
+
+        event_info = self.get_event_info()
+        if not event_info:
+            return None, "No hay evento configurado"
+
+        try:
+            from reportlab.lib.pagesizes import A4
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.units import inch
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+            from reportlab.lib import colors
+            from reportlab.lib.enums import TA_CENTER, TA_LEFT
+            from reportlab.platypus.flowables import Image
+            from io import BytesIO
+
+            # Colores del tema TEN
+            TEN_BLUE = colors.HexColor('#1E88E5')
+            TEN_LIGHT_BLUE = colors.HexColor('#64B5F6')
+            TEN_DARK_BLUE = colors.HexColor('#1565C0')
+            TEN_ACCENT = colors.HexColor('#E3F2FD')
+
+            # Crear buffer para PDF
+            buffer = BytesIO()
+            doc = SimpleDocTemplate(buffer, pagesize=A4,
+                                  rightMargin=72, leftMargin=72,
+                                  topMargin=72, bottomMargin=72)
+
+            story = []
+            styles = getSampleStyleSheet()
+
+            # Estilos personalizados
+            title_style = ParagraphStyle('EventTitle',
+                                       parent=styles['Heading1'],
+                                       fontSize=24,
+                                       spaceAfter=20,
+                                       alignment=TA_CENTER,
+                                       textColor=TEN_DARK_BLUE,
+                                       fontName='Helvetica-Bold')
+
+            subtitle_style = ParagraphStyle('EventSubtitle',
+                                          parent=styles['Heading2'],
+                                          fontSize=16,
+                                          spaceAfter=15,
+                                          alignment=TA_CENTER,
+                                          textColor=TEN_BLUE)
+
+            section_style = ParagraphStyle('SectionHeader',
+                                         parent=styles['Heading2'],
+                                         fontSize=14,
+                                         spaceAfter=12,
+                                         textColor=TEN_BLUE,
+                                         fontName='Helvetica-Bold')
+
+            # Logo del evento si existe
+            if event_info.get('event_logo'):
+                try:
+                    logo_path = f"event_logos/{event_info['event_logo']}"
+                    if os.path.exists(logo_path):
+                        logo = Image(logo_path, width=2*inch, height=1.5*inch)
+                        logo.hAlign = 'CENTER'
+                        story.append(logo)
+                        story.append(Spacer(1, 20))
+                except:
+                    pass
+
+            # Título del evento
+            story.append(Paragraph(event_info['name'], title_style))
+            story.append(Paragraph("Reporte de Configuración del Evento", subtitle_style))
+            story.append(Spacer(1, 30))
+
+            # Mensaje de bienvenida si existe
+            welcome_msg = event_info.get('welcome_message', '').strip()
+            if welcome_msg:
+                story.append(Paragraph("MENSAJE DE BIENVENIDA", section_style))
+                welcome_style = ParagraphStyle('Welcome',
+                                             parent=styles['Normal'],
+                                             fontSize=12,
+                                             spaceAfter=15,
+                                             alignment=TA_LEFT)
+                story.append(Paragraph(welcome_msg.replace('\n', '<br/>'), welcome_style))
+                story.append(Spacer(1, 20))
+
+            # Información general
+            story.append(Paragraph("INFORMACIÓN GENERAL", section_style))
+            general_data = [
+                ['Campo', 'Valor'],
+                ['Nombre del Evento', event_info['name']],
+                ['Rango de Edades', f"{event_info['min_age']} - {event_info['max_age']} años"],
+                ['Valor por Nadador', f"${event_info.get('swimmer_fee', 0):,.0f}"],
+                ['Valor por Equipo', f"${event_info.get('team_fee', 0):,.0f}"],
+                ['Total de Categorías', str(len(event_info['categories']))],
+                ['Total de Pruebas', str(len(event_info['events']))],
+                ['Fecha de Creación', event_info.get('created_date', '').split('T')[0]],
+            ]
+
+            general_table = Table(general_data, colWidths=[2.5*inch, 3*inch])
+            general_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), TEN_BLUE),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 12),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), TEN_ACCENT),
+                ('GRID', (0, 0), (-1, -1), 1, TEN_DARK_BLUE),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ]))
+            story.append(general_table)
+            story.append(Spacer(1, 30))
+
+            # Categorías
+            story.append(Paragraph("CATEGORÍAS DEL EVENTO", section_style))
+            categories_data = [['#', 'Nombre', 'Rango de Edad', 'Pruebas Asignadas']]
+
+            # Ordenar categorías por edad
+            sorted_categories = self.sort_categories_by_age(event_info['categories'])
+
+            for i, category in enumerate(sorted_categories, 1):
+                cat_name = category['name']
+                age_range = category['age_range']
+                cat_events = event_info['category_events'].get(cat_name, [])
+                events_count = len(cat_events)
+
+                categories_data.append([
+                    str(i),
+                    cat_name,
+                    age_range,
+                    str(events_count)
+                ])
+
+            categories_table = Table(categories_data, colWidths=[0.5*inch, 2*inch, 1.5*inch, 1*inch])
+            categories_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), TEN_BLUE),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 11),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), TEN_ACCENT),
+                ('GRID', (0, 0), (-1, -1), 1, TEN_DARK_BLUE),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ]))
+            story.append(categories_table)
+            story.append(Spacer(1, 30))
+
+            # Pruebas del evento
+            story.append(Paragraph("PRUEBAS DEL EVENTO (ORDEN)", section_style))
+            events_data = [['Orden', 'Prueba']]
+
+            for i, event in enumerate(event_info['events'], 1):
+                events_data.append([str(i), event])
+
+            events_table = Table(events_data, colWidths=[1*inch, 4*inch])
+            events_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), TEN_BLUE),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+                ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 11),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), TEN_ACCENT),
+                ('GRID', (0, 0), (-1, -1), 1, TEN_DARK_BLUE),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ]))
+            story.append(events_table)
+
+            # Nueva página para asignaciones detalladas
+            story.append(PageBreak())
+            story.append(Paragraph("ASIGNACIÓN DETALLADA DE PRUEBAS POR CATEGORÍA", section_style))
+
+            for category in sorted_categories:
+                cat_name = category['name']
+                age_range = category['age_range']
+                cat_events = event_info['category_events'].get(cat_name, [])
+
+                story.append(Paragraph(f"{cat_name} ({age_range})",
+                                     ParagraphStyle('CategoryName', parent=styles['Heading3'],
+                                                  fontSize=12, textColor=TEN_DARK_BLUE,
+                                                  spaceAfter=8)))
+
+                if cat_events:
+                    events_text = ", ".join(cat_events)
+                    story.append(Paragraph(events_text, styles['Normal']))
+                else:
+                    story.append(Paragraph("<i>Sin pruebas asignadas</i>",
+                                         ParagraphStyle('NoEvents', parent=styles['Normal'],
+                                                      fontName='Helvetica-Oblique',
+                                                      textColor=colors.grey)))
+
+                story.append(Spacer(1, 15))
+
+            # Footer
+            story.append(Spacer(1, 50))
+            footer_style = ParagraphStyle('Footer',
+                                        parent=styles['Normal'],
+                                        fontSize=8,
+                                        alignment=TA_CENTER,
+                                        textColor=TEN_DARK_BLUE)
+            story.append(Paragraph("Sistema de Gestión de Competencias TEN - Reporte Generado Automáticamente",
+                                 footer_style))
+
+            # Generar PDF
+            doc.build(story)
+            buffer.seek(0)
+
+            # Guardar archivo
+            filename = f"reporte_evento_{event_info['name'].replace(' ', '_')}.pdf"
+            return buffer.getvalue(), filename
+
+        except Exception as e:
+            return None, f"Error generando PDF: {str(e)}"
+
+    def save_event_logo(self, uploaded_file, event_name):
+        """Guardar logo del evento"""
+        try:
+            # Crear directorio para logos si no existe
+            logo_dir = "event_logos"
+            os.makedirs(logo_dir, exist_ok=True)
+
+            # Generar nombre de archivo único
+            file_extension = uploaded_file.name.split('.')[-1].lower()
+            safe_event_name = "".join(c for c in event_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+            logo_filename = f"{safe_event_name.replace(' ', '_')}_logo.{file_extension}"
+            logo_path = os.path.join(logo_dir, logo_filename)
+
+            # Guardar archivo
+            with open(logo_path, 'wb') as f:
+                f.write(uploaded_file.getbuffer())
+
+            return True, logo_filename
+
+        except Exception as e:
+            return False, f"Error guardando logo: {str(e)}"
