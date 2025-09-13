@@ -295,19 +295,47 @@ def mostrar_creacion_evento():
     event_info = event_manager.get_event_info()
 
     if event_info:
-        st.markdown(f"""
-        <div class="success-message">
-            <h4>✅ Evento configurado: {event_info['name']}</h4>
-            <p><strong>Pruebas seleccionadas:</strong> {len(event_info['events'])}</p>
-            <p><strong>Rango de edades:</strong> {event_info['min_age']} - {event_info['max_age']} años</p>
-        </div>
-        """, unsafe_allow_html=True)
+        # Validar configuración completa
+        is_complete, validation_message = event_manager.validate_event_configuration()
 
-        # Mostrar detalles del evento en expandible
+        if is_complete:
+            st.markdown(f"""
+            <div class="success-message">
+                <h4>✅ Evento configurado: {event_info['name']}</h4>
+                <p><strong>Categorías:</strong> {len(event_info['categories'])}</p>
+                <p><strong>Pruebas del evento:</strong> {len(event_info['events'])}</p>
+                <p><strong>Rango de edades:</strong> {event_info['min_age']} - {event_info['max_age']} años</p>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+            <div class="warning-message">
+                <h4>⚠️ Evento configurado: {event_info['name']}</h4>
+                <p><strong>Estado:</strong> Configuración incompleta</p>
+                <p><strong>Errores:</strong> {validation_message}</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # Mostrar detalles del evento en expandibles
         with st.expander("Ver detalles del evento"):
-            st.write("**Pruebas incluidas:**")
-            for i, event in enumerate(event_info['events'], 1):
-                st.write(f"{i}. {event}")
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.write("**Categorías:**")
+                for i, category in enumerate(event_info['categories'], 1):
+                    age_info = f" ({category['age_range']})" if category['age_range'] else ""
+                    st.write(f"{i}. {category['name']}{age_info}")
+
+            with col2:
+                st.write("**Pruebas del evento (orden):**")
+                for i, event in enumerate(event_info['events'], 1):
+                    st.write(f"{i}. {event}")
+
+            # Mostrar asignación de pruebas por categoría
+            if event_info['category_events']:
+                st.write("**Asignación de pruebas por categoría:**")
+                for cat_name, events in event_info['category_events'].items():
+                    st.write(f"**{cat_name}:** {', '.join(events) if events else 'Sin pruebas asignadas'}")
 
         # Opciones para modificar o eliminar
         col1, col2, col3 = st.columns(3)
@@ -315,6 +343,7 @@ def mostrar_creacion_evento():
         with col1:
             if st.button("🔄 Modificar Evento", type="secondary"):
                 st.session_state.modificar_evento = True
+                st.rerun()
 
         with col2:
             if st.button("🗑️ Eliminar Evento", type="secondary"):
@@ -326,100 +355,479 @@ def mostrar_creacion_evento():
                     st.error(message)
 
         with col3:
-            if st.button("➡️ Ir a Inscripción", type="primary"):
-                st.session_state.selected_option = "✍️ Inscripción de Nadadores"
-                st.rerun()
+            if st.button("➡️ Ir a Inscripción", type="primary", disabled=not is_complete):
+                if is_complete:
+                    st.session_state.selected_option = "✍️ Inscripción de Nadadores"
+                    st.rerun()
 
     # Formulario para crear/modificar evento
     if not event_info or st.session_state.get('modificar_evento', False):
-        if event_info:
-            st.markdown("### 🔄 Modificar Evento Existente")
-        else:
-            st.markdown("### ➕ Crear Nuevo Evento")
-            st.markdown("""
-            <div class="info-message">
-                Configure los detalles de su evento de natación. Solo las pruebas seleccionadas
-                estarán disponibles durante la inscripción de nadadores.
-            </div>
-            """, unsafe_allow_html=True)
+        crear_formulario_evento(event_manager, event_info)
 
-        with st.form("evento_form"):
-            # Nombre del evento
-            event_name = st.text_input(
-                "📝 Nombre del Evento",
-                value=event_info['name'] if event_info else "",
-                placeholder="Ej: Campeonato Nacional de Natación 2024"
+
+def crear_formulario_evento(event_manager, event_info=None):
+    """Crear formulario completo para configuración de evento"""
+
+    if event_info:
+        st.markdown("### 🔄 Modificar Evento Existente")
+    else:
+        st.markdown("### ➕ Crear Nuevo Evento")
+        st.markdown("""
+        <div class="info-message">
+            Configure los detalles completos de su evento de natación siguiendo el orden:
+            <strong>1) Nombre y edades → 2) Categorías → 3) Pruebas del evento → 4) Asignación por categoría</strong>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # Inicializar session_state si es necesario
+    if 'evento_step' not in st.session_state:
+        st.session_state.evento_step = 1
+
+    if 'evento_categories' not in st.session_state:
+        st.session_state.evento_categories = event_info['categories'] if event_info else []
+
+    if 'evento_event_order' not in st.session_state:
+        st.session_state.evento_event_order = event_info['events'] if event_info else []
+
+    if 'evento_category_events' not in st.session_state:
+        st.session_state.evento_category_events = event_info['category_events'] if event_info else {}
+
+    # Pasos del formulario
+    tabs = st.tabs(["1️⃣ Datos Básicos", "2️⃣ Categorías", "3️⃣ Pruebas del Evento", "4️⃣ Asignación por Categoría", "5️⃣ Finalizar"])
+
+    with tabs[0]:
+        mostrar_paso_datos_basicos(event_manager, event_info)
+
+    with tabs[1]:
+        mostrar_paso_categorias(event_manager)
+
+    with tabs[2]:
+        mostrar_paso_pruebas_evento(event_manager)
+
+    with tabs[3]:
+        mostrar_paso_asignacion_categorias(event_manager)
+
+    with tabs[4]:
+        mostrar_paso_finalizar(event_manager, event_info)
+
+
+def mostrar_paso_datos_basicos(event_manager, event_info):
+    """Paso 1: Datos básicos del evento"""
+    st.markdown("### 📝 Información Básica del Evento")
+
+    col1, col2 = st.columns([3, 1])
+
+    with col1:
+        event_name = st.text_input(
+            "Nombre del Evento",
+            value=event_info['name'] if event_info else "",
+            placeholder="Ej: Campeonato Nacional de Natación 2024",
+            key="evento_name"
+        )
+
+    col1, col2 = st.columns(2)
+    with col1:
+        min_age = st.number_input(
+            "🧒 Edad Mínima",
+            min_value=5,
+            max_value=80,
+            value=event_info['min_age'] if event_info else 8,
+            step=1,
+            key="evento_min_age"
+        )
+
+    with col2:
+        max_age = st.number_input(
+            "🧓 Edad Máxima",
+            min_value=5,
+            max_value=80,
+            value=event_info['max_age'] if event_info else 18,
+            step=1,
+            key="evento_max_age"
+        )
+
+    # Validaciones básicas
+    if event_name and len(event_name.strip()) < 3:
+        st.error("El nombre del evento debe tener al menos 3 caracteres")
+    elif min_age >= max_age:
+        st.error("La edad mínima debe ser menor que la máxima")
+    elif event_name and event_name.strip() and min_age < max_age:
+        st.success("✅ Datos básicos completados correctamente")
+
+
+def mostrar_paso_categorias(event_manager):
+    """Paso 2: Gestión de categorías"""
+    st.markdown("### 🏷️ Configuración de Categorías")
+
+    # Pestañas para creación manual vs carga desde Excel
+    tab1, tab2 = st.tabs(["Creación Manual", "Cargar desde Excel"])
+
+    with tab1:
+        mostrar_creacion_manual_categorias()
+
+    with tab2:
+        mostrar_carga_excel_categorias(event_manager)
+
+    # Mostrar categorías actuales
+    if st.session_state.evento_categories:
+        st.markdown("### 📋 Categorías Configuradas")
+        mostrar_lista_categorias_editable()
+
+
+def mostrar_creacion_manual_categorias():
+    """Interfaz para creación manual de categorías"""
+    st.markdown("**Agregar nueva categoría:**")
+
+    col1, col2, col3 = st.columns([2, 2, 1])
+
+    with col1:
+        new_category_name = st.text_input("Nombre de la categoría", placeholder="Ej: Juvenil A", key="new_cat_name")
+
+    with col2:
+        new_category_age = st.text_input("Rango de edad (opcional)", placeholder="Ej: 12-13 años", key="new_cat_age")
+
+    with col3:
+        if st.button("➕ Agregar", type="primary"):
+            if new_category_name.strip():
+                # Validar nombre único
+                is_valid, message = event_manager_module.EventManager().validate_category_name(
+                    new_category_name.strip(),
+                    st.session_state.evento_categories
+                )
+
+                if is_valid:
+                    new_category = {
+                        'name': new_category_name.strip(),
+                        'age_range': new_category_age.strip()
+                    }
+                    st.session_state.evento_categories.append(new_category)
+                    st.success(f"Categoría '{new_category_name}' agregada")
+                    # Limpiar campos
+                    st.session_state.new_cat_name = ""
+                    st.session_state.new_cat_age = ""
+                    st.rerun()
+                else:
+                    st.error(message)
+            else:
+                st.error("El nombre de la categoría es requerido")
+
+
+def mostrar_carga_excel_categorias(event_manager):
+    """Interfaz para cargar categorías desde Excel"""
+    st.markdown("""
+    **Cargar desde archivo Excel:**
+
+    El archivo debe contener columnas con nombres que incluyan:
+    - **Nombre/Categoría:** nombre de la categoría
+    - **Edad/Rango:** rango de edades (opcional)
+    """)
+
+    uploaded_file = st.file_uploader(
+        "Seleccionar archivo Excel",
+        type=['xlsx', 'xls'],
+        key="categories_upload"
+    )
+
+    if uploaded_file:
+        if st.button("📤 Cargar Categorías", type="primary"):
+            success, result = event_manager.load_categories_from_excel(uploaded_file)
+
+            if success:
+                # Sobrescribir categorías existentes
+                st.session_state.evento_categories = result
+                st.success(f"✅ {len(result)} categorías cargadas exitosamente")
+                st.rerun()
+            else:
+                st.error(f"❌ Error al cargar categorías: {result}")
+
+
+def mostrar_lista_categorias_editable():
+    """Mostrar lista de categorías con opciones de edición"""
+    for i, category in enumerate(st.session_state.evento_categories):
+        col1, col2, col3, col4 = st.columns([2, 2, 1, 1])
+
+        with col1:
+            # Campo editable para nombre
+            new_name = st.text_input(
+                f"Categoría {i+1}",
+                value=category['name'],
+                key=f"cat_name_{i}",
+                label_visibility="collapsed"
             )
 
-            # Rango de edades
-            col1, col2 = st.columns(2)
-            with col1:
-                min_age = st.number_input(
-                    "🧒 Edad Mínima",
-                    min_value=5,
-                    max_value=80,
-                    value=event_info['min_age'] if event_info else 8,
-                    step=1
-                )
+        with col2:
+            # Campo editable para edad
+            new_age = st.text_input(
+                f"Edad {i+1}",
+                value=category['age_range'],
+                key=f"cat_age_{i}",
+                placeholder="Rango de edad",
+                label_visibility="collapsed"
+            )
 
-            with col2:
-                max_age = st.number_input(
-                    "🧓 Edad Máxima",
-                    min_value=5,
-                    max_value=80,
-                    value=event_info['max_age'] if event_info else 18,
-                    step=1
-                )
+        with col3:
+            # Botón actualizar
+            if st.button("💾", key=f"update_cat_{i}", help="Actualizar categoría"):
+                if new_name.strip():
+                    # Validar nombre único (excluyendo la actual)
+                    is_valid, message = event_manager_module.EventManager().validate_category_name(
+                        new_name.strip(),
+                        st.session_state.evento_categories,
+                        exclude_index=i
+                    )
 
-            # Selección de pruebas
-            st.markdown("### 🏊‍♀️ Selección de Pruebas")
-            st.markdown("Marque las pruebas que estarán disponibles en su evento:")
-
-            all_events = event_manager.get_available_events()
-            selected_events = event_info['events'] if event_info else []
-
-            # Crear checkboxes en 3 columnas
-            col1, col2, col3 = st.columns(3)
-            pruebas_seleccionadas = []
-
-            for i, event in enumerate(all_events):
-                col = [col1, col2, col3][i % 3]
-                with col:
-                    if st.checkbox(event, value=event in selected_events, key=f"event_{i}"):
-                        pruebas_seleccionadas.append(event)
-
-            # Botones de acción
-            col1, col2, col3 = st.columns([1, 1, 1])
-
-            with col1:
-                if st.form_submit_button("💾 Guardar Evento", type="primary"):
-                    if not event_name.strip():
-                        st.error("❌ El nombre del evento es requerido")
-                    elif min_age >= max_age:
-                        st.error("❌ La edad mínima debe ser menor que la máxima")
-                    elif not pruebas_seleccionadas:
-                        st.error("❌ Debe seleccionar al menos una prueba")
+                    if is_valid:
+                        st.session_state.evento_categories[i] = {
+                            'name': new_name.strip(),
+                            'age_range': new_age.strip()
+                        }
+                        st.success(f"Categoría {i+1} actualizada")
+                        st.rerun()
                     else:
-                        success, message = event_manager.save_event_config(
-                            event_name.strip(),
-                            pruebas_seleccionadas,
-                            min_age,
-                            max_age
-                        )
-                        if success:
-                            st.success(message)
-                            st.session_state.modificar_evento = False
-                            st.rerun()
-                        else:
-                            st.error(message)
+                        st.error(message)
+                else:
+                    st.error("El nombre no puede estar vacío")
 
-            with col2:
-                if st.form_submit_button("🔄 Seleccionar Todas"):
-                    st.rerun()
+        with col4:
+            # Botón eliminar
+            if st.button("🗑️", key=f"delete_cat_{i}", help="Eliminar categoría"):
+                st.session_state.evento_categories.pop(i)
+                st.success("Categoría eliminada")
+                st.rerun()
 
-            with col3:
-                if st.form_submit_button("❌ Limpiar Selección"):
-                    st.rerun()
+
+def mostrar_paso_pruebas_evento(event_manager):
+    """Paso 3: Selección y orden de pruebas del evento"""
+    st.markdown("### 🏊‍♀️ Configuración de Pruebas del Evento")
+
+    st.markdown("""
+    <div class="info-message">
+        <strong>Instrucciones:</strong> Seleccione las pruebas disponibles de la lista de la izquierda
+        y arrástrelas a la lista de la derecha para definir el orden del evento.
+    </div>
+    """, unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns([2, 1, 2])
+
+    # Lista de pruebas disponibles
+    with col1:
+        st.markdown("**🏊 Pruebas Disponibles**")
+        all_events = event_manager.get_available_events()
+        selected_events = st.session_state.evento_event_order
+
+        # Filtrar eventos que ya no están en el orden
+        available_events = [event for event in all_events if event not in selected_events]
+
+        if available_events:
+            for event in available_events:
+                col_a, col_b = st.columns([3, 1])
+                with col_a:
+                    st.write(f"• {event}")
+                with col_b:
+                    if st.button("➡️", key=f"add_event_{event}", help=f"Agregar {event}"):
+                        st.session_state.evento_event_order.append(event)
+                        st.rerun()
+        else:
+            st.info("Todas las pruebas han sido seleccionadas")
+
+    # Separador visual
+    with col2:
+        st.markdown("<br>" * 8, unsafe_allow_html=True)
+        st.markdown("**⬅️ ➡️**", unsafe_allow_html=True)
+
+    # Lista de pruebas seleccionadas (orden del evento)
+    with col3:
+        st.markdown("**🏆 Pruebas del Evento (Orden)**")
+
+        if st.session_state.evento_event_order:
+            for i, event in enumerate(st.session_state.evento_event_order):
+                col_a, col_b, col_c, col_d = st.columns([1, 3, 1, 1])
+
+                with col_a:
+                    st.write(f"{i+1}.")
+
+                with col_b:
+                    st.write(event)
+
+                with col_c:
+                    # Botones para reordenar
+                    if i > 0 and st.button("⬆️", key=f"up_{i}", help="Subir"):
+                        # Intercambiar con el anterior
+                        st.session_state.evento_event_order[i], st.session_state.evento_event_order[i-1] = \
+                        st.session_state.evento_event_order[i-1], st.session_state.evento_event_order[i]
+                        st.rerun()
+
+                with col_d:
+                    # Botón para remover
+                    if st.button("❌", key=f"remove_event_{i}", help="Quitar del evento"):
+                        st.session_state.evento_event_order.pop(i)
+                        st.rerun()
+
+        else:
+            st.info("Agregue pruebas desde la lista de la izquierda")
+
+        # Botones adicionales
+        if st.session_state.evento_event_order:
+            if st.button("🔄 Limpiar Orden"):
+                st.session_state.evento_event_order = []
+                st.rerun()
+
+
+def mostrar_paso_asignacion_categorias(event_manager):
+    """Paso 4: Asignación de pruebas por categoría"""
+    st.markdown("### 🎯 Asignación de Pruebas por Categoría")
+
+    if not st.session_state.evento_categories:
+        st.warning("⚠️ Primero debe configurar las categorías en el paso anterior")
+        return
+
+    if not st.session_state.evento_event_order:
+        st.warning("⚠️ Primero debe configurar las pruebas del evento en el paso anterior")
+        return
+
+    st.markdown("""
+    <div class="info-message">
+        Seleccione qué pruebas puede nadar cada categoría. Solo aparecen las pruebas
+        que fueron incluidas en el evento.
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Para cada categoría, mostrar checkboxes de las pruebas del evento
+    for category in st.session_state.evento_categories:
+        category_name = category['name']
+
+        st.markdown(f"**📋 {category_name}** {f'({category["age_range"]})' if category['age_range'] else ''}")
+
+        # Obtener pruebas actualmente asignadas a esta categoría
+        current_events = st.session_state.evento_category_events.get(category_name, [])
+
+        # Crear checkboxes en columnas
+        cols = st.columns(3)
+        selected_events_for_category = []
+
+        for i, event in enumerate(st.session_state.evento_event_order):
+            col = cols[i % 3]
+            with col:
+                is_selected = st.checkbox(
+                    event,
+                    value=event in current_events,
+                    key=f"cat_event_{category_name}_{i}"
+                )
+                if is_selected:
+                    selected_events_for_category.append(event)
+
+        # Actualizar session state
+        st.session_state.evento_category_events[category_name] = selected_events_for_category
+
+        # Mostrar resumen
+        if selected_events_for_category:
+            st.success(f"✅ {len(selected_events_for_category)} pruebas seleccionadas para {category_name}")
+        else:
+            st.error(f"❌ No hay pruebas seleccionadas para {category_name}")
+
+        st.divider()
+
+
+def mostrar_paso_finalizar(event_manager, event_info):
+    """Paso 5: Finalizar y guardar configuración"""
+    st.markdown("### ✅ Finalizar Configuración del Evento")
+
+    # Validaciones finales
+    errors = []
+    warnings = []
+
+    # Validar nombre del evento
+    event_name = st.session_state.get('evento_name', '').strip()
+    if not event_name or len(event_name) < 3:
+        errors.append("El nombre del evento debe tener al menos 3 caracteres")
+
+    # Validar edades
+    min_age = st.session_state.get('evento_min_age', 0)
+    max_age = st.session_state.get('evento_max_age', 0)
+    if min_age >= max_age:
+        errors.append("El rango de edades no es válido")
+
+    # Validar categorías
+    if not st.session_state.evento_categories:
+        errors.append("Debe configurar al menos una categoría")
+
+    # Validar pruebas del evento
+    if not st.session_state.evento_event_order:
+        errors.append("Debe seleccionar al menos una prueba para el evento")
+
+    # Validar asignación de pruebas por categoría
+    for category in st.session_state.evento_categories:
+        cat_name = category['name']
+        cat_events = st.session_state.evento_category_events.get(cat_name, [])
+        if not cat_events:
+            errors.append(f"La categoría '{cat_name}' no tiene pruebas asignadas")
+
+    # Mostrar resumen
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("**📋 Resumen de Configuración:**")
+        st.write(f"**Nombre:** {event_name}")
+        st.write(f"**Edades:** {min_age} - {max_age} años")
+        st.write(f"**Categorías:** {len(st.session_state.evento_categories)}")
+        st.write(f"**Pruebas del evento:** {len(st.session_state.evento_event_order)}")
+
+    with col2:
+        st.markdown("**🎯 Categorías y sus pruebas:**")
+        for category in st.session_state.evento_categories:
+            cat_name = category['name']
+            cat_events = st.session_state.evento_category_events.get(cat_name, [])
+            st.write(f"**{cat_name}:** {len(cat_events)} pruebas")
+
+    # Mostrar errores o warnings
+    if errors:
+        st.error("❌ **Errores que deben corregirse:**\n" + "\n".join([f"• {error}" for error in errors]))
+    elif warnings:
+        st.warning("⚠️ **Advertencias:**\n" + "\n".join([f"• {warning}" for warning in warnings]))
+    else:
+        st.success("✅ **Configuración completa y válida**")
+
+    # Botones finales
+    col1, col2, col3 = st.columns([1, 1, 1])
+
+    with col1:
+        if st.button("💾 Guardar Evento", type="primary", disabled=bool(errors)):
+            success, message = event_manager.save_event_config(
+                event_name,
+                st.session_state.evento_categories,
+                st.session_state.evento_event_order,
+                st.session_state.evento_category_events,
+                min_age,
+                max_age
+            )
+
+            if success:
+                st.success(message)
+                # Limpiar session state
+                for key in list(st.session_state.keys()):
+                    if key.startswith('evento_'):
+                        del st.session_state[key]
+                st.session_state.modificar_evento = False
+                st.rerun()
+            else:
+                st.error(message)
+
+    with col2:
+        if st.button("🔄 Reiniciar Formulario"):
+            # Limpiar session state
+            for key in list(st.session_state.keys()):
+                if key.startswith('evento_'):
+                    del st.session_state[key]
+            st.rerun()
+
+    with col3:
+        if st.button("❌ Cancelar"):
+            # Limpiar session state
+            for key in list(st.session_state.keys()):
+                if key.startswith('evento_'):
+                    del st.session_state[key]
+            st.session_state.modificar_evento = False
+            st.rerun()
 
 
 def generar_sembrado_categoria():

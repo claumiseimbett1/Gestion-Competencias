@@ -162,6 +162,65 @@ class SwimmerRegistration:
                 return selected_events
         return self.swimming_events
 
+    def get_available_events_for_swimmer_category(self, category_name):
+        """Obtener las pruebas disponibles para un nadador según su categoría"""
+        if self.event_manager:
+            return self.event_manager.get_available_events_for_swimmer(category_name)
+        return self.get_available_events()
+
+    def get_event_categories(self):
+        """Obtener las categorías configuradas para el evento"""
+        if self.event_manager:
+            return self.event_manager.get_categories()
+        return [{'name': cat, 'age_range': ''} for cat in self.categories]
+
+    def find_swimmer_category_by_age_and_gender(self, age, gender):
+        """Buscar la categoría apropiada para un nadador basándose en edad y género"""
+        if self.event_manager:
+            event_categories = self.event_manager.get_categories()
+
+            # Si hay categorías configuradas en el evento, intentar encontrar una que coincida
+            for category in event_categories:
+                # Si la categoría tiene rango de edad específico, intentar parsearlo
+                age_range = category.get('age_range', '').strip()
+                if age_range and self._age_matches_range(age, age_range):
+                    return category['name']
+
+            # Si no se encuentra coincidencia específica, retornar la primera categoría como fallback
+            if event_categories:
+                return event_categories[0]['name']
+
+        # Fallback al sistema tradicional de categorías por edad/género
+        return self.get_category_by_age(age, gender)
+
+    def _age_matches_range(self, age, age_range):
+        """Verificar si una edad coincide con un rango de edad textual"""
+        try:
+            # Buscar patrones como "12-13", "12 a 13", "12-13 años", etc.
+            import re
+
+            # Patrón para rango: "12-13", "12 a 13", "12 - 13"
+            range_pattern = r'(\d+)[\s]*[-aA]\s*(\d+)'
+            match = re.search(range_pattern, age_range)
+
+            if match:
+                min_age = int(match.group(1))
+                max_age = int(match.group(2))
+                return min_age <= age <= max_age
+
+            # Patrón para edad específica: "12", "12 años"
+            single_pattern = r'(\d+)'
+            match = re.search(single_pattern, age_range)
+
+            if match:
+                target_age = int(match.group(1))
+                return age == target_age
+
+        except (ValueError, AttributeError):
+            pass
+
+        return False
+
     def create_empty_registration_file(self):
         available_events = self.get_available_events()
         columns = ['NOMBRE Y AP', 'EQUIPO', 'EDAD', 'CAT.', 'SEXO'] + available_events
@@ -423,6 +482,13 @@ class SwimmerRegistration:
         # Obtener pruebas disponibles del evento
         available_events = self.get_available_events()
 
+        # Si tenemos categoría del nadador, filtrar por pruebas de la categoría
+        swimmer_category = swimmer_data.get('category')
+        if swimmer_category:
+            category_events = self.get_available_events_for_swimmer_category(swimmer_category)
+            if category_events:
+                available_events = category_events
+
         # Procesar cada registro y extraer tiempos
         times_by_event = {}
 
@@ -596,7 +662,7 @@ class SwimmerRegistration:
         
         # Asignar categoría automática si no está disponible pero tenemos edad y género
         if not swimmer_info['category'] and swimmer_info['age'] and swimmer_info['gender']:
-            swimmer_info['category'] = self.get_category_by_age(swimmer_info['age'], swimmer_info['gender'])
+            swimmer_info['category'] = self.find_swimmer_category_by_age_and_gender(swimmer_info['age'], swimmer_info['gender'])
         
         # Valores por defecto para datos faltantes
         if not swimmer_info['age']:
@@ -621,7 +687,7 @@ class SwimmerRegistration:
             'name': swimmer_info['name'],
             'team': swimmer_info['team'],
             'age': swimmer_info['age'] or 12,
-            'category': swimmer_info['category'] or self.get_category_by_age(swimmer_info['age'] or 12, swimmer_info['gender'] or 'M'),
+            'category': swimmer_info['category'] or self.find_swimmer_category_by_age_and_gender(swimmer_info['age'] or 12, swimmer_info['gender'] or 'M'),
             'gender': swimmer_info['gender'] or 'M',
             'events': latest_times
         }
@@ -947,7 +1013,7 @@ class SwimmerRegistration:
 
                     # Auto-generar categoría si no se proporciona
                     if not category:
-                        category = self.get_category_by_age(age, gender)
+                        category = self.find_swimmer_category_by_age_and_gender(age, gender)
 
                     # Verificar si ya existe el nadador
                     if os.path.exists(self.archivo_inscripcion):
