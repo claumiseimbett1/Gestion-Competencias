@@ -114,6 +114,31 @@ class SwimmerRegistration:
             print(f"Error calculando edad: {e}")
             return None
 
+    def _get_swimmer_events_dict(self, swimmer):
+        """Helper method to get swimmer events as dict, handling both dict and list formats"""
+        events = swimmer.get('events', {})
+        if isinstance(events, dict):
+            return events
+        elif isinstance(events, list):
+            # Convert list format to dict format
+            events_dict = {}
+            for item in events:
+                if isinstance(item, dict) and 'event' in item and 'time' in item:
+                    events_dict[item['event']] = item['time']
+                elif isinstance(item, str) and ':' in item:
+                    # Handle format "event: time"
+                    parts = item.split(':', 1)
+                    if len(parts) == 2:
+                        events_dict[parts[0].strip()] = parts[1].strip()
+            return events_dict
+        else:
+            return {}
+
+    def _get_swimmer_events_list(self, swimmer):
+        """Helper method to get list of events with times, handling both dict and list formats"""
+        events_dict = self._get_swimmer_events_dict(swimmer)
+        return [event for event, time in events_dict.items() if time and str(time).strip()]
+
     def get_category_by_age(self, age, gender, birth_date=None):
         """Determinar categoría basada en la edad, usando las categorías del evento si están disponibles"""
 
@@ -487,7 +512,7 @@ class SwimmerRegistration:
                 teams_data[team_name]['genders'][swimmer['gender']] += 1
 
                 # Contar eventos del nadador
-                swimmer_events = [event for event, time in swimmer['events'].items() if time and time.strip()]
+                swimmer_events = self._get_swimmer_events_list(swimmer)
                 teams_data[team_name]['total_events'] += len(swimmer_events)
 
             # Ordenar equipos por número de nadadores (descendente)
@@ -532,7 +557,8 @@ class SwimmerRegistration:
                     for swimmer in team_info['swimmers']:
                         # Obtener eventos inscritos
                         events_list = []
-                        for event, time in swimmer['events'].items():
+                        events_data = self._get_swimmer_events_dict(swimmer)
+                        for event, time in events_data.items():
                             if time and time.strip():
                                 events_list.append(f"{event}: {time}")
 
@@ -554,6 +580,51 @@ class SwimmerRegistration:
 
         except Exception as e:
             return None, f"Error exportando a Excel: {e}"
+
+    def preview_team_report(self):
+        """Generar previsualización del reporte de equipos"""
+        swimmers = self.get_swimmers_list()
+        if not swimmers:
+            return None, "No hay nadadores inscritos"
+
+        try:
+            # Agrupar nadadores por equipo
+            teams_data = {}
+
+            for swimmer in swimmers:
+                team_name = swimmer['team']
+                if team_name not in teams_data:
+                    teams_data[team_name] = {
+                        'swimmers': [],
+                        'total_swimmers': 0,
+                        'categories': {},
+                        'genders': {'M': 0, 'F': 0},
+                        'total_events': 0
+                    }
+
+                teams_data[team_name]['swimmers'].append(swimmer)
+                teams_data[team_name]['total_swimmers'] += 1
+
+                # Contar por categoría
+                category = swimmer['category']
+                if category not in teams_data[team_name]['categories']:
+                    teams_data[team_name]['categories'][category] = 0
+                teams_data[team_name]['categories'][category] += 1
+
+                # Contar géneros
+                teams_data[team_name]['genders'][swimmer['gender']] += 1
+
+                # Contar eventos del nadador
+                swimmer_events = self._get_swimmer_events_list(swimmer)
+                teams_data[team_name]['total_events'] += len(swimmer_events)
+
+            # Ordenar equipos por número de nadadores (descendente)
+            sorted_teams = dict(sorted(teams_data.items(), key=lambda x: x[1]['total_swimmers'], reverse=True))
+
+            return sorted_teams, "Previsualización generada exitosamente"
+
+        except Exception as e:
+            return None, f"Error generando previsualización de equipos: {e}"
 
     def generate_medals_report(self):
         """Generar reporte de medallas por categoría según número de inscritos"""
@@ -579,7 +650,8 @@ class SwimmerRegistration:
                     category_events[category_key] = {}
 
                 # Contar participantes por evento en esta categoría
-                for event, time in swimmer['events'].items():
+                events_data = self._get_swimmer_events_dict(swimmer)
+                for event, time in events_data.items():
                     if time and time.strip() and event in available_events:
                         if event not in category_events[category_key]:
                             category_events[category_key][event] = {
@@ -627,6 +699,75 @@ class SwimmerRegistration:
         except Exception as e:
             return None, f"Error generando reporte de medallas: {e}"
 
+    def preview_medals_report(self):
+        """Generar previsualización del reporte de medallas"""
+        swimmers = self.get_swimmers_list()
+        if not swimmers:
+            return None, "No hay nadadores inscritos"
+
+        try:
+            # Obtener eventos disponibles
+            available_events = self.get_available_events()
+
+            # Agrupar por categoría-género y contar participantes por evento
+            category_events = {}
+
+            for swimmer in swimmers:
+                # Crear clave única para categoría-género
+                category_key = f"{swimmer['category']} {swimmer['gender']}"
+
+                if category_key not in category_events:
+                    category_events[category_key] = {}
+
+                # Contar participantes por evento en esta categoría
+                events_data = self._get_swimmer_events_dict(swimmer)
+                for event, time in events_data.items():
+                    if time and time.strip() and event in available_events:
+                        if event not in category_events[category_key]:
+                            category_events[category_key][event] = {
+                                'participants': [],
+                                'count': 0
+                            }
+
+                        category_events[category_key][event]['participants'].append({
+                            'name': swimmer['name'],
+                            'team': swimmer['team'],
+                            'time': time
+                        })
+                        category_events[category_key][event]['count'] += 1
+
+            # Calcular medallas por categoría-evento
+            medals_data = {}
+            for category, events in category_events.items():
+                medals_data[category] = {}
+                for event, event_data in events.items():
+                    participants = event_data['count']
+
+                    # Lógica de medallas según número de participantes
+                    medals = {'Oro': 0, 'Plata': 0, 'Bronce': 0}
+
+                    if participants >= 3:
+                        medals['Oro'] = 1
+                        medals['Plata'] = 1
+                        medals['Bronce'] = 1
+                    elif participants == 2:
+                        medals['Oro'] = 1
+                        medals['Plata'] = 1
+                    elif participants == 1:
+                        medals['Oro'] = 1
+
+                    medals_data[category][event] = {
+                        'participants_count': participants,
+                        'participants_list': event_data['participants'],
+                        'medals': medals,
+                        'total_medals': sum(medals.values())
+                    }
+
+            return medals_data, f"Previsualización de medallas generada para {len(medals_data)} categorías"
+
+        except Exception as e:
+            return None, f"Error generando previsualización de medallas: {e}"
+
     def generate_payments_report(self):
         """Generar reporte de pagos de clubes"""
         swimmers = self.get_swimmers_list()
@@ -634,16 +775,21 @@ class SwimmerRegistration:
             return None, "No hay nadadores inscritos"
 
         try:
-            # Obtener valores de inscripción del evento configurado
-            event_info = None
+            # Obtener valores de tarifas desde el event manager
             swimmer_fee = 0
             team_fee = 0
 
-            if self.event_manager:
+            if self.event_manager and hasattr(self.event_manager, 'get_event_info'):
                 event_info = self.event_manager.get_event_info()
                 if event_info:
-                    swimmer_fee = event_info.get('swimmer_fee', 0)
-                    team_fee = event_info.get('team_fee', 0)
+                    swimmer_fee = event_info.get('swimmer_fee', 0) or 0
+                    team_fee = event_info.get('team_fee', 0) or 0
+
+            # Si no hay tarifas configuradas, usar valores por defecto
+            if swimmer_fee == 0:
+                swimmer_fee = 25000
+            if team_fee == 0:
+                team_fee = 50000
 
             # Agrupar por equipo para calcular pagos
             teams_payments = {}
@@ -662,15 +808,16 @@ class SwimmerRegistration:
                     }
 
                 # Agregar nadador al equipo
+                swimmer_events = self._get_swimmer_events_list(swimmer)
                 teams_payments[team_name]['swimmers'].append({
                     'name': swimmer['name'],
                     'category': swimmer['category'],
                     'gender': 'Masculino' if swimmer['gender'] == 'M' else 'Femenino',
-                    'events_count': len([e for e, t in swimmer['events'].items() if t and t.strip()])
+                    'events_count': len(swimmer_events)
                 })
 
                 teams_payments[team_name]['swimmer_count'] += 1
-                teams_payments[team_name]['total_events'] += len([e for e, t in swimmer['events'].items() if t and t.strip()])
+                teams_payments[team_name]['total_events'] += len(swimmer_events)
 
             # Calcular totales de pago
             for team_name, team_data in teams_payments.items():
@@ -821,6 +968,236 @@ class SwimmerRegistration:
 
         except Exception as e:
             return None, f"Error exportando reporte de pagos: {e}"
+
+    def generate_individual_team_pdfs(self, teams_data):
+        """Generar PDFs individuales para cada equipo"""
+        if not teams_data:
+            return False, "No hay datos de equipos"
+
+        try:
+            pdf_files = []
+
+            # Importar ReportLab si está disponible
+            if not REPORTLAB_AVAILABLE:
+                return False, "ReportLab no está disponible. Por favor instala reportlab: pip install reportlab"
+
+            from reportlab.lib.pagesizes import letter
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib import colors
+            from reportlab.lib.units import inch
+            from io import BytesIO
+            import os
+            from datetime import datetime
+
+            # Crear directorio de PDFs si no existe
+            pdf_dir = "pdfs_equipos"
+            if not os.path.exists(pdf_dir):
+                os.makedirs(pdf_dir)
+
+            for team_name, team_info in teams_data.items():
+                # Crear nombre de archivo seguro
+                safe_team_name = "".join(c for c in team_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+                filename = f"{pdf_dir}/equipo_{safe_team_name.replace(' ', '_')}.pdf"
+
+                # Crear documento PDF
+                doc = SimpleDocTemplate(filename, pagesize=letter, topMargin=0.5*inch)
+
+                # Estilos
+                styles = getSampleStyleSheet()
+                title_style = ParagraphStyle(
+                    'CustomTitle',
+                    parent=styles['Title'],
+                    fontSize=16,
+                    spaceAfter=0.3*inch,
+                    textColor=colors.HexColor('#1f4e79'),
+                    alignment=1  # Center
+                )
+
+                heading_style = ParagraphStyle(
+                    'CustomHeading',
+                    parent=styles['Heading2'],
+                    fontSize=12,
+                    textColor=colors.HexColor('#2e75b6'),
+                    spaceAfter=0.2*inch
+                )
+
+                # Contenido del PDF
+                content = []
+
+                # Título
+                title = Paragraph(f"REPORTE DE EQUIPO: {team_name.upper()}", title_style)
+                content.append(title)
+                content.append(Spacer(1, 0.2*inch))
+
+                # Estadísticas del equipo
+                stats_title = Paragraph("ESTADÍSTICAS DEL EQUIPO", heading_style)
+                content.append(stats_title)
+
+                stats_data = [
+                    ["Total Nadadores", str(team_info['total_swimmers'])],
+                    ["Nadadores Masculinos", str(team_info['genders']['M'])],
+                    ["Nadadores Femeninos", str(team_info['genders']['F'])],
+                    ["Total Inscripciones", str(team_info['total_events'])]
+                ]
+
+                stats_table = Table(stats_data, colWidths=[3*inch, 2*inch])
+                stats_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f2f8ff')),
+                    ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+                    ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                    ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 10),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                    ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#d4d4d4'))
+                ]))
+
+                content.append(stats_table)
+                content.append(Spacer(1, 0.3*inch))
+
+                # Lista de nadadores
+                swimmers_title = Paragraph("NADADORES DEL EQUIPO", heading_style)
+                content.append(swimmers_title)
+
+                # Crear tabla de nadadores
+                swimmers_data = [["Nombre", "Edad", "Categoría", "Género", "Eventos"]]
+
+                for swimmer in team_info['swimmers']:
+                    swimmer_events = self._get_swimmer_events_list(swimmer)
+                    events_text = f"{len(swimmer_events)} eventos"
+
+                    swimmers_data.append([
+                        swimmer['name'],
+                        str(swimmer['age']),
+                        swimmer['category'],
+                        "Masculino" if swimmer['gender'] == 'M' else "Femenino",
+                        events_text
+                    ])
+
+                swimmers_table = Table(swimmers_data, colWidths=[2.5*inch, 0.7*inch, 1*inch, 1*inch, 1.3*inch])
+                swimmers_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2e75b6')),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                    ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 9),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                    ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#d4d4d4')),
+                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8f9fa')])
+                ]))
+
+                content.append(swimmers_table)
+                content.append(Spacer(1, 0.3*inch))
+
+                # Categorías
+                if team_info['categories']:
+                    categories_title = Paragraph("DISTRIBUCIÓN POR CATEGORÍAS", heading_style)
+                    content.append(categories_title)
+
+                    categories_data = [["Categoría", "Cantidad"]]
+                    for category, count in team_info['categories'].items():
+                        categories_data.append([category, str(count)])
+
+                    categories_table = Table(categories_data, colWidths=[3*inch, 2*inch])
+                    categories_table.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2e75b6')),
+                        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                        ('FONTSIZE', (0, 0), (-1, -1), 10),
+                        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                        ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#d4d4d4')),
+                        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8f9fa')])
+                    ]))
+
+                    content.append(categories_table)
+
+                # Pie de página con fecha
+                content.append(Spacer(1, 0.5*inch))
+                footer = Paragraph(
+                    f"Reporte generado el {datetime.now().strftime('%d/%m/%Y %H:%M')}",
+                    styles['Normal']
+                )
+                content.append(footer)
+
+                # Crear PDF
+                doc.build(content)
+                pdf_files.append(filename)
+
+            return True, f"Se generaron {len(pdf_files)} PDFs en la carpeta 'pdfs_equipos'"
+
+        except Exception as e:
+            return False, f"Error generando PDFs individuales: {e}"
+
+    def preview_payments_report(self):
+        """Generar previsualización del reporte de pagos"""
+        swimmers = self.get_swimmers_list()
+        if not swimmers:
+            return None, 0, 0, "No hay nadadores inscritos"
+
+        try:
+            # Obtener valores de tarifas desde el event manager
+            swimmer_fee = 0
+            team_fee = 0
+
+            if self.event_manager and hasattr(self.event_manager, 'get_event_info'):
+                event_info = self.event_manager.get_event_info()
+                if event_info:
+                    swimmer_fee = event_info.get('swimmer_fee', 0) or 0
+                    team_fee = event_info.get('team_fee', 0) or 0
+
+            # Si no hay tarifas configuradas, usar valores por defecto
+            if swimmer_fee == 0:
+                swimmer_fee = 25000
+            if team_fee == 0:
+                team_fee = 50000
+
+            # Agrupar pagos por equipo
+            teams_payments = {}
+
+            for swimmer in swimmers:
+                team_name = swimmer['team']
+                if team_name not in teams_payments:
+                    teams_payments[team_name] = {
+                        'swimmers': [],
+                        'swimmer_count': 0,
+                        'total_events': 0,
+                        'swimmer_fee_total': 0,
+                        'team_fee_total': team_fee,
+                        'total_payment': 0
+                    }
+
+                # Agregar nadador al equipo
+                swimmer_events = self._get_swimmer_events_list(swimmer)
+                teams_payments[team_name]['swimmers'].append({
+                    'name': swimmer['name'],
+                    'category': swimmer['category'],
+                    'gender': 'Masculino' if swimmer['gender'] == 'M' else 'Femenino',
+                    'events_count': len(swimmer_events)
+                })
+
+                teams_payments[team_name]['swimmer_count'] += 1
+                teams_payments[team_name]['total_events'] += len(swimmer_events)
+
+            # Calcular totales de pago
+            for team_name, team_data in teams_payments.items():
+                # Pago por nadadores
+                team_data['swimmer_fee_total'] = team_data['swimmer_count'] * swimmer_fee
+
+                # Pago total del equipo
+                team_data['total_payment'] = team_data['swimmer_fee_total'] + team_data['team_fee_total']
+
+            # Ordenar por total de pago (descendente)
+            sorted_payments = dict(sorted(teams_payments.items(),
+                                        key=lambda x: x[1]['total_payment'],
+                                        reverse=True))
+
+            return sorted_payments, swimmer_fee, team_fee, f"Previsualización de pagos generada para {len(sorted_payments)} equipos"
+
+        except Exception as e:
+            return None, 0, 0, f"Error generando previsualización de pagos: {e}"
 
     # ===== MÉTODOS PARA BÚSQUEDA EN BASE DE DATOS =====
     

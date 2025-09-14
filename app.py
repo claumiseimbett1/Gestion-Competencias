@@ -3476,256 +3476,220 @@ def inscripcion_nadadores_interface():
             st.markdown("---")
             st.markdown("### 🏊‍♂️ Reporte por Equipos")
 
-            if st.button("📊 Generar Reporte por Equipos"):
-                with st.spinner("Generando reporte por equipos..."):
-                    teams_data, message = registration_system.generate_team_report()
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("👁️ Previsualizar Reporte por Equipos"):
+                    with st.spinner("Generando previsualización..."):
+                        teams_data, message = registration_system.preview_team_report()
+                        if teams_data:
+                            st.session_state['teams_preview'] = teams_data
+                            st.success("Previsualización generada")
+                        else:
+                            st.error(message)
 
-                    if teams_data:
-                        st.success(message)
+            with col2:
+                if st.button("📊 Generar Reporte por Equipos"):
+                    with st.spinner("Generando reporte por equipos..."):
+                        teams_data, message = registration_system.generate_team_report()
+                        if teams_data:
+                            st.success(message)
+                            st.session_state['teams_preview'] = teams_data
+                            st.info("¡Reporte generado! Desplázate hacia abajo para descargar el Excel.")
+                        else:
+                            st.error(message)
 
-                        # Mostrar resumen de equipos
-                        st.markdown("#### 📋 Resumen de Equipos")
+            # Mostrar previsualización si está disponible
+            if 'teams_preview' in st.session_state and st.session_state['teams_preview']:
+                teams_data = st.session_state['teams_preview']
 
-                        # Crear tabla de resumen
-                        summary_data = []
-                        for team_name, team_info in teams_data.items():
-                            summary_data.append({
-                                'Equipo': team_name,
-                                'Nadadores': team_info['total_swimmers'],
-                                'Masculino': team_info['genders']['M'],
-                                'Femenino': team_info['genders']['F'],
-                                'Inscripciones': team_info['total_events']
-                            })
+                # Mostrar resumen de equipos
+                st.markdown("#### 📋 Resumen de Equipos")
+                summary_data = []
+                for team_name, team_info in teams_data.items():
+                    summary_data.append({
+                        'Equipo': team_name,
+                        'Nadadores': team_info['total_swimmers'],
+                        'Masculino': team_info['genders']['M'],
+                        'Femenino': team_info['genders']['F'],
+                        'Inscripciones': team_info['total_events']
+                    })
 
-                        # Mostrar tabla
-                        import pandas as pd
-                        df_summary = pd.DataFrame(summary_data)
-                        st.dataframe(df_summary, use_container_width=True)
+                import pandas as pd
+                df_summary = pd.DataFrame(summary_data)
+                st.dataframe(df_summary, use_container_width=True)
 
-                        # Mostrar detalles expandibles por equipo
-                        st.markdown("#### 👥 Detalle por Equipo")
+                # Botón para generar PDFs individuales
+                if st.button("📄 Generar PDFs por Equipo"):
+                    with st.spinner("Generando PDFs individuales..."):
+                        success, message = registration_system.generate_individual_team_pdfs(teams_data)
+                        if success:
+                            st.success(f"🎉 {message}")
+                        else:
+                            st.error(f"❌ {message}")
 
-                        for team_name, team_info in teams_data.items():
-                            with st.expander(f"🏊‍♀️ {team_name} ({team_info['total_swimmers']} nadadores)"):
-                                col1, col2 = st.columns(2)
-
-                                with col1:
-                                    st.markdown("**📊 Estadísticas del Equipo:**")
-                                    st.write(f"• **Total nadadores:** {team_info['total_swimmers']}")
-                                    st.write(f"• **Masculino:** {team_info['genders']['M']}")
-                                    st.write(f"• **Femenino:** {team_info['genders']['F']}")
-                                    st.write(f"• **Total inscripciones:** {team_info['total_events']}")
-
-                                    # Categorías del equipo
-                                    if team_info['categories']:
-                                        st.markdown("**📚 Categorías:**")
-                                        for cat, count in team_info['categories'].items():
-                                            st.write(f"• {cat}: {count} nadador(es)")
-
-                                with col2:
-                                    st.markdown("**🏊‍♀️ Nadadores del Equipo:**")
-
-                                    # Lista de nadadores
-                                    for swimmer in team_info['swimmers']:
-                                        gender_icon = "👨" if swimmer['gender'] == 'M' else "👩"
-                                        events_count = len([e for e, t in swimmer['events'].items() if t and t.strip()])
-
-                                        st.write(f"{gender_icon} **{swimmer['name']}** ({swimmer['age']} años)")
-                                        st.write(f"   📚 {swimmer['category']} | 🏊‍♀️ {events_count} eventos")
-
-                        # Botón para exportar a Excel
-                        st.markdown("#### 📤 Exportar Reporte")
-                        if st.button("📊 Descargar Reporte Excel", type="primary"):
-                            excel_data, filename = registration_system.export_team_report_to_excel(teams_data)
-                            if excel_data:
-                                st.download_button(
-                                    label="📥 Descargar Excel",
-                                    data=excel_data,
-                                    file_name=filename,
-                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                                )
-                                st.success("¡Archivo Excel preparado para descarga!")
-                            else:
-                                st.error(f"Error generando Excel: {filename}")
+                # Botón para exportar a Excel
+                if st.button("📊 Descargar Reporte Excel", type="primary"):
+                    excel_data, filename = registration_system.export_team_report_to_excel(teams_data)
+                    if excel_data:
+                        st.download_button(
+                            label="📥 Descargar Excel",
+                            data=excel_data,
+                            file_name=filename,
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        )
+                        st.success("¡Archivo Excel preparado para descarga!")
                     else:
-                        st.error(message)
+                        st.error(f"Error generando Excel: {filename}")
 
         # Sección de Reporte de Medallas
         if swimmers:
             st.markdown("---")
             st.markdown("### 🏆 Reporte de Medallas")
 
-            if st.button("🥇 Generar Reporte de Medallas"):
-                with st.spinner("Calculando medallas por categoría..."):
-                    medals_data, message = registration_system.generate_medals_report()
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("👁️ Previsualizar Reporte de Medallas"):
+                    with st.spinner("Generando previsualización..."):
+                        medals_data, message = registration_system.preview_medals_report()
+                        if medals_data:
+                            st.session_state['medals_preview'] = medals_data
+                            st.success("Previsualización generada")
+                        else:
+                            st.error(message)
 
-                    if medals_data:
-                        st.success(message)
+            with col2:
+                if st.button("🥇 Generar Reporte de Medallas"):
+                    with st.spinner("Calculando medallas por categoría..."):
+                        medals_data, message = registration_system.generate_medals_report()
+                        if medals_data:
+                            st.success(message)
+                            st.session_state['medals_preview'] = medals_data
+                            st.info("¡Reporte generado! Desplázate hacia abajo para descargar el Excel.")
+                        else:
+                            st.error(message)
 
-                        # Mostrar resumen de medallas
-                        st.markdown("#### 🏆 Resumen de Medallas por Categoría")
+            # Mostrar previsualización si está disponible
+            if 'medals_preview' in st.session_state and st.session_state['medals_preview']:
+                medals_data = st.session_state['medals_preview']
 
-                        # Tabla de resumen
-                        summary_data = []
-                        for category, events in medals_data.items():
-                            category_medals = {'Oro': 0, 'Plata': 0, 'Bronce': 0}
-                            total_events = len(events)
+                # Mostrar resumen de medallas
+                st.markdown("#### 🏆 Resumen de Medallas por Categoría")
 
-                            for event_data in events.values():
-                                medals = event_data['medals']
-                                for medal_type, count in medals.items():
-                                    category_medals[medal_type] += count
+                # Tabla de resumen
+                summary_data = []
+                for category, events in medals_data.items():
+                    category_medals = {'Oro': 0, 'Plata': 0, 'Bronce': 0}
+                    total_events = len(events)
 
-                            summary_data.append({
-                                'Categoría': category,
-                                'Eventos': total_events,
-                                'Oro': category_medals['Oro'],
-                                'Plata': category_medals['Plata'],
-                                'Bronce': category_medals['Bronce'],
-                                'Total': sum(category_medals.values())
-                            })
+                    for event_data in events.values():
+                        medals = event_data['medals']
+                        for medal_type, count in medals.items():
+                            category_medals[medal_type] += count
 
-                        import pandas as pd
-                        df_medals_summary = pd.DataFrame(summary_data)
-                        st.dataframe(df_medals_summary, use_container_width=True)
+                    summary_data.append({
+                        'Categoría': category,
+                        'Eventos': total_events,
+                        'Oro': category_medals['Oro'],
+                        'Plata': category_medals['Plata'],
+                        'Bronce': category_medals['Bronce'],
+                        'Total': sum(category_medals.values())
+                    })
 
-                        # Mostrar detalles expandibles por categoría
-                        st.markdown("#### 📊 Detalle por Categoría y Evento")
+                import pandas as pd
+                df_medals_summary = pd.DataFrame(summary_data)
+                st.dataframe(df_medals_summary, use_container_width=True)
 
-                        for category, events in medals_data.items():
-                            total_cat_medals = sum(sum(event_data['medals'].values()) for event_data in events.values())
-                            with st.expander(f"🏆 {category} ({total_cat_medals} medallas)"):
-
-                                for event, event_data in events.items():
-                                    col1, col2, col3 = st.columns([2, 1, 1])
-
-                                    with col1:
-                                        st.markdown(f"**🏊‍♀️ {event}**")
-                                        st.write(f"👥 **{event_data['participants']} participantes**")
-
-                                    with col2:
-                                        medals = event_data['medals']
-                                        if medals['Oro']:
-                                            st.write("🥇 1 Oro")
-                                        if medals['Plata']:
-                                            st.write("🥈 1 Plata")
-                                        if medals['Bronce']:
-                                            st.write("🥉 1 Bronce")
-                                        if not any(medals.values()):
-                                            st.write("❌ Sin medallas")
-
-                                    with col3:
-                                        # Lógica explicativa
-                                        participants = event_data['participants']
-                                        if participants >= 8:
-                                            st.write("✅ 8+ → Oro, Plata, Bronce")
-                                        elif participants >= 6:
-                                            st.write("✅ 6-7 → Oro, Plata")
-                                        elif participants >= 4:
-                                            st.write("✅ 4-5 → Solo Oro")
-                                        elif participants >= 2:
-                                            st.write("✅ 2-3 → Solo Oro")
-                                        else:
-                                            st.write("❌ < 2 → Sin medallas")
-
-                                    st.markdown("---")
-
-                        # Botón para exportar medallas a Excel
-                        st.markdown("#### 📤 Exportar Reporte de Medallas")
-                        if st.button("🥇 Descargar Reporte Medallas Excel"):
-                            excel_data, filename = registration_system.export_medals_report_to_excel(medals_data)
-                            if excel_data:
-                                st.download_button(
-                                    label="📥 Descargar Excel Medallas",
-                                    data=excel_data,
-                                    file_name=filename,
-                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                                )
-                                st.success("¡Archivo Excel de medallas preparado para descarga!")
-                            else:
-                                st.error(f"Error generando Excel: {filename}")
+                # Botón para exportar medallas a Excel
+                if st.button("🥇 Descargar Reporte Medallas Excel", type="primary"):
+                    excel_data, filename = registration_system.export_medals_report_to_excel(medals_data)
+                    if excel_data:
+                        st.download_button(
+                            label="📥 Descargar Excel Medallas",
+                            data=excel_data,
+                            file_name=filename,
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        )
+                        st.success("¡Archivo Excel de medallas preparado para descarga!")
                     else:
-                        st.error(message)
+                        st.error(f"Error generando Excel: {filename}")
 
         # Sección de Reporte de Pagos
         if swimmers:
             st.markdown("---")
             st.markdown("### 💰 Reporte de Pagos de Clubes")
 
-            if st.button("💳 Generar Reporte de Pagos"):
-                with st.spinner("Calculando pagos por equipo..."):
-                    result = registration_system.generate_payments_report()
-
-                    if len(result) == 4:
-                        payments_data, swimmer_fee, team_fee, message = result
-
-                        if payments_data:
-                            st.success(message)
-
-                            # Mostrar configuración de tarifas
-                            col1, col2, col3 = st.columns(3)
-                            with col1:
-                                st.metric("💰 Valor por Nadador", f"${swimmer_fee:,.0f}")
-                            with col2:
-                                st.metric("🏊‍♀️ Valor por Equipo", f"${team_fee:,.0f}")
-                            with col3:
-                                total_revenue = sum(team_data['total_payment'] for team_data in payments_data.values())
-                                st.metric("💵 Ingresos Totales", f"${total_revenue:,.0f}")
-
-                            # Tabla de resumen de pagos
-                            st.markdown("#### 💰 Resumen de Pagos por Equipo")
-
-                            summary_payments = []
-                            for team_name, team_data in payments_data.items():
-                                summary_payments.append({
-                                    'Equipo': team_name,
-                                    'Nadadores': team_data['swimmer_count'],
-                                    'Pago Nadadores': f"${team_data['swimmer_fee_total']:,.0f}",
-                                    'Pago Equipo': f"${team_data['team_fee']:,.0f}",
-                                    'Total': f"${team_data['total_payment']:,.0f}"
-                                })
-
-                            df_payments = pd.DataFrame(summary_payments)
-                            st.dataframe(df_payments, use_container_width=True)
-
-                            # Mostrar detalles expandibles por equipo
-                            st.markdown("#### 💳 Detalle por Equipo")
-
-                            for team_name, team_data in payments_data.items():
-                                with st.expander(f"💰 {team_name} - ${team_data['total_payment']:,.0f}"):
-                                    col1, col2 = st.columns(2)
-
-                                    with col1:
-                                        st.markdown("**📊 Resumen de Pagos:**")
-                                        st.write(f"• **Nadadores:** {team_data['swimmer_count']}")
-                                        st.write(f"• **Pago por nadadores:** ${team_data['swimmer_fee_total']:,.0f}")
-                                        st.write(f"• **Pago por equipo:** ${team_data['team_fee']:,.0f}")
-                                        st.write(f"• **Total a pagar:** ${team_data['total_payment']:,.0f}")
-                                        st.write(f"• **Total inscripciones:** {team_data['total_events']}")
-
-                                    with col2:
-                                        st.markdown("**👥 Lista de Nadadores:**")
-                                        for swimmer in team_data['swimmers']:
-                                            gender_icon = "👨" if swimmer['gender'] == 'Masculino' else "👩"
-                                            st.write(f"{gender_icon} **{swimmer['name']}**")
-                                            st.write(f"   📚 {swimmer['category']} | 🏊‍♀️ {swimmer['events_count']} eventos")
-
-                            # Botón para exportar pagos a Excel
-                            st.markdown("#### 📤 Exportar Reporte de Pagos")
-                            if st.button("💰 Descargar Reporte Pagos Excel"):
-                                excel_data, filename = registration_system.export_payments_report_to_excel(payments_data, swimmer_fee, team_fee)
-                                if excel_data:
-                                    st.download_button(
-                                        label="📥 Descargar Excel Pagos",
-                                        data=excel_data,
-                                        file_name=filename,
-                                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                                    )
-                                    st.success("¡Archivo Excel de pagos preparado para descarga!")
-                                else:
-                                    st.error(f"Error generando Excel: {filename}")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("👁️ Previsualizar Reporte de Pagos"):
+                    with st.spinner("Generando previsualización..."):
+                        result = registration_system.preview_payments_report()
+                        if len(result) == 4:
+                            payments_data, swimmer_fee, team_fee, message = result
+                            if payments_data:
+                                st.session_state['payments_preview'] = (payments_data, swimmer_fee, team_fee)
+                                st.success("Previsualización generada")
+                            else:
+                                st.error(message)
                         else:
-                            st.error(message)
+                            st.error("Error en formato de respuesta")
+
+            with col2:
+                if st.button("💳 Generar Reporte de Pagos"):
+                    with st.spinner("Calculando pagos por equipo..."):
+                        result = registration_system.generate_payments_report()
+                        if len(result) == 4:
+                            payments_data, swimmer_fee, team_fee, message = result
+                            if payments_data:
+                                st.success(message)
+                                st.session_state['payments_preview'] = (payments_data, swimmer_fee, team_fee)
+                                st.info("¡Reporte generado! Desplázate hacia abajo para descargar el Excel.")
+                            else:
+                                st.error(message)
+                        else:
+                            st.error("Error en formato de respuesta")
+
+            # Mostrar previsualización si está disponible
+            if 'payments_preview' in st.session_state and st.session_state['payments_preview']:
+                payments_data, swimmer_fee, team_fee = st.session_state['payments_preview']
+
+                # Mostrar configuración de tarifas
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("💰 Valor por Nadador", f"${swimmer_fee:,.0f}")
+                with col2:
+                    st.metric("🏊‍♀️ Valor por Equipo", f"${team_fee:,.0f}")
+                with col3:
+                    total_revenue = sum(team_data['total_payment'] for team_data in payments_data.values())
+                    st.metric("💵 Ingresos Totales", f"${total_revenue:,.0f}")
+
+                # Tabla de resumen de pagos
+                st.markdown("#### 💰 Resumen de Pagos por Equipo")
+                summary_payments = []
+                for team_name, team_data in payments_data.items():
+                    summary_payments.append({
+                        'Equipo': team_name,
+                        'Nadadores': team_data['swimmer_count'],
+                        'Pago Nadadores': f"${team_data['swimmer_fee_total']:,.0f}",
+                        'Pago Equipo': f"${team_data['team_fee_total']:,.0f}",
+                        'Total': f"${team_data['total_payment']:,.0f}"
+                    })
+
+                df_payments = pd.DataFrame(summary_payments)
+                st.dataframe(df_payments, use_container_width=True)
+
+                # Botón para exportar pagos a Excel
+                if st.button("💰 Descargar Reporte Pagos Excel", type="primary"):
+                    excel_data, filename = registration_system.export_payments_report_to_excel(payments_data, swimmer_fee, team_fee)
+                    if excel_data:
+                        st.download_button(
+                            label="📥 Descargar Excel Pagos",
+                            data=excel_data,
+                            file_name=filename,
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        )
+                        st.success("¡Archivo Excel de pagos preparado para descarga!")
+                    else:
+                        st.error(f"Error generando Excel: {filename}")
 
         with col2:
             st.markdown("#### 🔧 Acciones del Sistema")
