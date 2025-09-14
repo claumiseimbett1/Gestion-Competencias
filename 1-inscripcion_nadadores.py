@@ -452,6 +452,376 @@ class SwimmerRegistration:
 
         return swimmers
     
+    # ===== MÉTODOS PARA REPORTES =====
+
+    def generate_team_report(self):
+        """Generar reporte detallado de inscripciones por equipo"""
+        swimmers = self.get_swimmers_list()
+        if not swimmers:
+            return None, "No hay nadadores inscritos"
+
+        try:
+            # Agrupar nadadores por equipo
+            teams_data = {}
+
+            for swimmer in swimmers:
+                team_name = swimmer['team']
+                if team_name not in teams_data:
+                    teams_data[team_name] = {
+                        'swimmers': [],
+                        'total_swimmers': 0,
+                        'categories': {},
+                        'genders': {'M': 0, 'F': 0},
+                        'total_events': 0
+                    }
+
+                # Agregar nadador al equipo
+                teams_data[team_name]['swimmers'].append(swimmer)
+                teams_data[team_name]['total_swimmers'] += 1
+
+                # Contar categorías
+                category = swimmer['category']
+                teams_data[team_name]['categories'][category] = teams_data[team_name]['categories'].get(category, 0) + 1
+
+                # Contar géneros
+                teams_data[team_name]['genders'][swimmer['gender']] += 1
+
+                # Contar eventos del nadador
+                swimmer_events = [event for event, time in swimmer['events'].items() if time and time.strip()]
+                teams_data[team_name]['total_events'] += len(swimmer_events)
+
+            # Ordenar equipos por número de nadadores (descendente)
+            sorted_teams = dict(sorted(teams_data.items(), key=lambda x: x[1]['total_swimmers'], reverse=True))
+
+            return sorted_teams, f"Reporte generado para {len(sorted_teams)} equipos"
+
+        except Exception as e:
+            return None, f"Error generando reporte: {e}"
+
+    def export_team_report_to_excel(self, teams_data):
+        """Exportar reporte de equipos a Excel"""
+        if not teams_data:
+            return None, "No hay datos para exportar"
+
+        try:
+            import pandas as pd
+            from io import BytesIO
+
+            # Crear buffer para Excel
+            buffer = BytesIO()
+
+            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                # Hoja de resumen por equipos
+                summary_data = []
+                for team_name, team_info in teams_data.items():
+                    summary_data.append({
+                        'Equipo': team_name,
+                        'Total Nadadores': team_info['total_swimmers'],
+                        'Masculino': team_info['genders']['M'],
+                        'Femenino': team_info['genders']['F'],
+                        'Total Inscripciones': team_info['total_events'],
+                        'Categorías': ', '.join(team_info['categories'].keys())
+                    })
+
+                summary_df = pd.DataFrame(summary_data)
+                summary_df.to_excel(writer, sheet_name='Resumen por Equipos', index=False)
+
+                # Hoja detallada de nadadores por equipo
+                detailed_data = []
+                for team_name, team_info in teams_data.items():
+                    for swimmer in team_info['swimmers']:
+                        # Obtener eventos inscritos
+                        events_list = []
+                        for event, time in swimmer['events'].items():
+                            if time and time.strip():
+                                events_list.append(f"{event}: {time}")
+
+                        detailed_data.append({
+                            'Equipo': team_name,
+                            'Nadador': swimmer['name'],
+                            'Edad': swimmer['age'],
+                            'Categoría': swimmer['category'],
+                            'Sexo': 'Masculino' if swimmer['gender'] == 'M' else 'Femenino',
+                            'Eventos Inscritos': '; '.join(events_list),
+                            'Total Eventos': len(events_list)
+                        })
+
+                detailed_df = pd.DataFrame(detailed_data)
+                detailed_df.to_excel(writer, sheet_name='Detalle de Nadadores', index=False)
+
+            buffer.seek(0)
+            return buffer.getvalue(), "reporte_equipos.xlsx"
+
+        except Exception as e:
+            return None, f"Error exportando a Excel: {e}"
+
+    def generate_medals_report(self):
+        """Generar reporte de medallas por categoría según número de inscritos"""
+        swimmers = self.get_swimmers_list()
+        if not swimmers:
+            return None, "No hay nadadores inscritos"
+
+        try:
+            # Obtener eventos disponibles del evento configurado
+            available_events = self.get_available_events()
+
+            # Agrupar por categoría y evento
+            category_events = {}
+
+            for swimmer in swimmers:
+                category = swimmer['category']
+                gender = swimmer['gender']
+
+                # Crear clave única por categoría y género
+                category_key = f"{category} - {'Masculino' if gender == 'M' else 'Femenino'}"
+
+                if category_key not in category_events:
+                    category_events[category_key] = {}
+
+                # Contar participantes por evento en esta categoría
+                for event, time in swimmer['events'].items():
+                    if time and time.strip() and event in available_events:
+                        if event not in category_events[category_key]:
+                            category_events[category_key][event] = {
+                                'participants': [],
+                                'count': 0
+                            }
+
+                        category_events[category_key][event]['participants'].append({
+                            'name': swimmer['name'],
+                            'team': swimmer['team'],
+                            'time': time
+                        })
+                        category_events[category_key][event]['count'] += 1
+
+            # Calcular medallas por evento/categoría
+            medals_data = {}
+
+            for category_key, events in category_events.items():
+                medals_data[category_key] = {}
+
+                for event, event_data in events.items():
+                    participants_count = event_data['count']
+
+                    # Lógica de medallas según participantes
+                    if participants_count >= 8:
+                        medals = {'Oro': 1, 'Plata': 1, 'Bronce': 1}
+                    elif participants_count >= 6:
+                        medals = {'Oro': 1, 'Plata': 1, 'Bronce': 0}
+                    elif participants_count >= 4:
+                        medals = {'Oro': 1, 'Plata': 0, 'Bronce': 0}
+                    elif participants_count >= 2:
+                        medals = {'Oro': 1, 'Plata': 0, 'Bronce': 0}
+                    else:
+                        medals = {'Oro': 0, 'Plata': 0, 'Bronce': 0}
+
+                    medals_data[category_key][event] = {
+                        'participants': participants_count,
+                        'participants_list': event_data['participants'],
+                        'medals': medals,
+                        'total_medals': sum(medals.values())
+                    }
+
+            return medals_data, f"Reporte de medallas generado para {len(medals_data)} categorías"
+
+        except Exception as e:
+            return None, f"Error generando reporte de medallas: {e}"
+
+    def generate_payments_report(self):
+        """Generar reporte de pagos de clubes"""
+        swimmers = self.get_swimmers_list()
+        if not swimmers:
+            return None, "No hay nadadores inscritos"
+
+        try:
+            # Obtener valores de inscripción del evento configurado
+            event_info = None
+            swimmer_fee = 0
+            team_fee = 0
+
+            if self.event_manager:
+                event_info = self.event_manager.get_event_info()
+                if event_info:
+                    swimmer_fee = event_info.get('swimmer_fee', 0)
+                    team_fee = event_info.get('team_fee', 0)
+
+            # Agrupar por equipo para calcular pagos
+            teams_payments = {}
+
+            for swimmer in swimmers:
+                team_name = swimmer['team']
+
+                if team_name not in teams_payments:
+                    teams_payments[team_name] = {
+                        'swimmers': [],
+                        'swimmer_count': 0,
+                        'total_events': 0,
+                        'swimmer_fee_total': 0,
+                        'team_fee': team_fee,
+                        'total_payment': 0
+                    }
+
+                # Agregar nadador al equipo
+                teams_payments[team_name]['swimmers'].append({
+                    'name': swimmer['name'],
+                    'category': swimmer['category'],
+                    'gender': 'Masculino' if swimmer['gender'] == 'M' else 'Femenino',
+                    'events_count': len([e for e, t in swimmer['events'].items() if t and t.strip()])
+                })
+
+                teams_payments[team_name]['swimmer_count'] += 1
+                teams_payments[team_name]['total_events'] += len([e for e, t in swimmer['events'].items() if t and t.strip()])
+
+            # Calcular totales de pago
+            for team_name, team_data in teams_payments.items():
+                # Pago por nadadores
+                team_data['swimmer_fee_total'] = team_data['swimmer_count'] * swimmer_fee
+
+                # Pago total (nadadores + equipo)
+                team_data['total_payment'] = team_data['swimmer_fee_total'] + team_data['team_fee']
+
+            # Ordenar por pago total (descendente)
+            sorted_payments = dict(sorted(teams_payments.items(),
+                                        key=lambda x: x[1]['total_payment'],
+                                        reverse=True))
+
+            return sorted_payments, swimmer_fee, team_fee, f"Reporte de pagos generado para {len(sorted_payments)} equipos"
+
+        except Exception as e:
+            return None, 0, 0, f"Error generando reporte de pagos: {e}"
+
+    def export_medals_report_to_excel(self, medals_data):
+        """Exportar reporte de medallas a Excel"""
+        if not medals_data:
+            return None, "No hay datos de medallas para exportar"
+
+        try:
+            import pandas as pd
+            from io import BytesIO
+
+            buffer = BytesIO()
+
+            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                # Hoja de resumen de medallas
+                summary_data = []
+                detail_data = []
+
+                for category, events in medals_data.items():
+                    category_medals = {'Oro': 0, 'Plata': 0, 'Bronce': 0}
+                    category_events = 0
+
+                    for event, event_data in events.items():
+                        medals = event_data['medals']
+                        participants = event_data['participants']
+
+                        # Sumar medallas de la categoría
+                        for medal_type, count in medals.items():
+                            category_medals[medal_type] += count
+
+                        category_events += 1
+
+                        # Datos detallados por evento
+                        detail_data.append({
+                            'Categoría': category,
+                            'Evento': event,
+                            'Participantes': participants,
+                            'Oro': medals['Oro'],
+                            'Plata': medals['Plata'],
+                            'Bronce': medals['Bronce'],
+                            'Total Medallas': sum(medals.values())
+                        })
+
+                    # Resumen por categoría
+                    summary_data.append({
+                        'Categoría': category,
+                        'Eventos': category_events,
+                        'Oro': category_medals['Oro'],
+                        'Plata': category_medals['Plata'],
+                        'Bronce': category_medals['Bronce'],
+                        'Total Medallas': sum(category_medals.values())
+                    })
+
+                # Crear DataFrames y exportar
+                summary_df = pd.DataFrame(summary_data)
+                detail_df = pd.DataFrame(detail_data)
+
+                summary_df.to_excel(writer, sheet_name='Resumen de Medallas', index=False)
+                detail_df.to_excel(writer, sheet_name='Detalle por Evento', index=False)
+
+            buffer.seek(0)
+            return buffer.getvalue(), "reporte_medallas.xlsx"
+
+        except Exception as e:
+            return None, f"Error exportando reporte de medallas: {e}"
+
+    def export_payments_report_to_excel(self, payments_data, swimmer_fee, team_fee):
+        """Exportar reporte de pagos a Excel"""
+        if not payments_data:
+            return None, "No hay datos de pagos para exportar"
+
+        try:
+            import pandas as pd
+            from io import BytesIO
+
+            buffer = BytesIO()
+
+            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                # Hoja de resumen de pagos
+                summary_data = []
+                detail_data = []
+
+                total_swimmers = 0
+                total_teams = len(payments_data)
+                total_revenue = 0
+
+                for team_name, team_data in payments_data.items():
+                    total_swimmers += team_data['swimmer_count']
+                    total_revenue += team_data['total_payment']
+
+                    # Resumen por equipo
+                    summary_data.append({
+                        'Equipo': team_name,
+                        'Nadadores': team_data['swimmer_count'],
+                        'Pago por Nadadores': f"${team_data['swimmer_fee_total']:,.0f}",
+                        'Pago por Equipo': f"${team_data['team_fee']:,.0f}",
+                        'Total a Pagar': f"${team_data['total_payment']:,.0f}",
+                        'Total Inscripciones': team_data['total_events']
+                    })
+
+                    # Detalle por nadador
+                    for swimmer in team_data['swimmers']:
+                        detail_data.append({
+                            'Equipo': team_name,
+                            'Nadador': swimmer['name'],
+                            'Categoría': swimmer['category'],
+                            'Sexo': swimmer['gender'],
+                            'Eventos': swimmer['events_count'],
+                            'Pago Individual': f"${swimmer_fee:,.0f}"
+                        })
+
+                # Agregar totales
+                summary_data.append({
+                    'Equipo': 'TOTAL GENERAL',
+                    'Nadadores': total_swimmers,
+                    'Pago por Nadadores': f"${total_swimmers * swimmer_fee:,.0f}",
+                    'Pago por Equipo': f"${total_teams * team_fee:,.0f}",
+                    'Total a Pagar': f"${total_revenue:,.0f}",
+                    'Total Inscripciones': sum(team_data['total_events'] for team_data in payments_data.values())
+                })
+
+                # Crear DataFrames y exportar
+                summary_df = pd.DataFrame(summary_data)
+                detail_df = pd.DataFrame(detail_data)
+
+                summary_df.to_excel(writer, sheet_name='Resumen de Pagos', index=False)
+                detail_df.to_excel(writer, sheet_name='Detalle de Nadadores', index=False)
+
+            buffer.seek(0)
+            return buffer.getvalue(), "reporte_pagos.xlsx"
+
+        except Exception as e:
+            return None, f"Error exportando reporte de pagos: {e}"
+
     # ===== MÉTODOS PARA BÚSQUEDA EN BASE DE DATOS =====
     
     def load_database(self):

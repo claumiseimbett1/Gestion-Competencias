@@ -4,6 +4,13 @@ import pandas as pd
 from datetime import datetime
 from pathlib import Path
 
+# Verificar disponibilidad de ReportLab
+try:
+    import reportlab
+    REPORTLAB_AVAILABLE = True
+except ImportError:
+    REPORTLAB_AVAILABLE = False
+
 class EventManager:
     def __init__(self):
         self.config_file = 'event_config.json'
