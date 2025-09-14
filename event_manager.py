@@ -103,6 +103,13 @@ class EventManager:
                 'category_events': config.get('category_events', {}),
                 'min_age': config.get('min_age', 8),
                 'max_age': config.get('max_age', 18),
+                'swimmer_fee': config.get('swimmer_fee', 0),
+                'team_fee': config.get('team_fee', 0),
+                'welcome_message': config.get('welcome_message', ''),
+                'event_logo': config.get('event_logo', ''),
+                'start_date': config.get('start_date', ''),
+                'end_date': config.get('end_date', ''),
+                'age_criteria': config.get('age_criteria', 'event_date'),
                 'created_date': config.get('created_date', ''),
                 'modified_date': config.get('modified_date', '')
             }

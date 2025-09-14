@@ -975,7 +975,7 @@ def mostrar_paso_finalizar(event_manager, event_info):
         welcome_message = st.session_state.get('evento_welcome_message', '').strip()
         if welcome_message:
             st.write("**📝 Mensaje de bienvenida:**")
-            st.write(f"*{welcome_message}*")
+            st.text_area("", value=welcome_message, height=100, disabled=True, key="preview_welcome_message")
 
     with col2:
         st.markdown("**🎯 Categorías y sus pruebas:**")
