@@ -456,15 +456,37 @@ class EventManager:
         if not event_info:
             return None, "No hay evento configurado"
 
+        # Validar campos críticos del evento
         try:
-            from reportlab.lib.pagesizes import A4
-            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-            from reportlab.lib.units import inch
-            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
-            from reportlab.lib import colors
-            from reportlab.lib.enums import TA_CENTER, TA_LEFT
-            from reportlab.platypus.flowables import Image
-            from io import BytesIO
+            event_name = event_info.get('name', 'Evento sin nombre')
+            if not event_name or len(str(event_name).strip()) == 0:
+                event_name = 'Evento sin nombre'
+            print(f"Generando PDF para evento: {event_name}")
+
+            # Validar categorías y eventos
+            categories = event_info.get('categories', [])
+            events = event_info.get('events', [])
+            print(f"Categorías: {len(categories)}, Eventos: {len(events)}")
+
+        except Exception as validation_error:
+            return None, f"Error validando datos del evento: {validation_error}"
+
+        try:
+            # Verificar importaciones de ReportLab
+            try:
+                from reportlab.lib.pagesizes import A4
+                from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+                from reportlab.lib.units import inch
+                from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+                from reportlab.lib import colors
+                from reportlab.lib.enums import TA_CENTER, TA_LEFT
+                from reportlab.platypus.flowables import Image
+                from io import BytesIO
+                print("ReportLab importado exitosamente")
+            except ImportError as import_error:
+                return None, f"Error importando ReportLab: {import_error}. Instala con: pip install reportlab"
+            except Exception as import_error:
+                return None, f"Error inesperado importando ReportLab: {import_error}"
 
             # Colores del tema TEN
             TEN_BLUE = colors.HexColor('#1E88E5')
@@ -541,34 +563,64 @@ class EventManager:
             ]
 
             # Agregar fechas si están disponibles
-            if event_info.get('start_date'):
-                try:
-                    from datetime import datetime
-                    start_date = datetime.fromisoformat(event_info['start_date']).strftime('%d/%m/%Y')
-                    general_data.append(['Fecha de Inicio', start_date])
-                except:
-                    general_data.append(['Fecha de Inicio', event_info.get('start_date', '')])
+            try:
+                if event_info.get('start_date'):
+                    try:
+                        from datetime import datetime
+                        if isinstance(event_info['start_date'], str):
+                            start_date = datetime.fromisoformat(event_info['start_date']).strftime('%d/%m/%Y')
+                        else:
+                            start_date = str(event_info['start_date'])
+                        general_data.append(['Fecha de Inicio', start_date])
+                    except Exception as date_error:
+                        print(f"Error procesando fecha de inicio: {date_error}")
+                        general_data.append(['Fecha de Inicio', str(event_info.get('start_date', 'N/A'))])
 
-            if event_info.get('end_date'):
-                try:
-                    end_date = datetime.fromisoformat(event_info['end_date']).strftime('%d/%m/%Y')
-                    general_data.append(['Fecha de Finalización', end_date])
-                except:
-                    general_data.append(['Fecha de Finalización', event_info.get('end_date', '')])
+                if event_info.get('end_date'):
+                    try:
+                        if isinstance(event_info['end_date'], str):
+                            end_date = datetime.fromisoformat(event_info['end_date']).strftime('%d/%m/%Y')
+                        else:
+                            end_date = str(event_info['end_date'])
+                        general_data.append(['Fecha de Finalización', end_date])
+                    except Exception as date_error:
+                        print(f"Error procesando fecha de finalización: {date_error}")
+                        general_data.append(['Fecha de Finalización', str(event_info.get('end_date', 'N/A'))])
 
-            # Agregar criterio de edad
-            age_criteria = event_info.get('age_criteria', 'event_date')
-            age_criteria_text = "Edad al 31 de diciembre" if age_criteria == 'december_31' else "Edad el día del evento"
+                # Agregar criterio de edad
+                age_criteria = event_info.get('age_criteria', 'event_date')
+                age_criteria_text = "Edad al 31 de diciembre" if age_criteria == 'december_31' else "Edad el día del evento"
 
-            general_data.extend([
-                ['Rango de Edades', f"{event_info['min_age']} - {event_info['max_age']} años"],
-                ['Criterio de Edad', age_criteria_text],
-                ['Valor por Nadador', f"${event_info.get('swimmer_fee', 0):,.0f}"],
-                ['Valor por Equipo', f"${event_info.get('team_fee', 0):,.0f}"],
-                ['Total de Categorías', str(len(event_info['categories']))],
-                ['Total de Pruebas', str(len(event_info['events']))],
-                ['Fecha de Creación', event_info.get('created_date', '').split('T')[0]],
-            ])
+                # Validar que tenemos los datos necesarios antes de agregarlos
+                categories = event_info.get('categories', [])
+                events = event_info.get('events', [])
+
+                general_data.extend([
+                    ['Rango de Edades', f"{event_info.get('min_age', 0)} - {event_info.get('max_age', 0)} años"],
+                    ['Criterio de Edad', age_criteria_text],
+                    ['Valor por Nadador', f"${event_info.get('swimmer_fee', 0):,.0f}"],
+                    ['Valor por Equipo', f"${event_info.get('team_fee', 0):,.0f}"],
+                    ['Total de Categorías', str(len(categories))],
+                    ['Total de Pruebas', str(len(events))],
+                ])
+
+                # Agregar fecha de creación si está disponible
+                created_date = event_info.get('created_date', '')
+                if created_date:
+                    try:
+                        created_date_formatted = created_date.split('T')[0]
+                        general_data.append(['Fecha de Creación', created_date_formatted])
+                    except:
+                        general_data.append(['Fecha de Creación', str(created_date)])
+
+            except Exception as section_error:
+                print(f"Error en sección de información general: {section_error}")
+                # Agregar datos mínimos si hay error
+                general_data.extend([
+                    ['Error', 'Hubo un problema procesando algunos datos'],
+                    ['Total de Categorías', str(len(event_info.get('categories', [])))],
+                    ['Total de Pruebas', str(len(event_info.get('events', [])))],
+                ])
 
             general_table = Table(general_data, colWidths=[2.5*inch, 3*inch])
             general_table.setStyle(TableStyle([
@@ -586,24 +638,44 @@ class EventManager:
             story.append(Spacer(1, 30))
 
             # Categorías
-            story.append(Paragraph("CATEGORÍAS DEL EVENTO", section_style))
-            categories_data = [['#', 'Nombre', 'Rango de Edad', 'Pruebas Asignadas']]
+            try:
+                story.append(Paragraph("CATEGORÍAS DEL EVENTO", section_style))
+                categories_data = [['#', 'Nombre', 'Rango de Edad', 'Pruebas Asignadas']]
 
-            # Ordenar categorías por edad
-            sorted_categories = self.sort_categories_by_age(event_info['categories'])
+                # Obtener categorías y validar
+                categories = event_info.get('categories', [])
+                if categories:
+                    # Ordenar categorías por edad
+                    try:
+                        sorted_categories = self.sort_categories_by_age(categories)
+                    except:
+                        print("Error ordenando categorías, usando orden original")
+                        sorted_categories = categories
 
-            for i, category in enumerate(sorted_categories, 1):
-                cat_name = category['name']
-                age_range = category['age_range']
-                cat_events = event_info['category_events'].get(cat_name, [])
-                events_count = len(cat_events)
+                    for i, category in enumerate(sorted_categories, 1):
+                        try:
+                            cat_name = category.get('name', 'Sin nombre')
+                            age_range = category.get('age_range', 'N/A')
+                            cat_events = event_info.get('category_events', {}).get(cat_name, [])
+                            events_count = len(cat_events) if cat_events else 0
 
-                categories_data.append([
-                    str(i),
-                    cat_name,
-                    age_range,
-                    str(events_count)
-                ])
+                            categories_data.append([
+                                str(i),
+                                str(cat_name),
+                                str(age_range),
+                                str(events_count)
+                            ])
+                        except Exception as cat_error:
+                            print(f"Error procesando categoría {i}: {cat_error}")
+                            categories_data.append([str(i), 'Error', 'Error', '0'])
+                else:
+                    categories_data.append(['1', 'Sin categorías configuradas', 'N/A', '0'])
+
+            except Exception as categories_error:
+                print(f"Error en sección de categorías: {categories_error}")
+                story.append(Paragraph("Error procesando categorías", section_style))
+                categories_data = [['#', 'Nombre', 'Rango de Edad', 'Pruebas Asignadas'],
+                                 ['1', 'Error cargando datos', 'N/A', '0']]
 
             categories_table = Table(categories_data, colWidths=[0.5*inch, 2*inch, 1.5*inch, 1*inch])
             categories_table.setStyle(TableStyle([
@@ -686,7 +758,10 @@ class EventManager:
             return buffer.getvalue(), filename
 
         except Exception as e:
-            return None, f"Error generando PDF: {str(e)}"
+            import traceback
+            error_details = f"Error generando PDF: {str(e)}\n\nTraceback:\n{traceback.format_exc()}"
+            print(error_details)  # Para debug en consola
+            return None, error_details
 
     def save_event_logo(self, uploaded_file, event_name):
         """Guardar logo del evento"""

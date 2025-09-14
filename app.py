@@ -318,6 +318,13 @@ def mostrar_creacion_evento():
 
         # Mostrar detalles del evento en expandibles
         with st.expander("Ver detalles del evento"):
+            # Mostrar mensaje de bienvenida si existe
+            welcome_message = event_info.get('welcome_message', '').strip()
+            if welcome_message:
+                st.markdown("**📝 Mensaje de Bienvenida:**")
+                st.text_area("", value=welcome_message, height=100, disabled=True, key="detail_welcome_message")
+                st.markdown("---")
+
             col1, col2 = st.columns(2)
 
             with col1:
@@ -348,17 +355,26 @@ def mostrar_creacion_evento():
         with col2:
             if st.button("📄 Generar PDF", type="secondary"):
                 with st.spinner("Generando reporte PDF..."):
-                    pdf_data, filename = event_manager.generate_event_pdf_report()
-                    if pdf_data:
-                        st.download_button(
-                            label="📥 Descargar Reporte PDF",
-                            data=pdf_data,
-                            file_name=filename,
-                            mime="application/pdf"
-                        )
-                        st.success("✅ Reporte PDF generado exitosamente")
-                    else:
-                        st.error(f"❌ Error generando PDF: {filename}")
+                    try:
+                        result = event_manager.generate_event_pdf_report()
+                        if result is None:
+                            st.error("❌ La función generate_event_pdf_report devolvió None")
+                        else:
+                            pdf_data, filename = result
+                            if pdf_data:
+                                st.download_button(
+                                    label="📥 Descargar Reporte PDF",
+                                    data=pdf_data,
+                                    file_name=filename,
+                                    mime="application/pdf"
+                                )
+                                st.success("✅ Reporte PDF generado exitosamente")
+                            else:
+                                st.error(f"❌ Error generando PDF: {filename}")
+                    except Exception as e:
+                        st.error(f"❌ Error inesperado generando PDF: {str(e)}")
+                        import traceback
+                        st.code(traceback.format_exc())
 
         with col3:
             if st.button("🗑️ Eliminar Evento", type="secondary"):
