@@ -58,7 +58,29 @@ class SwimmerRegistration:
         ]
         
     def get_category_by_age(self, age, gender):
+        """Determinar categoría basada en la edad, usando las categorías del evento si están disponibles"""
         age = int(age)
+
+        # Si tenemos event manager configurado, usar las categorías del evento
+        if self.event_manager:
+            event_categories = self.get_event_categories()
+            if event_categories:
+                # Buscar la categoría correspondiente en las configuradas para el evento
+                for category in event_categories:
+                    category_name = category.get('name', '')
+                    age_range = category.get('age_range', '')
+
+                    if age_range:
+                        # Parsear el rango de edad
+                        min_age, max_age = self.event_manager.parse_age_range(age_range)
+                        if min_age is not None and max_age is not None:
+                            if min_age <= age <= max_age:
+                                return category_name
+
+                # Si no encuentra coincidencia en las categorías del evento, informar
+                return f"EDAD {age} NO CONFIGURADA"
+
+        # Lógica de categorías por defecto (fallback)
         if gender.upper() == 'M':  # Masculino
             if age <= 8:
                 return "PRE-INFANTIL A"
@@ -415,37 +437,56 @@ class SwimmerRegistration:
             return None, f"Error al cargar base de datos: {e}"
     
     def search_swimmer_in_database(self, search_term):
-        """Buscar nadador en la base de datos por nombre"""
+        """Buscar nadador en la base de datos por nombre, filtrando por categorías del evento"""
         df, message = self.load_database()
         if df is None:
             return [], message
-        
+
         # Buscar en la columna ATLETA
         if 'ATLETA' not in df.columns:
             return [], "No se encontró columna ATLETA en la base de datos"
-        
-        # Buscar coincidencias
+
+        # Buscar coincidencias por nombre
         search_term = search_term.lower().strip()
-        mask = df['ATLETA'].astype(str).str.lower().str.contains(search_term, na=False, regex=False)
-        matching_rows = df[mask]
-        
+        name_mask = df['ATLETA'].astype(str).str.lower().str.contains(search_term, na=False, regex=False)
+        matching_rows = df[name_mask]
+
+        # Obtener categorías configuradas en el evento
+        event_categories = self.get_event_categories()
+        if event_categories and self.event_manager:
+            # Extraer nombres de las categorías del evento
+            event_category_names = [cat['name'] for cat in event_categories]
+
+            # Filtrar por categorías del evento si están configuradas
+            if 'CATEGORIA' in df.columns:
+                category_mask = matching_rows['CATEGORIA'].isin(event_category_names)
+                matching_rows = matching_rows[category_mask]
+
+                if matching_rows.empty:
+                    return [], f"No se encontraron nadadores de '{search_term}' en las categorías del evento: {', '.join(event_category_names)}"
+
         # Agrupar por atleta único (pueden tener múltiples registros por diferentes pruebas)
         unique_athletes = matching_rows['ATLETA'].unique()
-        
+
         matches = []
         for athlete_name in unique_athletes:
             # Tomar el primer registro para información básica
             athlete_records = matching_rows[matching_rows['ATLETA'] == athlete_name]
             first_record = athlete_records.iloc[0]
-            
+
             matches.append({
                 'index': 0,  # No importante ya que agrupamos
                 'name': athlete_name,
                 'full_data': first_record,  # Información básica del primer registro
                 'all_records': athlete_records  # Todos los registros del atleta
             })
-        
-        return matches, f"Se encontraron {len(matches)} atletas únicos"
+
+        total_message = f"Se encontraron {len(matches)} atletas únicos"
+        if event_categories and self.event_manager:
+            event_category_names = [cat['name'] for cat in event_categories]
+            total_message += f" en las categorías: {', '.join(event_category_names)}"
+
+        return matches, total_message
     
     def get_swimmer_latest_times(self, swimmer_data):
         """Obtener los tiempos del nadador agrupando todos sus registros"""
@@ -461,22 +502,30 @@ class SwimmerRegistration:
             return {}, f"No se encontraron registros para {swimmer_data['name']}"
 
         # Mapear pruebas de la base de datos a eventos del sistema
+        # Usamos mapeo directo ya que los nombres deben coincidir exactamente
         prueba_mappings = {
-            '50M CROLL': '50m LIBRE',
-            '100M CROLL': '100m LIBRE',
-            '200M CROLL': '200m LIBRE',
-            '400M CROLL': '400m LIBRE',
-            '50M ESPALDA': '50m ESPALDA',
-            '100M ESPALDA': '100m ESPALDA',
-            '200M ESPALDA': '200m ESPALDA',
-            '50M PECHO': '50m PECHO',
-            '100M PECHO': '100m PECHO',
-            '200M PECHO': '200m PECHO',
-            '50M MARIPOSA': '50m MARIPOSA',
-            '100M MARIPOSA': '100m MARIPOSA',
-            '200M MARIPOSA': '200m MARIPOSA',
-            '200M COMBINADO INDIVIDUAL': '200m COMBINADO',
-            '400M COMBINADO INDIVIDUAL': '400m COMBINADO'
+            '50M CROLL': '50M CROLL',
+            '100M CROLL': '100M CROLL',
+            '200M CROLL': '200M CROLL',
+            '400M CROLL': '400M CROLL',
+            '50M ESPALDA': '50M ESPALDA',
+            '100M ESPALDA': '100M ESPALDA',
+            '200M ESPALDA': '200M ESPALDA',
+            '50M PECHO': '50M PECHO',
+            '100M PECHO': '100M PECHO',
+            '200M PECHO': '200M PECHO',
+            '50M MARIPOSA': '50M MARIPOSA',
+            '100M MARIPOSA': '100M MARIPOSA',
+            '200M MARIPOSA': '200M MARIPOSA',
+            '200M COMBINADO INDIVIDUAL': '200M COMBINADO INDIVIDUAL',
+            '400M COMBINADO INDIVIDUAL': '400M COMBINADO INDIVIDUAL',
+            # Mapeos adicionales para variaciones en la base de datos
+            '50M LIBRE': '50M CROLL',
+            '100M LIBRE': '100M CROLL',
+            '200M LIBRE': '200M CROLL',
+            '400M LIBRE': '400M CROLL',
+            '200M COMBINADO': '200M COMBINADO INDIVIDUAL',
+            '400M COMBINADO': '400M COMBINADO INDIVIDUAL'
         }
 
         # Obtener pruebas disponibles del evento
@@ -503,12 +552,18 @@ class SwimmerRegistration:
 
                 # Buscar el evento del sistema que coincide
                 system_event = None
-                for sys_event, db_prueba in prueba_mappings.items():
-                    if (prueba_str.upper() == db_prueba.upper() or
-                        prueba_str.upper().replace(' ', '') == db_prueba.upper().replace(' ', '') or
-                        db_prueba.upper() in prueba_str.upper()):
-                        system_event = sys_event
-                        break
+                prueba_upper = prueba_str.upper().strip()
+
+                # Primero buscar coincidencia exacta en el mapeo
+                if prueba_upper in prueba_mappings:
+                    system_event = prueba_mappings[prueba_upper]
+                else:
+                    # Buscar coincidencias aproximadas
+                    for db_prueba, sys_event_mapped in prueba_mappings.items():
+                        if (prueba_upper == db_prueba.upper() or
+                            prueba_upper.replace(' ', '') == db_prueba.upper().replace(' ', '')):
+                            system_event = sys_event_mapped
+                            break
 
                 # Solo incluir si el evento está disponible en el evento actual
                 if system_event and system_event in available_events and tiempo_str and tiempo_str not in ['0', '0.0', 'nan']:

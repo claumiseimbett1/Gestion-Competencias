@@ -495,6 +495,23 @@ def mostrar_paso_datos_basicos(event_manager, event_info):
             key="evento_max_age"
         )
 
+    # Criterio de edad
+    st.markdown("**📅 Criterio para Determinar la Edad:**")
+    age_criteria_options = {
+        "event_date": "Edad el día del evento",
+        "december_31": "Edad al 31 de diciembre"
+    }
+
+    default_criteria = event_info.get('age_criteria', 'event_date') if event_info else 'event_date'
+    age_criteria = st.selectbox(
+        "Seleccione cómo se calculará la edad de los nadadores",
+        options=list(age_criteria_options.keys()),
+        format_func=lambda x: age_criteria_options[x],
+        index=list(age_criteria_options.keys()).index(default_criteria),
+        key="evento_age_criteria",
+        help="Defina si la edad se calcula al día del evento o al 31 de diciembre del año en curso"
+    )
+
     # Valores de inscripción
     st.markdown("**💰 Valores de Inscripción:**")
     col1, col2 = st.columns(2)
@@ -938,6 +955,11 @@ def mostrar_paso_finalizar(event_manager, event_info):
 
         st.write(f"**Edades:** {min_age} - {max_age} años")
 
+        # Mostrar criterio de edad
+        age_criteria = st.session_state.get('evento_age_criteria', 'event_date')
+        age_criteria_text = "Edad al 31 de diciembre" if age_criteria == 'december_31' else "Edad el día del evento"
+        st.write(f"**Criterio de edad:** {age_criteria_text}")
+
         # Mostrar valores de inscripción
         swimmer_fee = st.session_state.get('evento_swimmer_fee', 0)
         team_fee = st.session_state.get('evento_team_fee', 0)
@@ -982,6 +1004,7 @@ def mostrar_paso_finalizar(event_manager, event_info):
             uploaded_logo = st.session_state.get('evento_logo_upload')
             start_date = st.session_state.get('evento_start_date')
             end_date = st.session_state.get('evento_end_date')
+            age_criteria = st.session_state.get('evento_age_criteria', 'event_date')
 
             # Procesar logo si se subió uno nuevo
             event_logo = None
@@ -1008,7 +1031,8 @@ def mostrar_paso_finalizar(event_manager, event_info):
                 welcome_message,
                 event_logo,
                 start_date,
-                end_date
+                end_date,
+                age_criteria
             )
 
             if success:
@@ -2868,7 +2892,10 @@ def inscripcion_nadadores_interface():
             events_data = {}
             col1, col2, col3 = st.columns(3)
             
-            for i, event in enumerate(registration_system.swimming_events):
+            # Obtener eventos disponibles del evento configurado
+            available_events = registration_system.get_available_events()
+
+            for i, event in enumerate(available_events):
                 with [col1, col2, col3][i % 3]:
                     time_input = st.text_input(
                         event,
@@ -3282,8 +3309,11 @@ def inscripcion_nadadores_interface():
                         
                         edit_events_data = {}
                         col1, col2, col3 = st.columns(3)
-                        
-                        for j, event in enumerate(registration_system.swimming_events):
+
+                        # Obtener eventos disponibles del evento configurado
+                        edit_available_events = registration_system.get_available_events()
+
+                        for j, event in enumerate(edit_available_events):
                             with [col1, col2, col3][j % 3]:
                                 current_time = swimmer_data['events'].get(event, "")
                                 edit_time_input = st.text_input(

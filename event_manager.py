@@ -27,7 +27,7 @@ class EventManager:
 
     def save_event_config(self, event_name, categories, event_order, category_events, min_age, max_age,
                          swimmer_fee=None, team_fee=None, welcome_message=None, event_logo=None,
-                         start_date=None, end_date=None):
+                         start_date=None, end_date=None, age_criteria=None):
         """Guardar la configuración del evento"""
         config = {
             'event_name': event_name,
@@ -42,6 +42,7 @@ class EventManager:
             'event_logo': event_logo,
             'start_date': start_date.isoformat() if start_date else None,
             'end_date': end_date.isoformat() if end_date else None,
+            'age_criteria': age_criteria or 'event_date',
             'created_date': datetime.now().isoformat(),
             'modified_date': datetime.now().isoformat()
         }
@@ -123,7 +124,7 @@ class EventManager:
 
     def update_event_config(self, event_name=None, categories=None, event_order=None, category_events=None,
                           min_age=None, max_age=None, swimmer_fee=None, team_fee=None,
-                          welcome_message=None, event_logo=None, start_date=None, end_date=None):
+                          welcome_message=None, event_logo=None, start_date=None, end_date=None, age_criteria=None):
         """Actualizar configuración existente"""
         config = self.load_event_config()
         if not config:
@@ -153,6 +154,8 @@ class EventManager:
             config['start_date'] = start_date.isoformat() if start_date else None
         if end_date is not None:
             config['end_date'] = end_date.isoformat() if end_date else None
+        if age_criteria is not None:
+            config['age_criteria'] = age_criteria
 
         config['modified_date'] = datetime.now().isoformat()
 
@@ -546,8 +549,13 @@ class EventManager:
                 except:
                     general_data.append(['Fecha de Finalización', event_info.get('end_date', '')])
 
+            # Agregar criterio de edad
+            age_criteria = event_info.get('age_criteria', 'event_date')
+            age_criteria_text = "Edad al 31 de diciembre" if age_criteria == 'december_31' else "Edad el día del evento"
+
             general_data.extend([
                 ['Rango de Edades', f"{event_info['min_age']} - {event_info['max_age']} años"],
+                ['Criterio de Edad', age_criteria_text],
                 ['Valor por Nadador', f"${event_info.get('swimmer_fee', 0):,.0f}"],
                 ['Valor por Equipo', f"${event_info.get('team_fee', 0):,.0f}"],
                 ['Total de Categorías', str(len(event_info['categories']))],
