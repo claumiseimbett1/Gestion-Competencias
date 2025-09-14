@@ -2876,7 +2876,7 @@ def inscripcion_nadadores_interface():
     registration_system = inscripcion_nadadores.SwimmerRegistration()
     
     # Tabs para diferentes funciones
-    tab1, tab2, tab3 = st.tabs(["➕ Nuevo Nadador", "📝 Nadadores Inscritos", "⚙️ Gestión"])
+    tab1, tab2, tab3 = st.tabs(["➕ Nuevo Nadador", "📝 Nadadores Inscritos", "📊 Reporte de Inscripción"])
     
     with tab1:
         st.markdown("### Registrar Nuevo Nadador")
@@ -3377,8 +3377,97 @@ def inscripcion_nadadores_interface():
                         st.error(message)
     
     with tab3:
-        st.markdown("### Gestión del Sistema")
-        
+        st.markdown("### 📊 Reporte de Inscripción")
+
+        # Sección de Acciones del Sistema (movida desde pagos)
+        st.markdown("#### 🔧 Acciones del Sistema")
+
+        col_actions1, col_actions2, col_actions3 = st.columns(3)
+
+        with col_actions1:
+            if st.button("📋 Crear Archivo Vacío"):
+                success, message = registration_system.create_empty_registration_file()
+                if success:
+                    st.success(message)
+                else:
+                    st.error(message)
+
+        with col_actions2:
+            if os.path.exists(registration_system.archivo_inscripcion):
+                with open(registration_system.archivo_inscripcion, "rb") as file:
+                    st.download_button(
+                        label="📥 Descargar Planilla de Inscripción",
+                        data=file.read(),
+                        file_name="planilla_inscripcion.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+
+        with col_actions3:
+            # Generar reporte PDF
+            if swimmers:
+                if st.button("📄 Generar Reporte PDF", type="primary"):
+                    try:
+                        pdf_data = registration_system.generate_pdf_report(swimmers, teams, categories, genders, events_stats)
+                        if pdf_data:
+                            st.download_button(
+                                label="📄 Descargar Reporte PDF",
+                                data=pdf_data,
+                                file_name="reporte_inscripciones.pdf",
+                                mime="application/pdf"
+                            )
+                            st.success("¡Reporte PDF generado exitosamente!")
+                        else:
+                            st.error("**ReportLab no está instalado en este entorno Python**")
+                            st.markdown("""
+                            **Para generar reportes PDF, pruebe uno de estos comandos:**
+                            ```bash
+                            pip install reportlab
+                            # o
+                            pip3 install reportlab
+                            # o
+                            python -m pip install reportlab
+                            # o
+                            python3 -m pip install reportlab
+                            ```
+
+                            **Si está usando un entorno virtual, asegúrese de activarlo primero:**
+                            ```bash
+                            source venv/bin/activate  # Linux/Mac
+                            # o
+                            venv\\Scripts\\activate     # Windows
+                            ```
+
+                            Luego reinicie la aplicación Streamlit.
+                            """)
+                    except Exception as e:
+                        if "reportlab" in str(e).lower() or "not available" in str(e).lower():
+                            st.error("Para generar reportes PDF, instale la librería ReportLab ejecutando: pip install reportlab")
+                        else:
+                            st.error(f"Error al generar el reporte PDF: {str(e)}")
+            else:
+                st.info("No hay nadadores inscritos para generar reporte")
+
+        # Sección de limpieza de inscripciones
+        st.markdown("#### 🧹 Limpiar Inscripciones")
+        col_clean1, col_clean2 = st.columns([2, 1])
+
+        with col_clean1:
+            st.info("🗑️ Eliminar todas las inscripciones para empezar con nuevos nadadores")
+
+        with col_clean2:
+            if st.button("👥 Limpiar Inscripciones", type="secondary", help="Eliminar planilla de inscripción"):
+                if os.path.exists("planilla_inscripcion.xlsx"):
+                    try:
+                        os.remove("planilla_inscripcion.xlsx")
+                        st.success("✅ Inscripciones eliminadas")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error al limpiar: {e}")
+                else:
+                    st.info("No hay archivo de inscripciones para limpiar")
+
+        st.markdown("---")
+
         col1, col2 = st.columns(2)
         
         with col1:
@@ -3518,14 +3607,44 @@ def inscripcion_nadadores_interface():
                 df_summary = pd.DataFrame(summary_data)
                 st.dataframe(df_summary, use_container_width=True)
 
-                # Botón para generar PDFs individuales
-                if st.button("📄 Generar PDFs por Equipo"):
-                    with st.spinner("Generando PDFs individuales..."):
-                        success, message = registration_system.generate_individual_team_pdfs(teams_data)
-                        if success:
-                            st.success(f"🎉 {message}")
-                        else:
-                            st.error(f"❌ {message}")
+                # Selector para generar PDF individual por equipo
+                st.markdown("#### 📄 Generar PDF por Equipo Individual")
+
+                # Crear lista de equipos para el selectbox
+                team_names = list(teams_data.keys())
+                if team_names:
+                    selected_team = st.selectbox(
+                        "Selecciona el equipo:",
+                        team_names,
+                        key="team_selector"
+                    )
+
+                    col_pdf1, col_pdf2 = st.columns(2)
+                    with col_pdf1:
+                        if st.button(f"📋 Generar PDF de {selected_team}", type="secondary"):
+                            with st.spinner(f"Generando PDF para {selected_team}..."):
+                                team_info = teams_data[selected_team]
+                                pdf_data, filename = registration_system.generate_team_pdf(selected_team, team_info)
+
+                                if pdf_data:
+                                    st.success(f"✅ PDF generado para {selected_team}")
+                                    st.download_button(
+                                        label=f"⬇️ Descargar PDF de {selected_team}",
+                                        data=pdf_data,
+                                        file_name=filename,
+                                        mime="application/pdf"
+                                    )
+                                else:
+                                    st.error(f"❌ {filename}")
+
+                    with col_pdf2:
+                        # Mostrar estadísticas del equipo seleccionado
+                        team_info = teams_data[selected_team]
+                        st.info(
+                            f"**{selected_team}**\n\n"
+                            f"👥 {team_info['total_swimmers']} nadadores\n\n"
+                            f"🏊‍♀️ {team_info['total_events']} inscripciones"
+                        )
 
                 # Botón para exportar a Excel
                 if st.button("📊 Descargar Reporte Excel", type="primary"):
@@ -3677,6 +3796,45 @@ def inscripcion_nadadores_interface():
                 df_payments = pd.DataFrame(summary_payments)
                 st.dataframe(df_payments, use_container_width=True)
 
+                # Selector para generar cuenta de cobro por club
+                st.markdown("#### 🧾 Generar Cuenta de Cobro por Club")
+                team_names = list(payments_data.keys())
+                if team_names:
+                    selected_team_payment = st.selectbox(
+                        "Selecciona el club para generar cuenta de cobro:",
+                        team_names,
+                        key="payment_team_selector"
+                    )
+
+                    col_invoice1, col_invoice2 = st.columns(2)
+                    with col_invoice1:
+                        if st.button(f"🧾 Generar Cuenta de Cobro - {selected_team_payment}", type="secondary"):
+                            with st.spinner(f"Generando cuenta de cobro para {selected_team_payment}..."):
+                                team_payment_data = payments_data[selected_team_payment]
+                                pdf_data, filename = registration_system.generate_club_payment_invoice(
+                                    selected_team_payment, team_payment_data, swimmer_fee, team_fee
+                                )
+
+                                if pdf_data:
+                                    st.success(f"✅ Cuenta de cobro generada para {selected_team_payment}")
+                                    st.download_button(
+                                        label=f"⬇️ Descargar Cuenta de Cobro - {selected_team_payment}",
+                                        data=pdf_data,
+                                        file_name=filename,
+                                        mime="application/pdf"
+                                    )
+                                else:
+                                    st.error(f"❌ {filename}")
+
+                    with col_invoice2:
+                        # Mostrar resumen del equipo seleccionado para pagos
+                        team_payment_info = payments_data[selected_team_payment]
+                        st.info(
+                            f"**{selected_team_payment}**\n\n"
+                            f"👥 {team_payment_info['swimmer_count']} nadadores\n\n"
+                            f"💰 Total: ${team_payment_info['total_payment']:,.0f}"
+                        )
+
                 # Botón para exportar pagos a Excel
                 if st.button("💰 Descargar Reporte Pagos Excel", type="primary"):
                     excel_data, filename = registration_system.export_payments_report_to_excel(payments_data, swimmer_fee, team_fee)
@@ -3690,102 +3848,7 @@ def inscripcion_nadadores_interface():
                         st.success("¡Archivo Excel de pagos preparado para descarga!")
                     else:
                         st.error(f"Error generando Excel: {filename}")
-
-        with col2:
-            st.markdown("#### 🔧 Acciones del Sistema")
             
-            if st.button("📋 Crear Archivo Vacío"):
-                success, message = registration_system.create_empty_registration_file()
-                if success:
-                    st.success(message)
-                else:
-                    st.error(message)
-            
-            if os.path.exists(registration_system.archivo_inscripcion):
-                with open(registration_system.archivo_inscripcion, "rb") as file:
-                    st.download_button(
-                        label="📥 Descargar Planilla de Inscripción",
-                        data=file.read(),
-                        file_name="planilla_inscripcion.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
-            
-            # Generar reporte PDF
-            if swimmers:
-                if st.button("📄 Generar Reporte PDF", type="primary"):
-                    try:
-                        pdf_data = registration_system.generate_pdf_report(swimmers, teams, categories, genders, events_stats)
-                        if pdf_data:
-                            st.download_button(
-                                label="📄 Descargar Reporte PDF",
-                                data=pdf_data,
-                                file_name="reporte_inscripciones.pdf",
-                                mime="application/pdf"
-                            )
-                            st.success("¡Reporte PDF generado exitosamente!")
-                        else:
-                            st.error("**ReportLab no está instalado en este entorno Python**")
-                            st.markdown("""
-                            **Para generar reportes PDF, pruebe uno de estos comandos:**
-                            ```bash
-                            pip install reportlab
-                            # o
-                            pip3 install reportlab
-                            # o
-                            python -m pip install reportlab
-                            # o  
-                            python3 -m pip install reportlab
-                            ```
-                            
-                            **Si está usando un entorno virtual, asegúrese de activarlo primero:**
-                            ```bash
-                            source venv/bin/activate  # Linux/Mac
-                            # o
-                            venv\\Scripts\\activate     # Windows
-                            ```
-                            
-                            Luego reinicie la aplicación Streamlit.
-                            """)
-                    except Exception as e:
-                        if "reportlab" in str(e).lower() or "not available" in str(e).lower():
-                            st.error("Para generar reportes PDF, instale la librería ReportLab ejecutando: pip install reportlab")
-                        else:
-                            st.error(f"Error al generar el reporte PDF: {str(e)}")
-            else:
-                st.info("No hay nadadores inscritos para generar reporte")
-            
-            st.markdown("#### 🧹 Limpiar Inscripciones")
-            col_clean1, col_clean2 = st.columns([2, 1])
-            
-            with col_clean1:
-                st.info("🗑️ Eliminar todas las inscripciones para empezar con nuevos nadadores")
-            
-            with col_clean2:
-                if st.button("👥 Limpiar Inscripciones", type="secondary", help="Eliminar planilla de inscripción"):
-                    if os.path.exists("planilla_inscripcion.xlsx"):
-                        try:
-                            os.remove("planilla_inscripcion.xlsx")
-                            st.success("✅ Inscripciones eliminadas")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"❌ Error: {e}")
-                    else:
-                        st.info("ℹ️ No hay inscripciones que eliminar")
-            
-            st.markdown("#### ℹ️ Información")
-            st.info("""
-            **Categorías por edad:**
-            - PRE-INFANTIL A: ≤8 años
-            - PRE-INFANTIL B: ≤9 años  
-            - INFANTIL A: ≤10 años
-            - INFANTIL B: ≤11 años
-            - JUVENIL A: ≤12 años
-            - JUVENIL B: ≤13 años
-            - JUNIOR A: ≤14 años
-            - JUNIOR B: ≤15 años
-            - SENIOR: ≤17 años
-            - MASTER: >17 años
-            """)
     
     # Copyright footer para todas las páginas
     st.markdown("---")

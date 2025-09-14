@@ -139,6 +139,17 @@ class SwimmerRegistration:
         events_dict = self._get_swimmer_events_dict(swimmer)
         return [event for event, time in events_dict.items() if time and str(time).strip()]
 
+    def _get_medal_explanation(self, participants):
+        """Helper method to get explanation of medal allocation based on participant count"""
+        if participants >= 3:
+            return "3+ participantes: Oro, Plata y Bronce"
+        elif participants == 2:
+            return "2 participantes: Oro y Plata únicamente"
+        elif participants == 1:
+            return "1 participante: Solo Oro"
+        else:
+            return "Sin participantes: Sin medallas"
+
     def get_category_by_age(self, age, gender, birth_date=None):
         """Determinar categoría basada en la edad, usando las categorías del evento si están disponibles"""
 
@@ -675,23 +686,25 @@ class SwimmerRegistration:
                 for event, event_data in events.items():
                     participants_count = event_data['count']
 
-                    # Lógica de medallas según participantes
-                    if participants_count >= 8:
+                    # Lógica correcta de medallas para campeonato deportivo
+                    medals = {'Oro': 0, 'Plata': 0, 'Bronce': 0}
+
+                    if participants_count >= 3:
+                        # 3 o más participantes: Oro, Plata y Bronce
                         medals = {'Oro': 1, 'Plata': 1, 'Bronce': 1}
-                    elif participants_count >= 6:
+                    elif participants_count == 2:
+                        # 2 participantes: Solo Oro y Plata
                         medals = {'Oro': 1, 'Plata': 1, 'Bronce': 0}
-                    elif participants_count >= 4:
+                    elif participants_count == 1:
+                        # 1 participante: Solo Oro
                         medals = {'Oro': 1, 'Plata': 0, 'Bronce': 0}
-                    elif participants_count >= 2:
-                        medals = {'Oro': 1, 'Plata': 0, 'Bronce': 0}
-                    else:
-                        medals = {'Oro': 0, 'Plata': 0, 'Bronce': 0}
 
                     medals_data[category_key][event] = {
-                        'participants': participants_count,
+                        'participants_count': participants_count,
                         'participants_list': event_data['participants'],
                         'medals': medals,
-                        'total_medals': sum(medals.values())
+                        'total_medals': sum(medals.values()),
+                        'medal_explanation': self._get_medal_explanation(participants_count)
                     }
 
             return medals_data, f"Reporte de medallas generado para {len(medals_data)} categorías"
@@ -760,7 +773,8 @@ class SwimmerRegistration:
                         'participants_count': participants,
                         'participants_list': event_data['participants'],
                         'medals': medals,
-                        'total_medals': sum(medals.values())
+                        'total_medals': sum(medals.values()),
+                        'medal_explanation': self._get_medal_explanation(participants)
                     }
 
             return medals_data, f"Previsualización de medallas generada para {len(medals_data)} categorías"
@@ -969,114 +983,139 @@ class SwimmerRegistration:
         except Exception as e:
             return None, f"Error exportando reporte de pagos: {e}"
 
-    def generate_individual_team_pdfs(self, teams_data):
-        """Generar PDFs individuales para cada equipo"""
-        if not teams_data:
-            return False, "No hay datos de equipos"
+    def generate_team_pdf(self, team_name, team_info):
+        """Generar PDF individual para un equipo específico con estadísticas e inscripciones detalladas"""
+        if not team_info:
+            return None, "No hay datos del equipo"
 
         try:
-            pdf_files = []
-
             # Importar ReportLab si está disponible
             if not REPORTLAB_AVAILABLE:
-                return False, "ReportLab no está disponible. Por favor instala reportlab: pip install reportlab"
+                return None, "ReportLab no está disponible. Por favor instala reportlab: pip install reportlab"
 
-            from reportlab.lib.pagesizes import letter
-            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+            from reportlab.lib.pagesizes import letter, A4
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
             from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
             from reportlab.lib import colors
             from reportlab.lib.units import inch
             from io import BytesIO
-            import os
             from datetime import datetime
 
-            # Crear directorio de PDFs si no existe
-            pdf_dir = "pdfs_equipos"
-            if not os.path.exists(pdf_dir):
-                os.makedirs(pdf_dir)
+            # Crear buffer para el PDF
+            buffer = BytesIO()
 
-            for team_name, team_info in teams_data.items():
-                # Crear nombre de archivo seguro
-                safe_team_name = "".join(c for c in team_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
-                filename = f"{pdf_dir}/equipo_{safe_team_name.replace(' ', '_')}.pdf"
+            # Crear documento PDF
+            doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=0.5*inch, bottomMargin=0.5*inch)
 
-                # Crear documento PDF
-                doc = SimpleDocTemplate(filename, pagesize=letter, topMargin=0.5*inch)
+            # Estilos personalizados
+            styles = getSampleStyleSheet()
+            title_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Title'],
+                fontSize=18,
+                spaceAfter=0.3*inch,
+                textColor=colors.HexColor('#1f4e79'),
+                alignment=1  # Center
+            )
 
-                # Estilos
-                styles = getSampleStyleSheet()
-                title_style = ParagraphStyle(
-                    'CustomTitle',
-                    parent=styles['Title'],
-                    fontSize=16,
-                    spaceAfter=0.3*inch,
-                    textColor=colors.HexColor('#1f4e79'),
-                    alignment=1  # Center
-                )
+            heading_style = ParagraphStyle(
+                'CustomHeading',
+                parent=styles['Heading2'],
+                fontSize=14,
+                textColor=colors.HexColor('#2e75b6'),
+                spaceAfter=0.2*inch
+            )
 
-                heading_style = ParagraphStyle(
-                    'CustomHeading',
-                    parent=styles['Heading2'],
-                    fontSize=12,
-                    textColor=colors.HexColor('#2e75b6'),
-                    spaceAfter=0.2*inch
-                )
+            subheading_style = ParagraphStyle(
+                'CustomSubheading',
+                parent=styles['Heading3'],
+                fontSize=12,
+                textColor=colors.HexColor('#2e75b6'),
+                spaceAfter=0.1*inch
+            )
 
-                # Contenido del PDF
-                content = []
+            # Contenido del PDF
+            content = []
 
-                # Título
-                title = Paragraph(f"REPORTE DE EQUIPO: {team_name.upper()}", title_style)
-                content.append(title)
-                content.append(Spacer(1, 0.2*inch))
+            # Título principal
+            title = Paragraph(f"REPORTE DE INSCRIPCIÓN<br/>EQUIPO: {team_name.upper()}", title_style)
+            content.append(title)
+            content.append(Spacer(1, 0.3*inch))
 
-                # Estadísticas del equipo
-                stats_title = Paragraph("ESTADÍSTICAS DEL EQUIPO", heading_style)
-                content.append(stats_title)
+            # Estadísticas del equipo
+            stats_title = Paragraph("ESTADÍSTICAS DEL EQUIPO", heading_style)
+            content.append(stats_title)
 
-                stats_data = [
-                    ["Total Nadadores", str(team_info['total_swimmers'])],
-                    ["Nadadores Masculinos", str(team_info['genders']['M'])],
-                    ["Nadadores Femeninos", str(team_info['genders']['F'])],
-                    ["Total Inscripciones", str(team_info['total_events'])]
-                ]
+            stats_data = [
+                ["Concepto", "Cantidad"],
+                ["Total Nadadores", str(team_info['total_swimmers'])],
+                ["Nadadores Masculinos", str(team_info['genders']['M'])],
+                ["Nadadores Femeninos", str(team_info['genders']['F'])],
+                ["Total Inscripciones", str(team_info['total_events'])]
+            ]
 
-                stats_table = Table(stats_data, colWidths=[3*inch, 2*inch])
-                stats_table.setStyle(TableStyle([
-                    ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f2f8ff')),
-                    ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+            stats_table = Table(stats_data, colWidths=[3*inch, 2*inch])
+            stats_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2e75b6')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f2f8ff')),
+                ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 11),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#d4d4d4'))
+            ]))
+
+            content.append(stats_table)
+            content.append(Spacer(1, 0.3*inch))
+
+            # Distribución por categorías
+            if team_info['categories']:
+                categories_title = Paragraph("DISTRIBUCIÓN POR CATEGORÍAS", heading_style)
+                content.append(categories_title)
+
+                categories_data = [["Categoría", "Cantidad de Nadadores"]]
+                for category, count in team_info['categories'].items():
+                    categories_data.append([category, str(count)])
+
+                categories_table = Table(categories_data, colWidths=[3*inch, 2*inch])
+                categories_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2e75b6')),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
                     ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-                    ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
                     ('FONTSIZE', (0, 0), (-1, -1), 10),
                     ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-                    ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#d4d4d4'))
+                    ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#d4d4d4')),
+                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8f9fa')])
                 ]))
 
-                content.append(stats_table)
+                content.append(categories_table)
                 content.append(Spacer(1, 0.3*inch))
 
-                # Lista de nadadores
-                swimmers_title = Paragraph("NADADORES DEL EQUIPO", heading_style)
-                content.append(swimmers_title)
+            # Inscripciones detalladas por nadador
+            swimmers_title = Paragraph("INSCRIPCIONES DETALLADAS POR NADADOR", heading_style)
+            content.append(swimmers_title)
 
-                # Crear tabla de nadadores
-                swimmers_data = [["Nombre", "Edad", "Categoría", "Género", "Eventos"]]
+            for i, swimmer in enumerate(team_info['swimmers']):
+                # Datos del nadador
+                swimmer_name = Paragraph(f"<b>{i+1}. {swimmer['name']}</b>", subheading_style)
+                content.append(swimmer_name)
 
-                for swimmer in team_info['swimmers']:
-                    swimmer_events = self._get_swimmer_events_list(swimmer)
-                    events_text = f"{len(swimmer_events)} eventos"
+                # Información básica del nadador
+                basic_info = [
+                    ["Información", "Detalle"],
+                    ["Edad", f"{swimmer['age']} años"],
+                    ["Categoría", swimmer['category']],
+                    ["Género", "Masculino" if swimmer['gender'] == 'M' else "Femenino"]
+                ]
 
-                    swimmers_data.append([
-                        swimmer['name'],
-                        str(swimmer['age']),
-                        swimmer['category'],
-                        "Masculino" if swimmer['gender'] == 'M' else "Femenino",
-                        events_text
-                    ])
-
-                swimmers_table = Table(swimmers_data, colWidths=[2.5*inch, 0.7*inch, 1*inch, 1*inch, 1.3*inch])
-                swimmers_table.setStyle(TableStyle([
-                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2e75b6')),
+                basic_table = Table(basic_info, colWidths=[1.5*inch, 2*inch])
+                basic_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4472C4')),
                     ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
                     ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
                     ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
@@ -1084,52 +1123,249 @@ class SwimmerRegistration:
                     ('FONTSIZE', (0, 0), (-1, -1), 9),
                     ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
                     ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#d4d4d4')),
-                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8f9fa')])
+                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f0f0f0')])
                 ]))
 
-                content.append(swimmers_table)
-                content.append(Spacer(1, 0.3*inch))
+                content.append(basic_table)
+                content.append(Spacer(1, 0.1*inch))
 
-                # Categorías
-                if team_info['categories']:
-                    categories_title = Paragraph("DISTRIBUCIÓN POR CATEGORÍAS", heading_style)
-                    content.append(categories_title)
+                # Inscripciones del nadador con tiempos
+                events_data = [["Evento", "Tiempo Inscripción"]]
+                events_dict = self._get_swimmer_events_dict(swimmer)
 
-                    categories_data = [["Categoría", "Cantidad"]]
-                    for category, count in team_info['categories'].items():
-                        categories_data.append([category, str(count)])
+                for event, time in events_dict.items():
+                    if time and str(time).strip():
+                        events_data.append([event, str(time)])
 
-                    categories_table = Table(categories_data, colWidths=[3*inch, 2*inch])
-                    categories_table.setStyle(TableStyle([
-                        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2e75b6')),
+                if len(events_data) > 1:  # Si hay eventos inscritos
+                    events_table = Table(events_data, colWidths=[3*inch, 1.5*inch])
+                    events_table.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#70AD47')),
                         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
                         ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
                         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
                         ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-                        ('FONTSIZE', (0, 0), (-1, -1), 10),
-                        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                        ('FONTSIZE', (0, 0), (-1, -1), 9),
+                        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
                         ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#d4d4d4')),
-                        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8f9fa')])
+                        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f0f8f0')])
                     ]))
 
-                    content.append(categories_table)
+                    content.append(events_table)
+                else:
+                    no_events = Paragraph("Sin inscripciones en eventos", styles['Normal'])
+                    content.append(no_events)
 
-                # Pie de página con fecha
-                content.append(Spacer(1, 0.5*inch))
-                footer = Paragraph(
-                    f"Reporte generado el {datetime.now().strftime('%d/%m/%Y %H:%M')}",
-                    styles['Normal']
-                )
-                content.append(footer)
+                content.append(Spacer(1, 0.2*inch))
 
-                # Crear PDF
-                doc.build(content)
-                pdf_files.append(filename)
+                # Separar nadadores si hay muchos (nueva página cada 4 nadadores)
+                if (i + 1) % 4 == 0 and i < len(team_info['swimmers']) - 1:
+                    content.append(PageBreak())
 
-            return True, f"Se generaron {len(pdf_files)} PDFs en la carpeta 'pdfs_equipos'"
+            # Pie de página con fecha y hora
+            content.append(Spacer(1, 0.5*inch))
+            footer = Paragraph(
+                f"<i>Reporte generado el {datetime.now().strftime('%d/%m/%Y a las %H:%M')}</i>",
+                styles['Normal']
+            )
+            content.append(footer)
+
+            # Construir PDF
+            doc.build(content)
+            buffer.seek(0)
+
+            return buffer.getvalue(), f"reporte_equipo_{team_name.replace(' ', '_')}.pdf"
 
         except Exception as e:
-            return False, f"Error generando PDFs individuales: {e}"
+            return None, f"Error generando PDF del equipo: {e}"
+
+    def generate_club_payment_invoice(self, team_name, team_data, swimmer_fee, team_fee):
+        """Generar PDF de cuenta de cobro para un club específico"""
+        if not team_data:
+            return None, "No hay datos del equipo"
+
+        try:
+            # Importar ReportLab si está disponible
+            if not REPORTLAB_AVAILABLE:
+                return None, "ReportLab no está disponible. Por favor instala reportlab: pip install reportlab"
+
+            from reportlab.lib.pagesizes import letter, A4
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib import colors
+            from reportlab.lib.units import inch
+            from io import BytesIO
+            from datetime import datetime
+
+            # Crear buffer para el PDF
+            buffer = BytesIO()
+
+            # Crear documento PDF
+            doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=0.5*inch, bottomMargin=0.5*inch)
+
+            # Estilos personalizados
+            styles = getSampleStyleSheet()
+
+            # Estilo para título principal
+            title_style = ParagraphStyle(
+                'InvoiceTitle',
+                parent=styles['Title'],
+                fontSize=20,
+                spaceAfter=0.3*inch,
+                textColor=colors.HexColor('#1f4e79'),
+                alignment=1,  # Center
+                fontName='Helvetica-Bold'
+            )
+
+            # Estilo para encabezados
+            heading_style = ParagraphStyle(
+                'InvoiceHeading',
+                parent=styles['Heading2'],
+                fontSize=14,
+                textColor=colors.HexColor('#2e75b6'),
+                spaceAfter=0.2*inch,
+                fontName='Helvetica-Bold'
+            )
+
+            # Estilo para información legal
+            legal_style = ParagraphStyle(
+                'LegalInfo',
+                parent=styles['Normal'],
+                fontSize=10,
+                textColor=colors.HexColor('#666666'),
+                alignment=1  # Center
+            )
+
+            # Contenido del PDF
+            content = []
+
+            # Título principal
+            title = Paragraph("CUENTA DE COBRO", title_style)
+            content.append(title)
+            content.append(Spacer(1, 0.2*inch))
+
+            # Información de la factura
+            invoice_date = datetime.now().strftime('%d/%m/%Y')
+            invoice_info = [
+                ["Fecha:", invoice_date],
+                ["Club/Equipo:", team_name],
+                ["Concepto:", "Inscripción Competencia de Natación"],
+                ["Estado:", "PENDIENTE DE PAGO"]
+            ]
+
+            invoice_table = Table(invoice_info, colWidths=[2*inch, 3*inch])
+            invoice_table.setStyle(TableStyle([
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 11),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                ('BACKGROUND', (0, 3), (1, 3), colors.HexColor('#ffe6e6'))  # Resaltar estado pendiente
+            ]))
+
+            content.append(invoice_table)
+            content.append(Spacer(1, 0.3*inch))
+
+            # Detalle de nadadores
+            swimmers_title = Paragraph("DETALLE DE NADADORES INSCRITOS", heading_style)
+            content.append(swimmers_title)
+
+            # Crear tabla con los nadadores
+            swimmers_data = [["#", "Nombre del Nadador", "Categoría", "Eventos", "Valor"]]
+
+            total_swimmer_cost = 0
+            for i, swimmer in enumerate(team_data['swimmers'], 1):
+                swimmers_data.append([
+                    str(i),
+                    swimmer['name'],
+                    swimmer['category'],
+                    str(swimmer['events_count']),
+                    f"${swimmer_fee:,.0f}"
+                ])
+                total_swimmer_cost += swimmer_fee
+
+            swimmers_table = Table(swimmers_data, colWidths=[0.5*inch, 2.5*inch, 1*inch, 0.8*inch, 1*inch])
+            swimmers_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2e75b6')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('ALIGN', (1, 1), (1, -1), 'LEFT'),  # Nombres alineados a la izquierda
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#d4d4d4')),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8f9fa')])
+            ]))
+
+            content.append(swimmers_table)
+            content.append(Spacer(1, 0.2*inch))
+
+            # Resumen de costos
+            cost_title = Paragraph("RESUMEN DE COSTOS", heading_style)
+            content.append(cost_title)
+
+            cost_summary = [
+                ["Concepto", "Cantidad", "Valor Unitario", "Subtotal"],
+                [f"Inscripción Nadadores ({team_data['swimmer_count']})", str(team_data['swimmer_count']), f"${swimmer_fee:,.0f}", f"${total_swimmer_cost:,.0f}"],
+                ["Inscripción de Equipo", "1", f"${team_fee:,.0f}", f"${team_fee:,.0f}"],
+                ["", "", "", ""],
+                ["TOTAL A PAGAR", "", "", f"${team_data['total_payment']:,.0f}"]
+            ]
+
+            cost_table = Table(cost_summary, colWidths=[2.5*inch, 1*inch, 1.2*inch, 1.2*inch])
+            cost_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2e75b6')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('BACKGROUND', (0, 4), (-1, 4), colors.HexColor('#4472C4')),
+                ('TEXTCOLOR', (0, 4), (-1, 4), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('ALIGN', (0, 1), (0, 3), 'LEFT'),  # Conceptos alineados a la izquierda
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTNAME', (0, 4), (-1, 4), 'Helvetica-Bold'),
+                ('FONTNAME', (0, 1), (-1, 3), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('FONTSIZE', (0, 4), (-1, 4), 12),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, 3), 1, colors.HexColor('#d4d4d4')),
+                ('GRID', (0, 4), (-1, 4), 2, colors.HexColor('#2e75b6')),
+                ('ROWBACKGROUNDS', (0, 1), (-1, 3), [colors.white, colors.HexColor('#f0f8ff')])
+            ]))
+
+            content.append(cost_table)
+            content.append(Spacer(1, 0.4*inch))
+
+            # Información de pago
+            payment_title = Paragraph("INFORMACIÓN DE PAGO", heading_style)
+            content.append(payment_title)
+
+            payment_info = Paragraph(
+                "<b>Forma de Pago:</b> Transferencia bancaria o consignación<br/>"
+                "<b>Plazo de Pago:</b> 5 días hábiles a partir de la fecha de esta cuenta<br/>"
+                "<b>Referencia:</b> Incluir nombre del equipo en la transferencia<br/><br/>"
+                "<i>* Esta cuenta de cobro es válida únicamente para el equipo especificado</i><br/>"
+                "<i>* El pago debe realizarse antes del inicio de la competencia</i>",
+                styles['Normal']
+            )
+            content.append(payment_info)
+            content.append(Spacer(1, 0.3*inch))
+
+            # Pie de página
+            footer_info = Paragraph(
+                f"<i>Cuenta de cobro generada el {datetime.now().strftime('%d/%m/%Y a las %H:%M')}<br/>"
+                "Sistema de Gestión de Competencias - TEN</i>",
+                legal_style
+            )
+            content.append(footer_info)
+
+            # Construir PDF
+            doc.build(content)
+            buffer.seek(0)
+
+            return buffer.getvalue(), f"cuenta_cobro_{team_name.replace(' ', '_')}.pdf"
+
+        except Exception as e:
+            return None, f"Error generando cuenta de cobro: {e}"
 
     def preview_payments_report(self):
         """Generar previsualización del reporte de pagos"""
