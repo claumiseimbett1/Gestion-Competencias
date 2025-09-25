@@ -295,10 +295,10 @@ class SwimmerRegistration:
                 return selected_events
         return self.swimming_events
 
-    def get_available_events_for_swimmer_category(self, category_name):
-        """Obtener las pruebas disponibles para un nadador según su categoría"""
+    def get_available_events_for_swimmer_category(self, category_name, swimmer_age=None):
+        """Obtener las pruebas disponibles para un nadador según su categoría y edad"""
         if self.event_manager:
-            return self.event_manager.get_available_events_for_swimmer(category_name)
+            return self.event_manager.get_available_events_for_swimmer(category_name, swimmer_age)
         return self.get_available_events()
 
     def get_event_categories(self):
@@ -356,7 +356,7 @@ class SwimmerRegistration:
 
     def create_empty_registration_file(self):
         available_events = self.get_available_events()
-        columns = ['NOMBRE Y AP', 'EQUIPO', 'EDAD', 'CAT.', 'SEXO'] + available_events
+        columns = ['NOMBRE Y AP', 'EQUIPO', 'EDAD', 'CAT.', 'SEXO', 'FECHA DE NA'] + available_events
         df = pd.DataFrame(columns=columns)
 
         try:
@@ -382,7 +382,8 @@ class SwimmerRegistration:
                     'team': row['EQUIPO'],
                     'age': row['EDAD'],
                     'category': row['CAT.'],
-                    'gender': row['SEXO']
+                    'gender': row['SEXO'],
+                    'birth_date': row.get('FECHA DE NA', '')
                 }
         
         return False, None
@@ -408,7 +409,8 @@ class SwimmerRegistration:
                 'EQUIPO': swimmer_data['team'],
                 'EDAD': swimmer_data['age'],
                 'CAT.': swimmer_data['category'],
-                'SEXO': swimmer_data['gender']
+                'SEXO': swimmer_data['gender'],
+                'FECHA DE NA': swimmer_data.get('birth_date', '')
             }
             
             for event, time in swimmer_data['events'].items():
@@ -437,6 +439,7 @@ class SwimmerRegistration:
             df.loc[index, 'EDAD'] = swimmer_data['age']
             df.loc[index, 'CAT.'] = swimmer_data['category']
             df.loc[index, 'SEXO'] = swimmer_data['gender']
+            df.loc[index, 'FECHA DE NA'] = swimmer_data.get('birth_date', '')
             
             for event, time in swimmer_data['events'].items():
                 if time and time.strip():
@@ -483,6 +486,7 @@ class SwimmerRegistration:
                 'age': row['EDAD'],
                 'category': row['CAT.'],
                 'gender': row['SEXO'],
+                'birth_date': row.get('FECHA DE NA', ''),
                 'events': events_registered
             })
 
@@ -1545,43 +1549,50 @@ class SwimmerRegistration:
     
     def search_swimmer_in_database(self, search_term):
         """Buscar nadador en la base de datos por nombre, filtrando por categorías del evento"""
-        df, message = self.load_database()
-        if df is None:
-            return [], message
+        try:
+            df, message = self.load_database()
+            if df is None:
+                return [], message
 
-        # Buscar en la columna ATLETA
-        if 'ATLETA' not in df.columns:
-            return [], "No se encontró columna ATLETA en la base de datos"
+            # Buscar en la columna ATLETA
+            if 'ATLETA' not in df.columns:
+                return [], "No se encontró columna ATLETA en la base de datos"
 
-        # Buscar coincidencias por nombre
-        search_term = search_term.lower().strip()
-        name_mask = df['ATLETA'].astype(str).str.lower().str.contains(search_term, na=False, regex=False)
-        matching_rows = df[name_mask]
+            # Buscar coincidencias por nombre
+            search_term = search_term.lower().strip()
+            if not search_term:
+                return [], "Ingrese un término de búsqueda válido"
 
-        # Obtener configuración del evento para edad y categorías
-        event_categories = self.get_event_categories()
-        event_info = None
-        age_criteria = 'event_date'
-        event_start_date = None
+            name_mask = df['ATLETA'].astype(str).str.lower().str.contains(search_term, na=False, regex=False)
+            matching_rows = df[name_mask]
 
-        if self.event_manager:
-            event_info = self.event_manager.get_event_info()
-            if event_info:
-                age_criteria = event_info.get('age_criteria', 'event_date')
-                if event_info.get('start_date'):
-                    try:
-                        from datetime import datetime
-                        event_start_date = datetime.fromisoformat(event_info['start_date']).date()
-                    except:
-                        pass
+            if matching_rows.empty:
+                return [], f"No se encontraron atletas con el nombre '{search_term}'"
 
-        # Filtrar por categorías usando fecha de nacimiento si está disponible
-        if event_categories and self.event_manager:
-            # Extraer nombres de las categorías del evento
-            event_category_names = [cat['name'] for cat in event_categories]
+            # Obtener configuración del evento para edad y categorías
+            event_categories = self.get_event_categories()
+            event_info = None
+            age_criteria = 'event_date'
+            event_start_date = None
 
-            # Buscar columna de fecha de nacimiento (incluyendo las que vienen de ATLETAS)
-            birth_date_column = None
+            if self.event_manager:
+                event_info = self.event_manager.get_event_info()
+                if event_info:
+                    age_criteria = event_info.get('age_criteria', 'event_date')
+                    if event_info.get('start_date'):
+                        try:
+                            from datetime import datetime
+                            event_start_date = datetime.fromisoformat(event_info['start_date']).date()
+                        except:
+                            pass
+
+            # Filtrar por categorías usando fecha de nacimiento si está disponible
+            if event_categories and self.event_manager:
+                # Extraer nombres de las categorías del evento
+                event_category_names = [cat['name'] for cat in event_categories]
+
+                # Buscar columna de fecha de nacimiento (incluyendo las que vienen de ATLETAS)
+                birth_date_column = None
             # Buscar por nombres exactos y patrones
             for col in matching_rows.columns:
                 col_upper = col.upper()
@@ -1683,6 +1694,10 @@ class SwimmerRegistration:
             total_message += f" en las categorías: {', '.join(event_category_names)}"
 
         return matches, total_message
+
+        # If we reach here due to an exception in the filtering logic, return a graceful error
+        except Exception as e:
+            return [], f"Error procesando búsqueda: {str(e)}"
     
     def get_swimmer_latest_times(self, swimmer_data):
         """Obtener los tiempos del nadador agrupando todos sus registros"""
@@ -1966,6 +1981,7 @@ class SwimmerRegistration:
             'age': int(row['EDAD']),
             'category': row['CAT.'],
             'gender': row['SEXO'],
+            'birth_date': row.get('FECHA DE NA', ''),
             'events': events_data
         }
 
@@ -2388,7 +2404,7 @@ class SwimmerRegistration:
 
             # Asegurar que todas las columnas estén presentes
             available_events = self.get_available_events()
-            all_columns = ['NOMBRE Y AP', 'EQUIPO', 'EDAD', 'CAT.', 'SEXO'] + available_events
+            all_columns = ['NOMBRE Y AP', 'EQUIPO', 'EDAD', 'CAT.', 'SEXO', 'FECHA DE NA'] + available_events
             for col in all_columns:
                 if col not in combined_df.columns:
                     combined_df[col] = ""

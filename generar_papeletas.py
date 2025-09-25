@@ -239,13 +239,157 @@ def crear_pagina_con_3_papeletas(papeletas_grupo, styles):
     elements.append(PageBreak())
     return elements
 
+def crear_tabla_excel_style(papeletas_grupo, styles):
+    """Crea una tabla estilo Excel con múltiples nadadores por página"""
+    # Datos de la tabla: encabezados + filas de nadadores
+    table_data = [
+        ['Prueba', 'Serie', 'Carril', 'Nombre', 'Equipo', 'Categoría', 'Tiempo Inscripción', 'Tiempo Final']
+    ]
+
+    for papeleta in papeletas_grupo:
+        table_data.append([
+            papeleta['prueba'],
+            str(papeleta['serie']),
+            str(papeleta['carril']),
+            papeleta['nombre'],
+            papeleta['equipo'],
+            papeleta['categoria'],
+            str(papeleta.get('tiempo_inscripcion', '')),
+            ''  # Campo vacío para tiempo final
+        ])
+
+    # Crear tabla con columnas ajustadas para landscape
+    table = Table(table_data, colWidths=[
+        2.5*inch,  # Prueba
+        0.6*inch,  # Serie
+        0.6*inch,  # Carril
+        1.8*inch,  # Nombre
+        1.3*inch,  # Equipo
+        0.8*inch,  # Categoría
+        1.0*inch,  # Tiempo Inscripción
+        1.0*inch   # Tiempo Final
+    ])
+
+    # Estilo de la tabla
+    table.setStyle(TableStyle([
+        # Encabezados
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4472C4')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+
+        # Filas de datos
+        ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+        ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 1), (-1, -1), 9),
+        ('ALIGN', (1, 1), (2, -1), 'CENTER'),  # Serie y Carril centrados
+        ('ALIGN', (6, 1), (7, -1), 'CENTER'),  # Tiempos centrados
+
+        # Bordes
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+
+        # Alternar colores de filas
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F2F2F2')]),
+
+        # Espacio en celdas
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+    ]))
+
+    return table
+
+def generar_papeletas_pdf_excel_style():
+    """Genera papeletas en formato de tabla Excel para ahorrar papel"""
+    papeletas_sembrado = leer_datos_sembrado()
+
+    if not papeletas_sembrado:
+        return False, "No se pudieron leer los datos del sembrado"
+
+    try:
+        # Crear documento PDF en orientación horizontal (landscape) para más espacio
+        doc = SimpleDocTemplate(
+            ARCHIVO_PAPELETAS.replace('.pdf', '_excel_style.pdf'),
+            pagesize=landscape(A4),
+            rightMargin=15*mm,
+            leftMargin=15*mm,
+            topMargin=15*mm,
+            bottomMargin=15*mm
+        )
+
+        styles = getSampleStyleSheet()
+        elements = []
+
+        # Título del documento
+        title_style = ParagraphStyle(
+            'DocumentTitle',
+            parent=styles['Heading1'],
+            fontSize=14,
+            textColor=colors.black,
+            alignment=TA_CENTER,
+            spaceAfter=15,
+            fontName='Helvetica-Bold'
+        )
+        elements.append(Paragraph("PAPELETAS DE JUECES - COMPETENCIA DE NATACIÓN", title_style))
+        elements.append(Spacer(1, 10))
+
+        # Agrupar eventos y series para optimizar espacio
+        events_grouped = {}
+        for papeleta in papeletas_sembrado:
+            event_key = papeleta['prueba']
+            if event_key not in events_grouped:
+                events_grouped[event_key] = []
+            events_grouped[event_key].append(papeleta)
+
+        # Procesar cada evento
+        for event_name, event_papeletas in events_grouped.items():
+            # Título del evento
+            event_title = ParagraphStyle(
+                'EventTitle',
+                parent=styles['Heading2'],
+                fontSize=12,
+                textColor=colors.HexColor('#4472C4'),
+                alignment=TA_LEFT,
+                spaceAfter=10,
+                fontName='Helvetica-Bold'
+            )
+            elements.append(Paragraph(f"EVENTO: {event_name}", event_title))
+
+            # Agrupar por series (máximo 15 nadadores por página para mantener legibilidad)
+            NADADORES_POR_PAGINA = 15
+            for i in range(0, len(event_papeletas), NADADORES_POR_PAGINA):
+                grupo = event_papeletas[i:i+NADADORES_POR_PAGINA]
+                table = crear_tabla_excel_style(grupo, styles)
+                elements.append(table)
+                elements.append(Spacer(1, 15))
+
+                # Agregar salto de página si no es el último grupo
+                if i + NADADORES_POR_PAGINA < len(event_papeletas):
+                    elements.append(PageBreak())
+
+            # Salto de página entre eventos
+            if event_name != list(events_grouped.keys())[-1]:
+                elements.append(PageBreak())
+
+        # Construir el PDF
+        doc.build(elements)
+        total_pages = math.ceil(len(papeletas_sembrado) / 15)
+        return True, f"Papeletas Excel-style generadas exitosamente: {ARCHIVO_PAPELETAS.replace('.pdf', '_excel_style.pdf')} ({len(papeletas_sembrado)} registros en ~{total_pages} páginas)"
+
+    except Exception as e:
+        return False, f"Error al generar papeletas Excel-style: {e}"
+
 def generar_papeletas_pdf():
     """Genera el archivo PDF con 3 papeletas por página, optimizado para impresión"""
     papeletas_sembrado = leer_datos_sembrado()
-    
+
     if not papeletas_sembrado:
         return False, "No se pudieron leer los datos del sembrado"
-    
+
     try:
         # Crear documento PDF en orientación vertical (portrait) con márgenes optimizados
         doc = SimpleDocTemplate(
@@ -256,10 +400,10 @@ def generar_papeletas_pdf():
             topMargin=15*mm,
             bottomMargin=15*mm
         )
-        
+
         styles = getSampleStyleSheet()
         elements = []
-        
+
         # Título del documento
         title_style = ParagraphStyle(
             'DocumentTitle',
@@ -272,17 +416,17 @@ def generar_papeletas_pdf():
         )
         elements.append(Paragraph("PAPELETAS DE JUECES - COMPETENCIA DE NATACIÓN", title_style))
         elements.append(Spacer(1, 10))
-        
+
         # Agrupar papeletas de 3 en 3 para cada página
         for i in range(0, len(papeletas_sembrado), 3):
             grupo_papeletas = papeletas_sembrado[i:i+3]
             pagina_elements = crear_pagina_con_3_papeletas(grupo_papeletas, styles)
             elements.extend(pagina_elements)
-        
+
         # Construir el PDF
         doc.build(elements)
         return True, f"Papeletas PDF generadas exitosamente: {ARCHIVO_PAPELETAS} ({len(papeletas_sembrado)} papeletas en {math.ceil(len(papeletas_sembrado)/3)} páginas)"
-        
+
     except Exception as e:
         return False, f"Error al generar papeletas: {e}"
 

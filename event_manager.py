@@ -32,8 +32,27 @@ class EventManager:
             "400M COMBINADO INDIVIDUAL"
         ]
 
+        # Definir restricciones de edad por evento (edad mínima)
+        self.event_age_restrictions = {
+            "50M CROLL": 6,
+            "100M CROLL": 8,
+            "200M CROLL": 10,
+            "400M CROLL": 12,
+            "50M ESPALDA": 6,
+            "100M ESPALDA": 8,
+            "200M ESPALDA": 10,
+            "50M PECHO": 7,
+            "100M PECHO": 9,
+            "200M PECHO": 11,
+            "50M MARIPOSA": 8,
+            "100M MARIPOSA": 10,
+            "200M MARIPOSA": 12,
+            "200M COMBINADO INDIVIDUAL": 10,
+            "400M COMBINADO INDIVIDUAL": 12
+        }
+
     def save_event_config(self, event_name, categories, event_order, category_events, min_age, max_age,
-                         swimmer_fee=None, team_fee=None, welcome_message=None, event_logo=None,
+                         swimmer_fee=None, team_fee=None, welcome_message=None, farewell_message=None, event_logo=None,
                          start_date=None, end_date=None, age_criteria=None):
         """Guardar la configuración del evento"""
         config = {
@@ -46,6 +65,7 @@ class EventManager:
             'swimmer_fee': swimmer_fee or 0,
             'team_fee': team_fee or 0,
             'welcome_message': welcome_message or '',
+            'farewell_message': farewell_message or '',
             'event_logo': event_logo,
             'start_date': start_date.isoformat() if start_date else None,
             'end_date': end_date.isoformat() if end_date else None,
@@ -113,6 +133,7 @@ class EventManager:
                 'swimmer_fee': config.get('swimmer_fee', 0),
                 'team_fee': config.get('team_fee', 0),
                 'welcome_message': config.get('welcome_message', ''),
+                'farewell_message': config.get('farewell_message', ''),
                 'event_logo': config.get('event_logo', ''),
                 'start_date': config.get('start_date', ''),
                 'end_date': config.get('end_date', ''),
@@ -138,7 +159,7 @@ class EventManager:
 
     def update_event_config(self, event_name=None, categories=None, event_order=None, category_events=None,
                           min_age=None, max_age=None, swimmer_fee=None, team_fee=None,
-                          welcome_message=None, event_logo=None, start_date=None, end_date=None, age_criteria=None):
+                          welcome_message=None, farewell_message=None, event_logo=None, start_date=None, end_date=None, age_criteria=None):
         """Actualizar configuración existente"""
         config = self.load_event_config()
         if not config:
@@ -162,6 +183,8 @@ class EventManager:
             config['team_fee'] = team_fee
         if welcome_message is not None:
             config['welcome_message'] = welcome_message
+        if farewell_message is not None:
+            config['farewell_message'] = farewell_message
         if event_logo is not None:
             config['event_logo'] = event_logo
         if start_date is not None:
@@ -383,12 +406,35 @@ class EventManager:
 
         return True, "Configuración válida"
 
-    def get_available_events_for_swimmer(self, category_name):
-        """Obtener las pruebas disponibles para un nadador según su categoría"""
+    def get_available_events_for_swimmer(self, category_name, swimmer_age=None):
+        """Obtener las pruebas disponibles para un nadador según su categoría y edad"""
         if not category_name:
-            return self.get_selected_events()
+            available_events = self.get_selected_events()
+        else:
+            available_events = self.get_events_for_category(category_name)
 
-        return self.get_events_for_category(category_name)
+        # Filtrar por edad si se proporciona
+        if swimmer_age is not None:
+            available_events = self.filter_events_by_age(available_events, swimmer_age)
+
+        return available_events
+
+    def filter_events_by_age(self, events, swimmer_age):
+        """Filtrar eventos basándose en las restricciones de edad"""
+        if not events or swimmer_age is None:
+            return events
+
+        filtered_events = []
+        for event in events:
+            min_age = self.event_age_restrictions.get(event, 6)  # edad mínima por defecto es 6
+            if swimmer_age >= min_age:
+                filtered_events.append(event)
+
+        return filtered_events
+
+    def get_event_age_restriction(self, event_name):
+        """Obtener la restricción de edad para un evento específico"""
+        return self.event_age_restrictions.get(event_name, 6)
 
     def parse_age_range(self, age_range_str):
         """Parsear un string de rango de edad y retornar min_age, max_age"""
@@ -747,6 +793,19 @@ class EventManager:
                 story.append(Spacer(1, 15))
 
             # Footer
+            # Mensaje de despedida si existe
+            farewell_msg = event_info.get('farewell_message', '').strip()
+            if farewell_msg:
+                story.append(Spacer(1, 30))
+                story.append(Paragraph("MENSAJE DE DESPEDIDA", section_style))
+                farewell_style = ParagraphStyle('Farewell',
+                                             parent=styles['Normal'],
+                                             fontSize=12,
+                                             spaceAfter=15,
+                                             alignment=TA_LEFT)
+                story.append(Paragraph(farewell_msg.replace('\n', '<br/>'), farewell_style))
+                story.append(Spacer(1, 20))
+
             story.append(Spacer(1, 50))
             footer_style = ParagraphStyle('Footer',
                                         parent=styles['Normal'],

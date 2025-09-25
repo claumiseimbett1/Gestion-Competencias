@@ -323,6 +323,14 @@ def mostrar_creacion_evento():
             if welcome_message:
                 st.markdown("**📝 Mensaje de Bienvenida:**")
                 st.text_area("", value=welcome_message, height=100, disabled=True, key="detail_welcome_message")
+
+            # Mostrar mensaje de despedida si existe
+            farewell_message = event_info.get('farewell_message', '').strip()
+            if farewell_message:
+                st.markdown("**📝 Mensaje de Despedida:**")
+                st.text_area("", value=farewell_message, height=100, disabled=True, key="detail_farewell_message")
+
+            if welcome_message or farewell_message:
                 st.markdown("---")
 
             col1, col2 = st.columns(2)
@@ -561,6 +569,18 @@ def mostrar_paso_datos_basicos(event_manager, event_info):
         key="evento_welcome_message",
         help="Mensaje que aparecerá en los reportes y documentos del evento (máximo 1000 caracteres)",
         placeholder="Escriba aquí un mensaje de bienvenida para los participantes del evento..."
+    )
+
+    # Mensaje de despedida
+    st.markdown("**📝 Mensaje de Despedida (Opcional):**")
+    farewell_message = st.text_area(
+        "Mensaje de despedida para el evento",
+        value=event_info.get('farewell_message', '') if event_info else '',
+        max_chars=1000,
+        height=100,
+        key="evento_farewell_message",
+        help="Mensaje de cierre que aparecerá en los reportes y documentos del evento (máximo 1000 caracteres)",
+        placeholder="Escriba aquí un mensaje de despedida para los participantes del evento..."
     )
 
     # Logo del evento
@@ -808,9 +828,11 @@ def mostrar_paso_pruebas_evento(event_manager):
             for event in available_events:
                 col_a, col_b = st.columns([3, 1])
                 with col_a:
-                    st.write(f"• {event}")
+                    # Obtener restricción de edad para el evento
+                    min_age = event_manager.get_event_age_restriction(event)
+                    st.write(f"• {event} <small>(≥{min_age} años)</small>", unsafe_allow_html=True)
                 with col_b:
-                    if st.button("➡️", key=f"add_event_{event}", help=f"Agregar {event}"):
+                    if st.button("➡️", key=f"add_event_{event}", help=f"Agregar {event} (edad mínima: {min_age} años)"):
                         st.session_state.evento_event_order.append(event)
                         st.rerun()
         else:
@@ -993,6 +1015,12 @@ def mostrar_paso_finalizar(event_manager, event_info):
             st.write("**📝 Mensaje de bienvenida:**")
             st.text_area("", value=welcome_message, height=100, disabled=True, key="preview_welcome_message")
 
+        # Mostrar mensaje de despedida si existe
+        farewell_message = st.session_state.get('evento_farewell_message', '').strip()
+        if farewell_message:
+            st.write("**📝 Mensaje de despedida:**")
+            st.text_area("", value=farewell_message, height=100, disabled=True, key="preview_farewell_message")
+
     with col2:
         st.markdown("**🎯 Categorías y sus pruebas:**")
         for category in st.session_state.evento_categories:
@@ -1045,6 +1073,7 @@ def mostrar_paso_finalizar(event_manager, event_info):
                 swimmer_fee,
                 team_fee,
                 welcome_message,
+                farewell_message,
                 event_logo,
                 start_date,
                 end_date,
@@ -1999,11 +2028,24 @@ def sembrado_competencia_interface():
                             st.markdown(f"""
                             <div style="background-color: {bg_color}; padding: 8px; border-radius: 5px; border: 1px solid #ccc; margin: 2px 0;">
                                 <strong>{current_swimmer['nombre']}</strong><br>
-                                <small>{current_swimmer['equipo']} | {current_swimmer['categoria']}<br>
-                                Tiempo: {current_swimmer['tiempo']}</small>
+                                <small>{current_swimmer['equipo']} | {current_swimmer['categoria']}</small>
                             </div>
                             """, unsafe_allow_html=True)
-                            
+
+                            # Campo editable para tiempo de inscripción
+                            new_time = st.text_input(
+                                "Tiempo:",
+                                value=current_swimmer['tiempo'],
+                                key=f"time_{serie_idx}_{lane_idx}",
+                                placeholder="MM:SS.dd",
+                                help="Ingresa el tiempo en formato MM:SS.dd (ej: 02:15.45)"
+                            )
+
+                            # Actualizar tiempo si cambió
+                            if new_time != current_swimmer['tiempo']:
+                                seeding_data['series'][serie_idx]['carriles'][lane_idx]['tiempo'] = new_time
+                                st.session_state[seeding_key] = seeding_data
+
                             # Botón para remover nadador
                             if st.button("❌", key=f"remove_{serie_idx}_{lane_idx}", help="Remover nadador"):
                                 # Mover a disponibles
@@ -2636,8 +2678,8 @@ def generar_papeletas_interface():
     
     st.markdown("---")
     
-    # Dos columnas para las dos opciones de generación
-    col1, col2 = st.columns(2)
+    # Tres columnas para las opciones de generación
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         st.markdown("### 📄 Papeletas PDF")
@@ -2689,6 +2731,32 @@ def generar_papeletas_interface():
                     file_name="papeletas_jueces.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     key="download_excel"
+                )
+
+    with col3:
+        st.markdown("### 📊 Papeletas Excel-Style")
+        st.info("Formato: Tabla como Excel con múltiples nadadores por página, ahorra papel")
+
+        if st.button("🚀 Generar Excel-Style", type="primary", key="gen_excel_style"):
+            with st.spinner("Generando papeletas estilo Excel..."):
+                try:
+                    success, message = papeletas_pdf_module.generar_papeletas_pdf_excel_style()
+                    if success:
+                        st.success(message)
+                    else:
+                        st.error(message)
+                except Exception as e:
+                    st.error(f"Error al generar papeletas Excel-style: {e}")
+
+        # Descarga Excel-style PDF
+        if os.path.exists("papeletas_jueces_excel_style.pdf"):
+            with open("papeletas_jueces_excel_style.pdf", "rb") as file:
+                st.download_button(
+                    label="⬇️ Descargar Excel-Style PDF",
+                    data=file.read(),
+                    file_name="papeletas_jueces_excel_style.pdf",
+                    mime="application/pdf",
+                    key="download_excel_style"
                 )
 
 def gestion_archivos():
@@ -2895,11 +2963,23 @@ def inscripcion_nadadores_interface():
             with col1:
                 name = st.text_input("Nombre y Apellidos", placeholder="Ej: Juan Pérez García")
                 team = st.text_input("Equipo", placeholder="Ej: Club Natación TEN")
-                age = st.number_input("Edad", min_value=6, max_value=99, value=12)
-                
+                from datetime import datetime, date
+                birth_date = st.date_input("Fecha de Nacimiento",
+                                         value=date.today().replace(year=date.today().year - 12),
+                                         min_value=date(1900, 1, 1),
+                                         max_value=date.today(),
+                                         help="Selecciona la fecha de nacimiento del nadador")
+
+                # Calcular edad automáticamente basada en la fecha de nacimiento
+                if birth_date:
+                    age = registration_system.calculate_age_by_criteria(birth_date) if hasattr(registration_system, 'calculate_age_by_criteria') else date.today().year - birth_date.year
+                    st.info(f"Edad calculada: **{age} años**")
+                else:
+                    age = 12  # valor por defecto
+
             with col2:
                 gender = st.selectbox("Sexo", ["M", "F"], format_func=lambda x: "Masculino" if x == "M" else "Femenino")
-                category = registration_system.get_category_by_age(age, gender)
+                category = registration_system.get_category_by_age(age, gender, birth_date)
                 st.info(f"Categoría automática: **{category}**")
                 
             st.markdown("### Pruebas de Inscripción")
@@ -2908,8 +2988,15 @@ def inscripcion_nadadores_interface():
             events_data = {}
             col1, col2, col3 = st.columns(3)
             
-            # Obtener eventos disponibles del evento configurado
-            available_events = registration_system.get_available_events()
+            # Obtener eventos disponibles filtrados por edad para la categoría del nadador
+            available_events = registration_system.get_available_events_for_swimmer_category(category, age)
+
+            # Mostrar información sobre restricciones de edad si hay eventos filtrados
+            all_events = registration_system.get_available_events()
+            if len(available_events) < len(all_events):
+                excluded_events = [e for e in all_events if e not in available_events]
+                if excluded_events:
+                    st.info(f"ℹ️ Eventos no disponibles para edad {age}: {', '.join(excluded_events)}")
 
             for i, event in enumerate(available_events):
                 with [col1, col2, col3][i % 3]:
@@ -2939,6 +3026,7 @@ def inscripcion_nadadores_interface():
                         'name': name.strip(),
                         'team': team.strip(),
                         'age': age,
+                        'birth_date': birth_date,
                         'category': category,
                         'gender': gender,
                         'events': events_data
@@ -3310,10 +3398,34 @@ def inscripcion_nadadores_interface():
                         with col1:
                             edit_name = st.text_input("Nombre y Apellidos", value=swimmer_data['name'], key=f"edit_name_{i}")
                             edit_team = st.text_input("Equipo", value=swimmer_data['team'], key=f"edit_team_{i}")
-                            edit_age = st.number_input("Edad", min_value=6, max_value=99, value=swimmer_data['age'], key=f"edit_age_{i}")
-                            
+
+                            # Usar fecha de nacimiento si está disponible, sino calcular desde la edad
+                            current_birth_date = swimmer_data.get('birth_date')
+                            if current_birth_date is None:
+                                # Si no hay fecha de nacimiento, estimar desde la edad
+                                current_birth_date = date.today().replace(year=date.today().year - swimmer_data['age'])
+                            elif isinstance(current_birth_date, str):
+                                try:
+                                    current_birth_date = datetime.strptime(current_birth_date, '%Y-%m-%d').date()
+                                except:
+                                    current_birth_date = date.today().replace(year=date.today().year - swimmer_data['age'])
+
+                            edit_birth_date = st.date_input("Fecha de Nacimiento",
+                                                           value=current_birth_date,
+                                                           min_value=date(1900, 1, 1),
+                                                           max_value=date.today(),
+                                                           key=f"edit_birth_date_{i}",
+                                                           help="Selecciona la fecha de nacimiento del nadador")
+
+                            # Calcular edad automáticamente
+                            if edit_birth_date:
+                                edit_age = registration_system.calculate_age_by_criteria(edit_birth_date) if hasattr(registration_system, 'calculate_age_by_criteria') else date.today().year - edit_birth_date.year
+                                st.info(f"Edad calculada: **{edit_age} años**")
+                            else:
+                                edit_age = swimmer_data['age']  # mantener edad original
+
                         with col2:
-                            edit_gender = st.selectbox("Sexo", ["M", "F"], 
+                            edit_gender = st.selectbox("Sexo", ["M", "F"],
                                                      index=0 if swimmer_data['gender'] == 'M' else 1,
                                                      format_func=lambda x: "Masculino" if x == "M" else "Femenino",
                                                      key=f"edit_gender_{i}")
@@ -3326,8 +3438,15 @@ def inscripcion_nadadores_interface():
                         edit_events_data = {}
                         col1, col2, col3 = st.columns(3)
 
-                        # Obtener eventos disponibles del evento configurado
-                        edit_available_events = registration_system.get_available_events()
+                        # Obtener eventos disponibles filtrados por edad para la categoría del nadador
+                        edit_available_events = registration_system.get_available_events_for_swimmer_category(edit_category, edit_age)
+
+                        # Mostrar información sobre restricciones de edad si hay eventos filtrados
+                        all_edit_events = registration_system.get_available_events()
+                        if len(edit_available_events) < len(all_edit_events):
+                            excluded_edit_events = [e for e in all_edit_events if e not in edit_available_events]
+                            if excluded_edit_events:
+                                st.info(f"ℹ️ Eventos no disponibles para edad {edit_age}: {', '.join(excluded_edit_events)}")
 
                         for j, event in enumerate(edit_available_events):
                             with [col1, col2, col3][j % 3]:
@@ -3355,6 +3474,7 @@ def inscripcion_nadadores_interface():
                                     'name': edit_name.strip(),
                                     'team': edit_team.strip(),
                                     'age': edit_age,
+                                    'birth_date': edit_birth_date,
                                     'category': edit_category,
                                     'gender': edit_gender,
                                     'events': edit_events_data
