@@ -1403,8 +1403,9 @@ def generate_seeding_excel_from_manual(seeding_data, event_name, gender):
                 ws.cell(row=current_row, column=4, value=swimmer['edad'])
                 ws.cell(row=current_row, column=5, value=swimmer['categoria'])
                 ws.cell(row=current_row, column=6, value=swimmer['tiempo'])
-                # Tiempo competencia vacío para llenar después
-                comp_cell = ws.cell(row=current_row, column=7, value="")
+                # Tiempo competencia (tomar valor si existe)
+                comp_time = swimmer.get('tiempo_competencia', '')
+                comp_cell = ws.cell(row=current_row, column=7, value=comp_time)
                 comp_cell.font = Font(color="0000FF")
             current_row += 1
         
@@ -2032,18 +2033,30 @@ def sembrado_competencia_interface():
                             </div>
                             """, unsafe_allow_html=True)
 
-                            # Campo editable para tiempo de inscripción
-                            new_time = st.text_input(
-                                "Tiempo:",
+                            # Mostrar tiempo de sembrado (no editable)
+                            st.text_input(
+                                "T. Sembrado:",
                                 value=current_swimmer['tiempo'],
-                                key=f"time_{serie_idx}_{lane_idx}",
-                                placeholder="MM:SS.dd",
-                                help="Ingresa el tiempo en formato MM:SS.dd (ej: 02:15.45)"
+                                key=f"seeding_time_{serie_idx}_{lane_idx}",
+                                disabled=True,
+                                help="Tiempo original de sembrado (no modificable)"
                             )
 
-                            # Actualizar tiempo si cambió
-                            if new_time != current_swimmer['tiempo']:
-                                seeding_data['series'][serie_idx]['carriles'][lane_idx]['tiempo'] = new_time
+                            # Campo editable para tiempo de competencia
+                            competition_time_key = f"comp_time_{serie_idx}_{lane_idx}"
+                            current_comp_time = current_swimmer.get('tiempo_competencia', '')
+
+                            new_comp_time = st.text_input(
+                                "T. Competencia:",
+                                value=current_comp_time,
+                                key=competition_time_key,
+                                placeholder="MM:SS.dd",
+                                help="Ingresa el tiempo de competencia en formato MM:SS.dd (ej: 02:15.45)"
+                            )
+
+                            # Actualizar tiempo de competencia si cambió
+                            if new_comp_time != current_comp_time:
+                                seeding_data['series'][serie_idx]['carriles'][lane_idx]['tiempo_competencia'] = new_comp_time
                                 st.session_state[seeding_key] = seeding_data
 
                             # Botón para remover nadador

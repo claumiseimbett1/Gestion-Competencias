@@ -407,13 +407,13 @@ def generar_papeletas_pdf_excel_3_per_row():
             elements.append(fila_table)
             elements.append(Spacer(1, 10))
 
-            # Salto de página cada 4 filas (12 papeletas por página)
-            if (i // PAPELETAS_POR_FILA + 1) % 4 == 0 and i + PAPELETAS_POR_FILA < len(papeletas_sembrado):
+            # Salto de página cada 6 filas (18 papeletas por página)
+            if (i // PAPELETAS_POR_FILA + 1) % 6 == 0 and i + PAPELETAS_POR_FILA < len(papeletas_sembrado):
                 elements.append(PageBreak())
 
         # Construir el PDF
         doc.build(elements)
-        total_pages = math.ceil(len(papeletas_sembrado) / 12)  # 12 papeletas por página (4 filas x 3)
+        total_pages = math.ceil(len(papeletas_sembrado) / 18)  # 18 papeletas por página (6 filas x 3)
         return True, f"Papeletas Excel 3x3 generadas exitosamente: {ARCHIVO_PAPELETAS.replace('.pdf', '_excel_3_per_row.pdf')} ({len(papeletas_sembrado)} papeletas en ~{total_pages} páginas)"
 
     except Exception as e:
