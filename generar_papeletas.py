@@ -303,6 +303,122 @@ def crear_tabla_excel_style(papeletas_grupo, styles):
 
     return table
 
+def crear_papeleta_individual_excel(papeleta, width_per_papeleta):
+    """Crea una papeleta individual en formato Excel"""
+    papeleta_data = [
+        ['PRUEBA:', papeleta['prueba']],
+        ['SERIE:', str(papeleta['serie'])],
+        ['CARRIL:', str(papeleta['carril'])],
+        ['NADADOR:', papeleta['nombre']],
+        ['EQUIPO:', papeleta['equipo']],
+        ['CATEGORÍA:', papeleta['categoria']],
+        ['T. INSCRIPCIÓN:', str(papeleta.get('tiempo_inscripcion', ''))],
+        ['T. FINAL:', '']
+    ]
+
+    papeleta_table = Table(papeleta_data, colWidths=[width_per_papeleta * 0.4, width_per_papeleta * 0.6])
+
+    papeleta_table.setStyle(TableStyle([
+        # Estilo general
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ('LEFTPADDING', (0, 0), (-1, -1), 3),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+
+        # Encabezados de campo en negrita
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#E6F3FF')),
+
+        # Campo de tiempo final resaltado
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#FFE6E6')),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+    ]))
+
+    return papeleta_table
+
+def generar_papeletas_pdf_excel_3_per_row():
+    """Genera papeletas exactas como Excel con 3 por fila para ahorrar papel"""
+    papeletas_sembrado = leer_datos_sembrado()
+
+    if not papeletas_sembrado:
+        return False, "No se pudieron leer los datos del sembrado"
+
+    try:
+        # Crear documento PDF en orientación horizontal (landscape) para 3 columnas
+        doc = SimpleDocTemplate(
+            ARCHIVO_PAPELETAS.replace('.pdf', '_excel_3_per_row.pdf'),
+            pagesize=landscape(A4),
+            rightMargin=10*mm,
+            leftMargin=10*mm,
+            topMargin=15*mm,
+            bottomMargin=15*mm
+        )
+
+        styles = getSampleStyleSheet()
+        elements = []
+
+        # Título del documento
+        title_style = ParagraphStyle(
+            'DocumentTitle',
+            parent=styles['Heading1'],
+            fontSize=16,
+            textColor=colors.black,
+            alignment=TA_CENTER,
+            spaceAfter=20,
+            fontName='Helvetica-Bold'
+        )
+        elements.append(Paragraph("PAPELETAS DE JUECES - COMPETENCIA DE NATACIÓN", title_style))
+        elements.append(Spacer(1, 15))
+
+        # Ancho disponible para 3 papeletas
+        page_width = landscape(A4)[0] - 20*mm  # Restar márgenes
+        width_per_papeleta = page_width / 3
+
+        # Agrupar papeletas de 3 en 3
+        PAPELETAS_POR_FILA = 3
+        for i in range(0, len(papeletas_sembrado), PAPELETAS_POR_FILA):
+            # Crear fila con hasta 3 papeletas
+            fila_papeletas = papeletas_sembrado[i:i+PAPELETAS_POR_FILA]
+
+            # Crear tablas individuales para cada papeleta
+            tablas_fila = []
+            for papeleta in fila_papeletas:
+                tabla_papeleta = crear_papeleta_individual_excel(papeleta, width_per_papeleta)
+                tablas_fila.append(tabla_papeleta)
+
+            # Rellenar con espacios vacíos si quedan menos de 3
+            while len(tablas_fila) < PAPELETAS_POR_FILA:
+                tabla_vacia = Table([['', '']], colWidths=[width_per_papeleta * 0.4, width_per_papeleta * 0.6])
+                tabla_vacia.setStyle(TableStyle([('FONTSIZE', (0, 0), (-1, -1), 1)]))
+                tablas_fila.append(tabla_vacia)
+
+            # Crear tabla contenedora para las 3 papeletas en una fila
+            fila_table = Table([tablas_fila], colWidths=[width_per_papeleta] * PAPELETAS_POR_FILA)
+            fila_table.setStyle(TableStyle([
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 5),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+            ]))
+
+            elements.append(fila_table)
+            elements.append(Spacer(1, 10))
+
+            # Salto de página cada 4 filas (12 papeletas por página)
+            if (i // PAPELETAS_POR_FILA + 1) % 4 == 0 and i + PAPELETAS_POR_FILA < len(papeletas_sembrado):
+                elements.append(PageBreak())
+
+        # Construir el PDF
+        doc.build(elements)
+        total_pages = math.ceil(len(papeletas_sembrado) / 12)  # 12 papeletas por página (4 filas x 3)
+        return True, f"Papeletas Excel 3x3 generadas exitosamente: {ARCHIVO_PAPELETAS.replace('.pdf', '_excel_3_per_row.pdf')} ({len(papeletas_sembrado)} papeletas en ~{total_pages} páginas)"
+
+    except Exception as e:
+        return False, f"Error al generar papeletas Excel 3x3: {e}"
+
 def generar_papeletas_pdf_excel_style():
     """Genera papeletas en formato de tabla Excel para ahorrar papel"""
     papeletas_sembrado = leer_datos_sembrado()

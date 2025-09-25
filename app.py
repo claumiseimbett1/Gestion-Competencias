@@ -655,7 +655,7 @@ def mostrar_creacion_manual_categorias():
         max_age_cat = st.number_input("Edad final", min_value=5, max_value=80, value=13, key="new_cat_max_age")
 
     with col4:
-        if st.button("➕ Agregar", type="primary"):
+        if st.button("➕ Agregar", type="primary", key="add_category_btn"):
             if new_category_name.strip():
                 # Validar rango de edad
                 if min_age_cat > max_age_cat:
@@ -679,9 +679,9 @@ def mostrar_creacion_manual_categorias():
                         # Ordenar categorías por edad
                         st.session_state.evento_categories = event_manager_module.EventManager().sort_categories_by_age(
                             st.session_state.evento_categories)
-                        st.success(f"Categoría '{new_category_name}' agregada")
-                        # Limpiar campos
+                        # Limpiar campos inmediatamente
                         st.session_state.new_cat_name = ""
+                        st.success(f"✅ Categoría '{new_category_name.strip()}' agregada exitosamente")
                         st.rerun()
                     else:
                         st.error(message)
@@ -706,7 +706,7 @@ def mostrar_carga_excel_categorias(event_manager):
     )
 
     if uploaded_file:
-        if st.button("📤 Cargar Categorías", type="primary"):
+        if st.button("📤 Cargar Categorías", type="primary", key="load_categories_btn"):
             success, result = event_manager.load_categories_from_excel(uploaded_file)
 
             if success:
@@ -2734,29 +2734,29 @@ def generar_papeletas_interface():
                 )
 
     with col3:
-        st.markdown("### 📊 Papeletas Excel-Style")
-        st.info("Formato: Tabla como Excel con múltiples nadadores por página, ahorra papel")
+        st.markdown("### 📊 Papeletas 3x3 Excel")
+        st.info("Formato: Exacto como Excel, 3 papeletas por fila para imprimir y recortar")
 
-        if st.button("🚀 Generar Excel-Style", type="primary", key="gen_excel_style"):
-            with st.spinner("Generando papeletas estilo Excel..."):
+        if st.button("🚀 Generar 3x3 Excel", type="primary", key="gen_excel_3x3"):
+            with st.spinner("Generando papeletas 3x3 Excel..."):
                 try:
-                    success, message = papeletas_pdf_module.generar_papeletas_pdf_excel_style()
+                    success, message = papeletas_pdf_module.generar_papeletas_pdf_excel_3_per_row()
                     if success:
                         st.success(message)
                     else:
                         st.error(message)
                 except Exception as e:
-                    st.error(f"Error al generar papeletas Excel-style: {e}")
+                    st.error(f"Error al generar papeletas 3x3 Excel: {e}")
 
-        # Descarga Excel-style PDF
-        if os.path.exists("papeletas_jueces_excel_style.pdf"):
-            with open("papeletas_jueces_excel_style.pdf", "rb") as file:
+        # Descarga 3x3 Excel PDF
+        if os.path.exists("papeletas_jueces_excel_3_per_row.pdf"):
+            with open("papeletas_jueces_excel_3_per_row.pdf", "rb") as file:
                 st.download_button(
-                    label="⬇️ Descargar Excel-Style PDF",
+                    label="⬇️ Descargar 3x3 Excel PDF",
                     data=file.read(),
-                    file_name="papeletas_jueces_excel_style.pdf",
+                    file_name="papeletas_jueces_excel_3_per_row.pdf",
                     mime="application/pdf",
-                    key="download_excel_style"
+                    key="download_excel_3x3"
                 )
 
 def gestion_archivos():
@@ -2822,9 +2822,9 @@ def gestion_archivos():
                 st.info(f"📈 Total de registros: {total_records:,}")
                 
             except Exception as e:
-                st.warning("⚠️ Error al leer información de la base de datos local")
+                pass  # No mostrar error innecesario
         else:
-            st.warning("⚠️ No se encuentra base de datos local")
+            pass  # No mostrar warning innecesario si no hay base de datos
     
     with col4:
         st.markdown("#### 🔄 Cargar Base de Datos Externa")
@@ -3090,9 +3090,9 @@ def inscripcion_nadadores_interface():
                             else:
                                 st.warning("⚠️ Base de datos sin hojas válidas")
                         except Exception as e:
-                            st.error("❌ Error al leer base de datos")
+                            pass  # No mostrar error innecesario
                     else:
-                        st.error("❌ No se encuentra base de datos")
+                        pass  # No mostrar error innecesario si no hay base de datos
                 
                 with col_db2:
                     with st.popover("🔄 Cambiar BD", help="Cargar una base de datos diferente"):
