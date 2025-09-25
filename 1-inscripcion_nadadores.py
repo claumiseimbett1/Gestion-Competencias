@@ -1593,109 +1593,108 @@ class SwimmerRegistration:
 
                 # Buscar columna de fecha de nacimiento (incluyendo las que vienen de ATLETAS)
                 birth_date_column = None
-            # Buscar por nombres exactos y patrones
-            for col in matching_rows.columns:
-                col_upper = col.upper()
-                if any(keyword in col_upper for keyword in ['NACIMIENTO', 'BIRTH', 'FECHA_NAC', 'F_NACIMIENTO']):
-                    birth_date_column = col
-                    print(f"Encontrada columna de fecha de nacimiento: {col}")
-                    break
-
-            if birth_date_column:
-                # Filtrar por edad calculada desde fecha de nacimiento
-                valid_rows = []
-                debug_info = []
-
-                for idx, row in matching_rows.iterrows():
-                    birth_date = row.get(birth_date_column)
-                    athlete_name = row.get('ATLETA', 'N/A')
-
-                    if birth_date and not pd.isna(birth_date):
-                        calculated_age = self.calculate_age_by_criteria(birth_date, event_start_date, age_criteria)
-                        if calculated_age:
-                            debug_info.append(f"{athlete_name}: {birth_date} → edad {calculated_age}")
-                            # Buscar categoría correspondiente
-                            for category in event_categories:
-                                category_name = category.get('name', '')
-                                age_range = category.get('age_range', '')
-                                if age_range:
-                                    min_age, max_age = self.event_manager.parse_age_range(age_range)
-                                    if min_age is not None and max_age is not None:
-                                        if min_age <= calculated_age <= max_age:
-                                            valid_rows.append(idx)
-                                            debug_info.append(f"  ✓ Válido para categoría {category_name} ({age_range})")
-                                            break
-                            else:
-                                debug_info.append(f"  ✗ No válido para ninguna categoría del evento")
-                        else:
-                            debug_info.append(f"{athlete_name}: Error calculando edad desde {birth_date}")
-                    else:
-                        debug_info.append(f"{athlete_name}: Sin fecha de nacimiento válida")
-
-                print(f"Filtrado por fecha de nacimiento:")
-                for info in debug_info[:10]:  # Mostrar solo los primeros 10 para no saturar
-                    print(f"  {info}")
-
-                if valid_rows:
-                    matching_rows = matching_rows.loc[valid_rows]
-                    print(f"Resultado final: {len(valid_rows)} nadadores válidos de {len(debug_info)} evaluados")
-                else:
-                    return [], f"No se encontraron nadadores de '{search_term}' con edades válidas para las categorías del evento. Criterio: {age_criteria}"
-
-            elif 'CATEGORIA' in matching_rows.columns:
-                # Fallback: filtrar por categorías directamente
-                category_mask = matching_rows['CATEGORIA'].isin(event_category_names)
-                matching_rows = matching_rows[category_mask]
-
-                if matching_rows.empty:
-                    return [], f"No se encontraron nadadores de '{search_term}' en las categorías del evento: {', '.join(event_category_names)}"
-
-        # Agrupar por atleta único (pueden tener múltiples registros por diferentes pruebas)
-        unique_athletes = matching_rows['ATLETA'].unique()
-
-        matches = []
-        for athlete_name in unique_athletes:
-            # Tomar el primer registro para información básica
-            athlete_records = matching_rows[matching_rows['ATLETA'] == athlete_name]
-            first_record = athlete_records.iloc[0]
-
-            # Calcular edad actualizada si hay fecha de nacimiento
-            calculated_age = None
-            birth_date_column = None
-            # Buscar fecha de nacimiento en las columnas disponibles
-            for col in first_record.index:
-                col_upper = str(col).upper()
-                if any(keyword in col_upper for keyword in ['NACIMIENTO', 'BIRTH', 'FECHA_NAC', 'F_NACIMIENTO']):
-                    if not pd.isna(first_record[col]):
+                # Buscar por nombres exactos y patrones
+                for col in matching_rows.columns:
+                    col_upper = col.upper()
+                    if any(keyword in col_upper for keyword in ['NACIMIENTO', 'BIRTH', 'FECHA_NAC', 'F_NACIMIENTO']):
                         birth_date_column = col
-                        print(f"Usando fecha de nacimiento de columna: {col}")
+                        print(f"Encontrada columna de fecha de nacimiento: {col}")
                         break
 
-            if birth_date_column and event_start_date and age_criteria:
-                calculated_age = self.calculate_age_by_criteria(first_record[birth_date_column], event_start_date, age_criteria)
+                if birth_date_column:
+                    # Filtrar por edad calculada desde fecha de nacimiento
+                    valid_rows = []
+                    debug_info = []
 
-            match_data = {
-                'index': 0,  # No importante ya que agrupamos
-                'name': athlete_name,
-                'full_data': first_record,  # Información básica del primer registro
-                'all_records': athlete_records,  # Todos los registros del atleta
-            }
+                    for idx, row in matching_rows.iterrows():
+                        birth_date = row.get(birth_date_column)
+                        athlete_name = row.get('ATLETA', 'N/A')
 
-            # Agregar edad calculada si está disponible
-            if calculated_age:
-                match_data['calculated_age'] = calculated_age
-                match_data['age_criteria'] = age_criteria
+                        if birth_date and not pd.isna(birth_date):
+                            calculated_age = self.calculate_age_by_criteria(birth_date, event_start_date, age_criteria)
+                            if calculated_age:
+                                debug_info.append(f"{athlete_name}: {birth_date} → edad {calculated_age}")
+                                # Buscar categoría correspondiente
+                                for category in event_categories:
+                                    category_name = category.get('name', '')
+                                    age_range = category.get('age_range', '')
+                                    if age_range:
+                                        min_age, max_age = self.event_manager.parse_age_range(age_range)
+                                        if min_age is not None and max_age is not None:
+                                            if min_age <= calculated_age <= max_age:
+                                                valid_rows.append(idx)
+                                                debug_info.append(f"  ✓ Válido para categoría {category_name} ({age_range})")
+                                                break
+                                else:
+                                    debug_info.append(f"  ✗ No válido para ninguna categoría del evento")
+                            else:
+                                debug_info.append(f"{athlete_name}: Error calculando edad desde {birth_date}")
+                        else:
+                            debug_info.append(f"{athlete_name}: Sin fecha de nacimiento válida")
 
-            matches.append(match_data)
+                    print(f"Filtrado por fecha de nacimiento:")
+                    for info in debug_info[:10]:  # Mostrar solo los primeros 10 para no saturar
+                        print(f"  {info}")
 
-        total_message = f"Se encontraron {len(matches)} atletas únicos"
-        if event_categories and self.event_manager:
-            event_category_names = [cat['name'] for cat in event_categories]
-            total_message += f" en las categorías: {', '.join(event_category_names)}"
+                    if valid_rows:
+                        matching_rows = matching_rows.loc[valid_rows]
+                        print(f"Resultado final: {len(valid_rows)} nadadores válidos de {len(debug_info)} evaluados")
+                    else:
+                        return [], f"No se encontraron nadadores de '{search_term}' con edades válidas para las categorías del evento. Criterio: {age_criteria}"
 
-        return matches, total_message
+                elif 'CATEGORIA' in matching_rows.columns:
+                    # Fallback: filtrar por categorías directamente
+                    category_mask = matching_rows['CATEGORIA'].isin(event_category_names)
+                    matching_rows = matching_rows[category_mask]
 
-        # If we reach here due to an exception in the filtering logic, return a graceful error
+                    if matching_rows.empty:
+                        return [], f"No se encontraron nadadores de '{search_term}' en las categorías del evento: {', '.join(event_category_names)}"
+
+            # Agrupar por atleta único (pueden tener múltiples registros por diferentes pruebas)
+            unique_athletes = matching_rows['ATLETA'].unique()
+
+            matches = []
+            for athlete_name in unique_athletes:
+                # Tomar el primer registro para información básica
+                athlete_records = matching_rows[matching_rows['ATLETA'] == athlete_name]
+                first_record = athlete_records.iloc[0]
+
+                # Calcular edad actualizada si hay fecha de nacimiento
+                calculated_age = None
+                birth_date_column = None
+                # Buscar fecha de nacimiento en las columnas disponibles
+                for col in first_record.index:
+                    col_upper = str(col).upper()
+                    if any(keyword in col_upper for keyword in ['NACIMIENTO', 'BIRTH', 'FECHA_NAC', 'F_NACIMIENTO']):
+                        if not pd.isna(first_record[col]):
+                            birth_date_column = col
+                            print(f"Usando fecha de nacimiento de columna: {col}")
+                            break
+
+                if birth_date_column and event_start_date and age_criteria:
+                    calculated_age = self.calculate_age_by_criteria(first_record[birth_date_column], event_start_date, age_criteria)
+
+                match_data = {
+                    'index': 0,  # No importante ya que agrupamos
+                    'name': athlete_name,
+                    'full_data': first_record,  # Información básica del primer registro
+                    'all_records': athlete_records,  # Todos los registros del atleta
+                }
+
+                # Agregar edad calculada si está disponible
+                if calculated_age:
+                    match_data['calculated_age'] = calculated_age
+                    match_data['age_criteria'] = age_criteria
+
+                matches.append(match_data)
+
+            total_message = f"Se encontraron {len(matches)} atletas únicos"
+            if event_categories and self.event_manager:
+                event_category_names = [cat['name'] for cat in event_categories]
+                total_message += f" en las categorías: {', '.join(event_category_names)}"
+
+            return matches, total_message
+
         except Exception as e:
             return [], f"Error procesando búsqueda: {str(e)}"
     
