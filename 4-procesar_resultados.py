@@ -1,16 +1,262 @@
-# procesar_resultados.py (Versión Final Corregida)
+# procesar_resultados.py (Versión Actualizada con Tiempos de Competencia)
 
 import pandas as pd
+import json
+import os
 from openpyxl import Workbook
-from openpyxl.styles import Font
+from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.styles.borders import Border, Side
 
 # --- CONFIGURACIÓN ---
 ARCHIVO_ENTRADA_RESULTADOS = 'resultados_con_tiempos.xlsx'
 ARCHIVO_SALIDA_PREMIACION = 'reporte_premiacion_final_CORREGIDO.xlsx'
-PUNTOS = {1: 9, 2: 7, 3: 6, 4: 5, 5: 4, 6: 3, 7: 2, 8: 1}
 
-# (Las funciones de ayuda como parse_time, format_time_value y apply_styles_and_width no cambian)
-# ... [copiarlas de la respuesta anterior] ...
+# Nuevo sistema de puntos: 1º=9, 2º=7, 3º=6, 4º=5, luego -1 por posición
+def calcular_puntos(posicion):
+    if posicion == 1:
+        return 9
+    elif posicion == 2:
+        return 7
+    elif posicion == 3:
+        return 6
+    elif posicion == 4:
+        return 5
+    else:
+        # A partir del 5º lugar, se resta 1 punto por posición (4, 3, 2, 1)
+        puntos = max(1, 5 - (posicion - 4))
+        return puntos
+
+def parse_time(time_val):
+    """Convierte tiempo a segundos para ordenamiento"""
+    if pd.isna(time_val) or time_val == "" or time_val is None:
+        return float('inf')
+
+    if hasattr(time_val, 'minute'):
+        return time_val.minute * 60 + time_val.second + time_val.microsecond / 1_000_000
+
+    time_str = str(time_val).replace(',', '.')
+    try:
+        parts = time_str.split(':')
+        if len(parts) == 2:
+            return int(parts[0]) * 60 + float(parts[1])
+        return float(time_str)
+    except (ValueError, IndexError):
+        return float('inf')
+
+def leer_tiempos_competencia_desde_sembrado():
+    """Lee los tiempos de competencia desde los archivos de sembrado manual"""
+    todos_resultados = []
+
+    # Buscar todos los archivos de sembrado manual en session_state
+    import streamlit as st
+
+    if 'manual_seeding_' not in str(st.session_state.keys()):
+        return []
+
+    # Buscar todas las claves de sembrado manual
+    for key in st.session_state.keys():
+        if key.startswith('manual_seeding_'):
+            seeding_data = st.session_state[key]
+
+            # Extraer evento y género del key
+            parts = key.replace('manual_seeding_', '').rsplit('_', 1)
+            if len(parts) == 2:
+                evento = parts[0]
+                genero = 'Hombres' if parts[1] == 'M' else 'Mujeres'
+
+                # Procesar cada serie
+                for serie in seeding_data.get('series', []):
+                    for carril_idx, swimmer in enumerate(serie['carriles']):
+                        if swimmer and swimmer.get('tiempo_competencia'):
+                            # Solo incluir nadadores con tiempo de competencia
+                            resultado = {
+                                'Prueba': f"{evento} - {genero}",
+                                'Evento': evento,
+                                'Genero': genero,
+                                'Serie': serie['serie'],
+                                'Carril': carril_idx + 1,
+                                'Nombre': swimmer['nombre'],
+                                'Equipo': swimmer['equipo'],
+                                'Edad': swimmer['edad'],
+                                'Categoria': swimmer['categoria'],
+                                'Tiempo_Sembrado': swimmer['tiempo'],
+                                'Tiempo_Competencia': swimmer['tiempo_competencia'],
+                                'Tiempo_Segundos': parse_time(swimmer['tiempo_competencia'])
+                            }
+                            todos_resultados.append(resultado)
+
+    return todos_resultados
+
+def procesar_resultados_por_categoria_y_genero(resultados):
+    """Procesa resultados agrupados por categoría y género con nuevo sistema de puntos"""
+    if not resultados:
+        return []
+
+    df = pd.DataFrame(resultados)
+    resultados_procesados = []
+
+    # Agrupar por evento, género y categoría
+    for (evento, genero, categoria), grupo in df.groupby(['Evento', 'Genero', 'Categoria']):
+        # Ordenar por tiempo (menor a mayor)
+        grupo_ordenado = grupo.sort_values('Tiempo_Segundos')
+
+        for posicion, (_, nadador) in enumerate(grupo_ordenado.iterrows(), 1):
+            # Solo asignar puntos si el tiempo es válido (no inf)
+            if nadador['Tiempo_Segundos'] != float('inf'):
+                puntos = calcular_puntos(posicion)
+
+                resultado = {
+                    'Evento': evento,
+                    'Genero': genero,
+                    'Categoria': categoria,
+                    'Posicion': posicion,
+                    'Nombre': nadador['Nombre'],
+                    'Equipo': nadador['Equipo'],
+                    'Edad': nadador['Edad'],
+                    'Tiempo_Competencia': nadador['Tiempo_Competencia'],
+                    'Puntos': puntos
+                }
+                resultados_procesados.append(resultado)
+
+    return resultados_procesados
+
+def generar_resumen_equipos(resultados_procesados):
+    """Genera resumen de puntos por equipo"""
+    if not resultados_procesados:
+        return []
+
+    df = pd.DataFrame(resultados_procesados)
+    resumen_equipos = df.groupby('Equipo').agg({
+        'Puntos': 'sum',
+        'Nombre': 'count'  # Contar participaciones
+    }).reset_index()
+
+    resumen_equipos.columns = ['Equipo', 'Puntos_Total', 'Participaciones']
+    resumen_equipos = resumen_equipos.sort_values('Puntos_Total', ascending=False)
+
+    return resumen_equipos.to_dict('records')
+
+def generar_reporte_resultados_completo():
+    """Función principal que genera el reporte completo de resultados"""
+    try:
+        # 1. Leer tiempos de competencia desde sembrado manual
+        resultados_brutos = leer_tiempos_competencia_desde_sembrado()
+
+        if not resultados_brutos:
+            return False, "No se encontraron tiempos de competencia en el sembrado manual"
+
+        # 2. Procesar resultados por categoría y género
+        resultados_procesados = procesar_resultados_por_categoria_y_genero(resultados_brutos)
+
+        if not resultados_procesados:
+            return False, "No se pudieron procesar los resultados"
+
+        # 3. Generar resumen por equipos
+        resumen_equipos = generar_resumen_equipos(resultados_procesados)
+
+        # 4. Crear archivo Excel con múltiples hojas
+        wb = Workbook()
+
+        # Eliminar hoja por defecto
+        if 'Sheet' in wb.sheetnames:
+            wb.remove(wb['Sheet'])
+
+        # HOJA 1: Resultados por Categoría y Género
+        ws_resultados = wb.create_sheet("Resultados por Categoría")
+
+        # Encabezados para resultados
+        headers_resultados = ['Evento', 'Género', 'Categoría', 'Pos.', 'Nombre', 'Equipo', 'Edad', 'Tiempo', 'Puntos']
+        for col, header in enumerate(headers_resultados, 1):
+            cell = ws_resultados.cell(row=1, column=col, value=header)
+            cell.font = Font(bold=True, size=12)
+            cell.fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+            cell.font = Font(bold=True, size=12, color="FFFFFF")
+
+        # Llenar datos de resultados
+        row = 2
+        for resultado in resultados_procesados:
+            ws_resultados.cell(row=row, column=1, value=resultado['Evento'])
+            ws_resultados.cell(row=row, column=2, value=resultado['Genero'])
+            ws_resultados.cell(row=row, column=3, value=resultado['Categoria'])
+            ws_resultados.cell(row=row, column=4, value=resultado['Posicion'])
+            ws_resultados.cell(row=row, column=5, value=resultado['Nombre'])
+            ws_resultados.cell(row=row, column=6, value=resultado['Equipo'])
+            ws_resultados.cell(row=row, column=7, value=resultado['Edad'])
+            ws_resultados.cell(row=row, column=8, value=resultado['Tiempo_Competencia'])
+            ws_resultados.cell(row=row, column=9, value=resultado['Puntos'])
+
+            # Colorear las medallas
+            if resultado['Posicion'] == 1:
+                for col in range(1, 10):
+                    ws_resultados.cell(row=row, column=col).fill = PatternFill(start_color="FFD700", end_color="FFD700", fill_type="solid")
+            elif resultado['Posicion'] == 2:
+                for col in range(1, 10):
+                    ws_resultados.cell(row=row, column=col).fill = PatternFill(start_color="C0C0C0", end_color="C0C0C0", fill_type="solid")
+            elif resultado['Posicion'] == 3:
+                for col in range(1, 10):
+                    ws_resultados.cell(row=row, column=col).fill = PatternFill(start_color="CD7F32", end_color="CD7F32", fill_type="solid")
+
+            row += 1
+
+        # Ajustar anchos de columna
+        column_widths = [15, 10, 12, 5, 25, 20, 5, 12, 8]
+        for i, width in enumerate(column_widths, 1):
+            ws_resultados.column_dimensions[chr(64+i)].width = width
+
+        # HOJA 2: Clasificación por Equipos
+        ws_equipos = wb.create_sheet("Clasificación por Equipos")
+
+        # Encabezados para equipos
+        headers_equipos = ['Posición', 'Equipo', 'Puntos Totales', 'Participaciones']
+        for col, header in enumerate(headers_equipos, 1):
+            cell = ws_equipos.cell(row=1, column=col, value=header)
+            cell.font = Font(bold=True, size=12)
+            cell.fill = PatternFill(start_color="228B22", end_color="228B22", fill_type="solid")
+            cell.font = Font(bold=True, size=12, color="FFFFFF")
+
+        # Llenar datos de equipos
+        for pos, equipo in enumerate(resumen_equipos, 1):
+            ws_equipos.cell(row=pos+1, column=1, value=pos)
+            ws_equipos.cell(row=pos+1, column=2, value=equipo['Equipo'])
+            ws_equipos.cell(row=pos+1, column=3, value=equipo['Puntos_Total'])
+            ws_equipos.cell(row=pos+1, column=4, value=equipo['Participaciones'])
+
+            # Colorear los 3 primeros equipos
+            if pos == 1:
+                for col in range(1, 5):
+                    ws_equipos.cell(row=pos+1, column=col).fill = PatternFill(start_color="FFD700", end_color="FFD700", fill_type="solid")
+            elif pos == 2:
+                for col in range(1, 5):
+                    ws_equipos.cell(row=pos+1, column=col).fill = PatternFill(start_color="C0C0C0", end_color="C0C0C0", fill_type="solid")
+            elif pos == 3:
+                for col in range(1, 5):
+                    ws_equipos.cell(row=pos+1, column=col).fill = PatternFill(start_color="CD7F32", end_color="CD7F32", fill_type="solid")
+
+        # Ajustar anchos de columna para equipos
+        ws_equipos.column_dimensions['A'].width = 10
+        ws_equipos.column_dimensions['B'].width = 25
+        ws_equipos.column_dimensions['C'].width = 15
+        ws_equipos.column_dimensions['D'].width = 15
+
+        # Guardar archivo
+        wb.save(ARCHIVO_SALIDA_PREMIACION)
+
+        return True, f"Reporte generado exitosamente: {ARCHIVO_SALIDA_PREMIACION} ({len(resultados_procesados)} resultados, {len(resumen_equipos)} equipos)"
+
+    except Exception as e:
+        return False, f"Error al generar reporte: {str(e)}"
+
+def main():
+    """Función principal para ejecutar el procesamiento"""
+    success, message = generar_reporte_resultados_completo()
+    if success:
+        print(f"✅ {message}")
+    else:
+        print(f"❌ {message}")
+    return success
+
+if __name__ == "__main__":
+    main()
 
 def procesar_resultados_excel_corregido(filepath):
     """Lee el archivo de resultados que ahora incluye la columna 'Categoría'."""

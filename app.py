@@ -2266,67 +2266,94 @@ def sembrado_competencia_interface():
 
 def procesar_resultados():
     st.markdown("## 🏆 Procesar Resultados")
-    
+
     st.markdown("""
     <div class="info-message">
-        Procesa los resultados finales de la competencia y genera reportes de premiación 
-        con sistema de puntos y clasificaciones por categoría y equipos ordenados por tiempo.
+        Procesa los resultados finales tomando los tiempos de competencia del sembrado manual
+        y genera reportes de premiación con sistema de puntos y clasificaciones por categoría, género y equipos.
     </div>
     """, unsafe_allow_html=True)
-    
-    if not os.path.exists("resultados_con_tiempos.xlsx"):
+
+    # Verificar si hay datos de sembrado manual con tiempos de competencia
+    tiempos_competencia_disponibles = False
+    total_tiempos = 0
+
+    for key in st.session_state.keys():
+        if key.startswith('manual_seeding_'):
+            seeding_data = st.session_state[key]
+            for serie in seeding_data.get('series', []):
+                for swimmer in serie['carriles']:
+                    if swimmer and swimmer.get('tiempo_competencia'):
+                        tiempos_competencia_disponibles = True
+                        total_tiempos += 1
+
+    if not tiempos_competencia_disponibles:
         st.markdown("""
         <div class="warning-message">
-            ⚠️ No se encontró el archivo <strong>resultados_con_tiempos.xlsx</strong>. 
-            Por favor, súbelo en la sección "Gestión de Archivos".
+            ⚠️ No se encontraron tiempos de competencia en el sembrado manual.
+            Por favor, ingresa los tiempos de competencia en la sección <strong>"Sembrado Manual"</strong>.
         </div>
         """, unsafe_allow_html=True)
         return
-    
-    try:
-        df = pd.read_excel("resultados_con_tiempos.xlsx", header=None)
-        st.success("✅ Archivo de resultados cargado correctamente")
-    except Exception as e:
-        st.error(f"Error al leer el archivo de resultados: {e}")
-        return
-    
-    # Mostrar sistema de puntos
-    st.markdown("### 🎯 Sistema de Puntos")
-    puntos_df = pd.DataFrame({
-        'Posición': [1, 2, 3, 4, 5, 6, 7, 8],
-        'Puntos': [9, 7, 6, 5, 4, 3, 2, 1]
-    })
-    st.dataframe(puntos_df, use_container_width=True)
-    
+
+    st.success(f"✅ Se encontraron {total_tiempos} tiempos de competencia listos para procesar")
+
+    # Mostrar nuevo sistema de puntos
+    st.markdown("### 🎯 Nuevo Sistema de Puntos")
+
+    col_puntos1, col_puntos2 = st.columns(2)
+
+    with col_puntos1:
+        st.markdown("**Primeros lugares:**")
+        puntos_principales = pd.DataFrame({
+            'Posición': [1, 2, 3, 4],
+            'Puntos': [9, 7, 6, 5]
+        })
+        st.dataframe(puntos_principales, use_container_width=True, hide_index=True)
+
+    with col_puntos2:
+        st.markdown("**Lugares restantes:**")
+        puntos_restantes = pd.DataFrame({
+            'Posición': [5, 6, 7, 8, '9+'],
+            'Puntos': [4, 3, 2, 1, '1*']
+        })
+        st.dataframe(puntos_restantes, use_container_width=True, hide_index=True)
+
+    st.markdown("_*A partir del 5º lugar se resta 1 punto por posición (mínimo 1 punto)_")
+
     col1, col2 = st.columns([1, 2])
-    
+
     with col1:
         if st.button("🚀 Procesar Resultados", type="primary"):
-            with st.spinner("Procesando resultados..."):
+            with st.spinner("Procesando resultados con tiempos de competencia..."):
                 try:
-                    script3.main_full()
-                    st.markdown("""
-                        <div class="success-message">
-                            ✅ <strong>Resultados procesados exitosamente!</strong><br>
-                            Archivo creado: <code>reporte_premiacion_final_CORREGIDO.xlsx</code>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    st.rerun()
+                    success, message = script3.generar_reporte_resultados_completo()
+                    if success:
+                        st.markdown(f"""
+                            <div class="success-message">
+                                ✅ <strong>Resultados procesados exitosamente!</strong><br>
+                                {message}
+                            </div>
+                            """, unsafe_allow_html=True)
+                        st.rerun()
+                    else:
+                        st.error(f"Error al procesar resultados: {message}")
                 except Exception as e:
                     st.error(f"Error al procesar resultados: {e}")
-    
+
     with col2:
-        if st.button("👁️ Visualizar Resultados", help="Ver resultados procesados con rankings"):
-            with st.spinner("Cargando resultados..."):
+        if st.button("👁️ Vista Previa de Resultados", help="Ver vista previa de los resultados antes de procesar"):
+            with st.spinner("Cargando vista previa..."):
                 try:
-                    resultados_data, message = script3.get_resultados_data()
-                    if resultados_data:
-                        st.session_state['resultados_preview'] = resultados_data
-                        st.success("✅ Resultados cargados")
+                    resultados_brutos = script3.leer_tiempos_competencia_desde_sembrado()
+                    if resultados_brutos:
+                        resultados_procesados = script3.procesar_resultados_por_categoria_y_genero(resultados_brutos)
+                        st.session_state['resultados_preview'] = resultados_procesados
+                        st.success(f"✅ Vista previa cargada: {len(resultados_procesados)} resultados")
                     else:
-                        st.error(message)
+                        st.error("No se encontraron resultados para procesar")
                 except Exception as e:
-                    st.error(f"Error al cargar resultados: {e}")
+                    st.error(f"Error al cargar vista previa: {e}")
     
     # Botón de descarga
     if os.path.exists("reporte_premiacion_final_CORREGIDO.xlsx"):
@@ -2339,105 +2366,73 @@ def procesar_resultados():
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
     
-    # Mostrar resultados procesados en pestañas si están disponibles
+    # Mostrar vista previa de resultados si están disponibles
     if 'resultados_preview' in st.session_state:
         st.markdown("---")
-        st.markdown("### 📊 Resultados y Rankings (Ordenados por Tiempo)")
-        
+        st.markdown("### 📊 Vista Previa de Resultados")
+
         resultados_data = st.session_state['resultados_preview']
-        
-        tab1, tab2, tab3 = st.tabs(["🏅 Por Categoría", "👥 Por Sexo", "🏢 Por Equipo"])
-        
-        with tab1:
-            st.markdown("#### 🏅 Ranking por Categoría")
-            st.markdown("*Ordenado por mejor tiempo en cada categoría*")
-            
-            for categoria, df_cat in resultados_data['por_categoria'].items():
-                with st.expander(f"📊 Categoría: {categoria} ({len(df_cat)} participantes)"):
-                    df_display = df_cat[['Posicion', 'Nombre', 'Equipo', 'Sexo_Display', 'Prueba', 'Tiempo_Formateado', 'Puntos']].copy()
-                    df_display.columns = ['Lugar', 'Nombre', 'Equipo', 'Sexo', 'Prueba', 'Tiempo', 'Puntos']
-                    
-                    # Destacar los primeros 3 lugares
-                    def highlight_winners(row):
-                        if row['Lugar'] == 1:
-                            return ['background-color: #FFD700'] * len(row)  # Oro
-                        elif row['Lugar'] == 2:
-                            return ['background-color: #C0C0C0'] * len(row)  # Plata
-                        elif row['Lugar'] == 3:
-                            return ['background-color: #CD7F32'] * len(row)  # Bronce
-                        else:
-                            return [''] * len(row)
-                    
-                    st.dataframe(
-                        df_display.style.apply(highlight_winners, axis=1),
-                        use_container_width=True,
-                        hide_index=True
-                    )
-        
-        with tab2:
-            st.markdown("#### 👥 Ranking por Sexo")
-            st.markdown("*Ordenado por mejor tiempo en cada sexo*")
-            
-            for sexo, df_sex in resultados_data['por_sexo'].items():
-                with st.expander(f"👤 {sexo} ({len(df_sex)} participantes)"):
-                    df_display = df_sex[['Posicion', 'Nombre', 'Equipo', 'Categoria', 'Prueba', 'Tiempo_Formateado', 'Puntos']].copy()
-                    df_display.columns = ['Lugar', 'Nombre', 'Equipo', 'Categoría', 'Prueba', 'Tiempo', 'Puntos']
-                    
-                    # Destacar los primeros 3 lugares
-                    def highlight_winners(row):
-                        if row['Lugar'] == 1:
-                            return ['background-color: #FFD700'] * len(row)  # Oro
-                        elif row['Lugar'] == 2:
-                            return ['background-color: #C0C0C0'] * len(row)  # Plata
-                        elif row['Lugar'] == 3:
-                            return ['background-color: #CD7F32'] * len(row)  # Bronce
-                        else:
-                            return [''] * len(row)
-                    
-                    st.dataframe(
-                        df_display.style.apply(highlight_winners, axis=1),
-                        use_container_width=True,
-                        hide_index=True
-                    )
-        
-        with tab3:
-            st.markdown("#### 🏢 Ranking por Equipo")
-            st.markdown("*Ordenado por puntos totales y tiempo promedio*")
-            
-            # Mostrar resumen de equipos
-            st.markdown("##### 🏆 Clasificación General de Equipos")
-            df_resumen = resultados_data['por_equipo']['_resumen'].copy()
-            df_resumen['Tiempo_Promedio'] = df_resumen['Tiempo_Promedio'].apply(lambda x: f"{x:.2f}s")
-            df_resumen.columns = ['Equipo', 'Puntos Totales', 'Tiempo Promedio', 'Lugar']
-            df_resumen = df_resumen[['Lugar', 'Equipo', 'Puntos Totales', 'Tiempo Promedio']]
-            
-            # Destacar los primeros 3 equipos
-            def highlight_teams(row):
-                if row['Lugar'] == 1:
-                    return ['background-color: #FFD700'] * len(row)  # Oro
-                elif row['Lugar'] == 2:
-                    return ['background-color: #C0C0C0'] * len(row)  # Plata
-                elif row['Lugar'] == 3:
-                    return ['background-color: #CD7F32'] * len(row)  # Bronce
-                else:
-                    return [''] * len(row)
-            
-            st.dataframe(
-                df_resumen.style.apply(highlight_teams, axis=1),
-                use_container_width=True,
-                hide_index=True
+
+        if resultados_data:
+            df_resultados = pd.DataFrame(resultados_data)
+
+            tab1, tab2 = st.tabs(["🏅 Resultados por Categoría y Género", "🏢 Resumen por Equipos"])
+
+            with tab1:
+                st.markdown("#### 🏅 Ranking por Categoría y Género (Ordenado por Tiempo)")
+
+                # Agrupar por evento, género y categoría
+                for (evento, genero, categoria), grupo in df_resultados.groupby(['Evento', 'Genero', 'Categoria']):
+                    with st.expander(f"🏊 {evento} - {genero} - {categoria} ({len(grupo)} nadadores)"):
+                        df_display = grupo[['Posicion', 'Nombre', 'Equipo', 'Edad', 'Tiempo_Competencia', 'Puntos']].copy()
+                        df_display.columns = ['Pos.', 'Nombre', 'Equipo', 'Edad', 'Tiempo', 'Puntos']
+
+                        # Función para destacar ganadores
+                        def highlight_winners(row):
+                            if row['Pos.'] == 1:
+                                return ['background-color: #FFD700; color: black'] * len(row)  # Oro
+                            elif row['Pos.'] == 2:
+                                return ['background-color: #C0C0C0; color: black'] * len(row)  # Plata
+                            elif row['Pos.'] == 3:
+                                return ['background-color: #CD7F32; color: white'] * len(row)  # Bronce
+                            else:
+                                return [''] * len(row)
+
+                        st.dataframe(
+                            df_display.style.apply(highlight_winners, axis=1),
+                            use_container_width=True,
+                            hide_index=True
+                        )
+
+            with tab2:
+                st.markdown("#### 🏢 Resumen de Puntos por Equipo")
+
+                # Calcular puntos por equipo
+                puntos_equipos = df_resultados.groupby('Equipo').agg({
+                    'Puntos': 'sum',
+                    'Nombre': 'count'
+                }).reset_index()
+                puntos_equipos.columns = ['Equipo', 'Puntos Totales', 'Participaciones']
+                puntos_equipos = puntos_equipos.sort_values('Puntos Totales', ascending=False)
+                puntos_equipos.reset_index(drop=True, inplace=True)
+                puntos_equipos.index += 1  # Empezar desde 1
+
+                # Función para destacar primeros equipos
+                def highlight_teams(row):
+                    if row.name == 1:
+                        return ['background-color: #FFD700; color: black'] * len(row)  # Oro
+                    elif row.name == 2:
+                        return ['background-color: #C0C0C0; color: black'] * len(row)  # Plata
+                    elif row.name == 3:
+                        return ['background-color: #CD7F32; color: white'] * len(row)  # Bronce
+                    else:
+                        return [''] * len(row)
+
+                st.dataframe(
+                    puntos_equipos.style.apply(highlight_teams, axis=1),
+                    use_container_width=True
+                )
             )
-            
-            st.markdown("##### 📋 Detalle por Equipos")
-            # Mostrar detalle de cada equipo
-            equipos = [k for k in resultados_data['por_equipo'].keys() if k != '_resumen']
-            for equipo in sorted(equipos):
-                df_equipo = resultados_data['por_equipo'][equipo]
-                with st.expander(f"🏢 {equipo} ({len(df_equipo)} participantes)"):
-                    df_display = df_equipo[['Posicion', 'Nombre', 'Categoria', 'Sexo_Display', 'Prueba', 'Tiempo_Formateado', 'Puntos']].copy()
-                    df_display.columns = ['Lugar en Equipo', 'Nombre', 'Categoría', 'Sexo', 'Prueba', 'Tiempo', 'Puntos']
-                    
-                    st.dataframe(df_display, use_container_width=True, hide_index=True)
     
     # Sección de limpieza de resultados
     st.markdown("---")
