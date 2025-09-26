@@ -2432,7 +2432,6 @@ def procesar_resultados():
                     puntos_equipos.style.apply(highlight_teams, axis=1),
                     use_container_width=True
                 )
-            )
     
     # Sección de limpieza de resultados
     st.markdown("---")
