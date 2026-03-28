@@ -3511,6 +3511,22 @@ def inscripcion_nadadores_interface():
     with tab3:
         st.markdown("### 📊 Reporte de Inscripción")
 
+        # Datos y agregados para PDF y estadísticas (debe existir antes del botón PDF)
+        swimmers = registration_system.get_swimmers_list()
+        teams = {}
+        categories = {}
+        genders = {"Masculino": 0, "Femenino": 0}
+        events_stats = {}
+        for swimmer in swimmers:
+            teams[swimmer['team']] = teams.get(swimmer['team'], 0) + 1
+            categories[swimmer['category']] = categories.get(swimmer['category'], 0) + 1
+            gender_label = "Masculino" if swimmer['gender'] == 'M' else "Femenino"
+            genders[gender_label] += 1
+            for event_info in swimmer['events']:
+                if ':' in event_info:
+                    event_name = event_info.split(':')[0].strip()
+                    events_stats[event_name] = events_stats.get(event_name, 0) + 1
+
         # Sección de Acciones del Sistema (movida desde pagos)
         st.markdown("#### 🔧 Acciones del Sistema")
 
@@ -3535,20 +3551,17 @@ def inscripcion_nadadores_interface():
                     )
 
         with col_actions3:
-            # Generar reporte PDF
+            # Generar reporte PDF (bytes en session_state para que el download_button persista entre reruns)
+            _pdf_key = "_reporte_inscripcion_pdf_bytes"
             if swimmers:
                 if st.button("📄 Generar Reporte PDF", type="primary"):
                     try:
                         pdf_data = registration_system.generate_pdf_report(swimmers, teams, categories, genders, events_stats)
                         if pdf_data:
-                            st.download_button(
-                                label="📄 Descargar Reporte PDF",
-                                data=pdf_data,
-                                file_name="reporte_inscripciones.pdf",
-                                mime="application/pdf"
-                            )
-                            st.success("¡Reporte PDF generado exitosamente!")
+                            st.session_state[_pdf_key] = pdf_data
+                            st.success("¡Reporte PDF listo! Usa **Descargar** justo debajo.")
                         else:
+                            st.session_state.pop(_pdf_key, None)
                             st.error("**ReportLab no está instalado en este entorno Python**")
                             st.markdown("""
                             **Para generar reportes PDF, pruebe uno de estos comandos:**
@@ -3572,11 +3585,22 @@ def inscripcion_nadadores_interface():
                             Luego reinicie la aplicación Streamlit.
                             """)
                     except Exception as e:
+                        st.session_state.pop(_pdf_key, None)
                         if "reportlab" in str(e).lower() or "not available" in str(e).lower():
                             st.error("Para generar reportes PDF, instale la librería ReportLab ejecutando: pip install reportlab")
                         else:
                             st.error(f"Error al generar el reporte PDF: {str(e)}")
+
+                if st.session_state.get(_pdf_key):
+                    st.download_button(
+                        label="📄 Descargar Reporte PDF",
+                        data=st.session_state[_pdf_key],
+                        file_name="reporte_inscripciones.pdf",
+                        mime="application/pdf",
+                        key="download_reporte_inscripciones_pdf",
+                    )
             else:
+                st.session_state.pop(_pdf_key, None)
                 st.info("No hay nadadores inscritos para generar reporte")
 
         # Sección de limpieza de inscripciones
@@ -3604,32 +3628,8 @@ def inscripcion_nadadores_interface():
         
         with col1:
             st.markdown("#### 📊 Estadísticas")
-            swimmers = registration_system.get_swimmers_list()
             
             if swimmers:
-                teams = {}
-                categories = {}
-                genders = {"Masculino": 0, "Femenino": 0}
-                events_stats = {}
-                
-                # Procesar estadísticas
-                for swimmer in swimmers:
-                    # Equipos
-                    teams[swimmer['team']] = teams.get(swimmer['team'], 0) + 1
-                    
-                    # Categorías
-                    categories[swimmer['category']] = categories.get(swimmer['category'], 0) + 1
-                    
-                    # Géneros
-                    gender_label = "Masculino" if swimmer['gender'] == 'M' else "Femenino"
-                    genders[gender_label] += 1
-                    
-                    # Eventos (contar inscripciones por prueba)
-                    for event_info in swimmer['events']:
-                        if ':' in event_info:  # Formato "EVENTO: tiempo"
-                            event_name = event_info.split(':')[0].strip()
-                            events_stats[event_name] = events_stats.get(event_name, 0) + 1
-                
                 # Métricas principales
                 col1, col2, col3 = st.columns(3)
                 with col1:

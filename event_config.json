@@ -2,10 +2,6 @@
   "event_name": "V Championship Master Swimming",
   "categories": [
     {
-      "name": "Infantil A",
-      "age_range": "\"10-11\""
-    },
-    {
       "name": "Infantil B",
       "age_range": "\"12-13\""
     },
@@ -108,7 +104,7 @@
       "100M CROLL"
     ]
   },
-  "min_age": 10,
+  "min_age": 12,
   "max_age": 80,
   "swimmer_fee": 80000,
   "team_fee": 30000,
@@ -118,6 +114,6 @@
   "start_date": "2026-04-18",
   "end_date": "2026-04-18",
   "age_criteria": "december_31",
-  "created_date": "2026-03-21T14:29:30.672692",
-  "modified_date": "2026-03-21T14:29:30.672701"
+  "created_date": "2026-03-28T14:55:28.502555",
+  "modified_date": "2026-03-28T14:55:28.502565"
 }

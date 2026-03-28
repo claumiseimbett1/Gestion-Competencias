@@ -1,7 +1,7 @@
 # generar_papeletas.py
 import pandas as pd
 import os
-from planilla_utils import inscrito_en_prueba
+from planilla_utils import inscrito_en_prueba, ordered_prueba_hoja_keys, titulo_prueba_numerada
 import math
 from pathlib import Path
 from reportlab.lib.pagesizes import A4, landscape
@@ -56,9 +56,11 @@ def leer_datos_sembrado():
                     }
                     eventos[nombre_prueba].append(nadador_info)
         
-        # Agrupar por categoría y crear series con carriles asignados
+        # Agrupar por categoría y crear series con carriles asignados (orden planilla: Mujeres → Hombres)
         papeletas_con_carriles = []
-        for nombre_prueba, nadadores in eventos.items():
+        for idx, nombre_prueba in enumerate(ordered_prueba_hoja_keys(eventos, event_cols), start=1):
+            titulo = titulo_prueba_numerada(idx, nombre_prueba)
+            nadadores = eventos[nombre_prueba]
             nadadores_por_categoria = {}
             for nadador in nadadores:
                 cat = nadador['categoria']
@@ -91,7 +93,7 @@ def leer_datos_sembrado():
                                 "equipo": nadador['equipo'],
                                 "categoria": nadador['categoria'],
                                 "sexo": nadador['sexo'],
-                                "prueba": nombre_prueba,
+                                "prueba": titulo,
                                 "serie": serie_num,
                                 "carril": carril_asignado,
                                 "tiempo_inscripcion": nadador['tiempo_inscripcion']
@@ -119,7 +121,7 @@ def crear_papeleta_compacta(papeleta_data, styles):
         fontName='Helvetica-Bold'
     )
     
-    elements.append(Paragraph(f"PRUEBA: {papeleta_data['prueba']}", title_style))
+    elements.append(Paragraph(papeleta_data['prueba'], title_style))
     
     # Información del nadador (más compacta)
     nadador_style = ParagraphStyle(
@@ -307,7 +309,7 @@ def crear_tabla_excel_style(papeletas_grupo, styles):
 def crear_papeleta_individual_excel(papeleta, width_per_papeleta):
     """Crea una papeleta individual en formato Excel"""
     papeleta_data = [
-        ['PRUEBA:', papeleta['prueba']],
+        ['Evento:', papeleta['prueba']],
         ['SERIE:', str(papeleta['serie'])],
         ['CARRIL:', str(papeleta['carril'])],
         ['NADADOR:', papeleta['nombre']],
@@ -474,7 +476,7 @@ def generar_papeletas_pdf_excel_style():
                 spaceAfter=10,
                 fontName='Helvetica-Bold'
             )
-            elements.append(Paragraph(f"EVENTO: {event_name}", event_title))
+            elements.append(Paragraph(event_name, event_title))
 
             # Agrupar por series (máximo 15 nadadores por página para mantener legibilidad)
             NADADORES_POR_PAGINA = 15

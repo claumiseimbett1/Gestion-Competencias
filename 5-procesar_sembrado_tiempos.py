@@ -10,6 +10,53 @@ from datetime import datetime
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, Border, Side
 
+def _parse_seeding_sheet_df(df_raw, resultados_data):
+    """Recorre una hoja de sembrado (formato estándar) y agrega filas con tiempo de competencia."""
+    current_event = None
+    current_series = None
+
+    for index, row in df_raw.iterrows():
+        row_values = [str(val) if pd.notna(val) else "" for val in row.values]
+
+        if len(row_values) > 0 and " - " in row_values[0] and row_values[0] != "":
+            if all(val == "" or val == "nan" for val in row_values[1:7]):
+                current_event = row_values[0]
+                continue
+
+        if len(row_values) > 0 and row_values[0].startswith("Serie "):
+            try:
+                current_series = int(row_values[0].split()[1])
+                continue
+            except (ValueError, IndexError):
+                pass
+
+        if len(row_values) > 0 and row_values[0] == "Carril":
+            continue
+
+        try:
+            carril = int(float(row_values[0]))
+            nombre = row_values[1] if len(row_values) > 1 else ""
+            equipo = row_values[2] if len(row_values) > 2 else ""
+            edad = row_values[3] if len(row_values) > 3 else ""
+            categoria = row_values[4] if len(row_values) > 4 else ""
+            tiempo_inscripcion = row_values[5] if len(row_values) > 5 else ""
+            tiempo_competencia = row_values[6] if len(row_values) > 6 else ""
+
+            if nombre and nombre != "---" and tiempo_competencia and tiempo_competencia.strip() != "":
+                resultados_data.append({
+                    'Evento': current_event or "Evento sin nombre",
+                    'Nombre': nombre,
+                    'Equipo': equipo,
+                    'Edad': edad,
+                    'Categoria': categoria,
+                    'Tiempo': tiempo_competencia,
+                    'Serie': current_series or 1,
+                    'Carril': carril
+                })
+
+        except (ValueError, TypeError):
+            continue
+
 def process_seeding_with_times(input_file):
     """
     Procesa un archivo de sembrado que contiene tiempos de competencia
@@ -19,64 +66,12 @@ def process_seeding_with_times(input_file):
         return False, f"Archivo no encontrado: {input_file}"
     
     try:
-        # Leer archivo Excel completo sin headers para procesar estructura
-        df_raw = pd.read_excel(input_file, header=None)
-        
-        # Procesar datos estructurados
         resultados_data = []
-        current_event = None
-        current_series = None
-        
-        for index, row in df_raw.iterrows():
-            # Convertir fila a lista para mejor manejo
-            row_values = [str(val) if pd.notna(val) else "" for val in row.values]
-            
-            # Detectar evento (líneas con formato "EVENTO - Género")
-            if len(row_values) > 0 and " - " in row_values[0] and row_values[0] != "":
-                # Verificar si es un título de evento (no tiene datos en otras columnas)
-                if all(val == "" or val == "nan" for val in row_values[1:7]):
-                    current_event = row_values[0]
-                    continue
-            
-            # Detectar serie (líneas con formato "Serie X")
-            if len(row_values) > 0 and row_values[0].startswith("Serie "):
-                try:
-                    current_series = int(row_values[0].split()[1])
-                    continue
-                except:
-                    pass
-            
-            # Detectar header row (Carril, Nombre, etc.)
-            if len(row_values) > 0 and row_values[0] == "Carril":
-                continue
-                
-            # Procesar filas de datos (tienen carril numérico)
-            try:
-                carril = int(float(row_values[0]))
-                nombre = row_values[1] if len(row_values) > 1 else ""
-                equipo = row_values[2] if len(row_values) > 2 else ""
-                edad = row_values[3] if len(row_values) > 3 else ""
-                categoria = row_values[4] if len(row_values) > 4 else ""
-                tiempo_inscripcion = row_values[5] if len(row_values) > 5 else ""
-                tiempo_competencia = row_values[6] if len(row_values) > 6 else ""
-                
-                # Solo procesar si hay nombre y tiempo de competencia
-                if nombre and nombre != "---" and tiempo_competencia and tiempo_competencia.strip() != "":
-                    resultados_data.append({
-                        'Evento': current_event or "Evento sin nombre",
-                        'Nombre': nombre,
-                        'Equipo': equipo,
-                        'Edad': edad,
-                        'Categoria': categoria,
-                        'Tiempo': tiempo_competencia,
-                        'Serie': current_series or 1,
-                        'Carril': carril
-                    })
-                    
-            except (ValueError, TypeError):
-                # No es una fila de datos válida
-                continue
-        
+        xl = pd.ExcelFile(input_file)
+        for sheet_name in xl.sheet_names:
+            df_raw = pd.read_excel(input_file, sheet_name=sheet_name, header=None)
+            _parse_seeding_sheet_df(df_raw, resultados_data)
+
         if len(resultados_data) == 0:
             return False, "No se encontraron tiempos de competencia válidos en el archivo"
         
