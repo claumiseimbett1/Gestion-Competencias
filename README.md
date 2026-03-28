@@ -4,196 +4,187 @@
 
 ## 🌟 Descripción
 
-Sistema completo para la gestión de competencias de natación que incluye inscripción de nadadores, generación de sembrados y procesamiento de resultados con sistema de puntuación. Desarrollado para optimizar la organización de eventos deportivos acuáticos.
+Sistema completo para la gestión de competencias de natación: configuración del evento, inscripción de nadadores, generación de sembrados (series y carriles), papeletas para jueces (PDF y Excel) y procesamiento de resultados con sistema de puntuación. Pensado para optimizar la organización de eventos deportivos acuáticos.
 
-## ✨ Características Principales
+## ✨ Características principales
 
-- 🏊 **Inscripción de Nadadores**: Manual, búsqueda en BD e importación masiva
-- 📊 **Sembrado Inteligente**: Por categorías o tiempo con organización automática de series
-- 🏆 **Procesamiento de Resultados**: Sistema de puntos y reportes por equipos
-- 📋 **Reportes PDF**: Documentos profesionales con branding corporativo  
-- 🌐 **Interfaz Web Moderna**: Aplicación Streamlit intuitiva
-- 💻 **Uso Local**: Scripts independientes para uso técnico
+- 🎯 **Gestión del evento**: Pruebas disponibles, rangos de edad y configuración persistente (`event_config.json`)
+- 🏊 **Inscripción de nadadores**: Manual, búsqueda en base de datos e importación masiva desde Excel
+- 📊 **Sembrado**: Por categorías o solo por tiempo, con asignación estándar de carriles
+- 📋 **Papeletas para jueces**: Generación en PDF y en Excel tras el sembrado
+- 🏆 **Procesamiento de resultados**: Puntos, rankings y reportes por evento, individual y equipos
+- 🌐 **Interfaz web**: Aplicación Streamlit con todas las funciones integradas
+- 💻 **Uso local**: Menú por consola (`menu_local.py`) y scripts ejecutables por separado
 
-## 🚀 Inicio Rápido
+## 🚀 Inicio rápido
 
-### 🌐 Aplicación Web (Recomendado)
+### Aplicación web (recomendado)
+
+En Windows suele usarse `python`; en Linux/mac a veces `python3`.
+
 ```bash
-# Instalar dependencias
 pip install -r requirements.txt
-
-# Ejecutar aplicación
 streamlit run app.py
 ```
-Accede a `http://localhost:8501` en tu navegador.
 
-### 💻 Menú Local Interactivo
+Abre `http://localhost:8501` en el navegador.
+
+### Menú local interactivo
+
 ```bash
-python3 menu_local.py
+python menu_local.py
 ```
 
-### ⚡ Scripts Individuales
+### Scripts individuales
+
 ```bash
-python3 1-inscripcion_nadadores.py    # Inscripciones
-python3 2-generar_sembrado.py         # Sembrado por categorías
-python3 3-generar_sembrado_por_tiempo.py  # Sembrado por tiempo
-python3 4-procesar_resultados.py      # Procesar resultados
+python 1-inscripcion_nadadores.py
+python 2-generar_sembrado.py
+python 3-generar_sembrado_por_tiempo.py
+python 4-procesar_resultados.py
+python 5-procesar_sembrado_tiempos.py   # Sembrado con tiempos → formato de resultados
 ```
 
-## 📁 Estructura del Proyecto
+Los módulos `generar_papeletas.py` y `generar_papeletas_excel.py` se usan desde la app web o pueden importarse según necesidad; no suelen ejecutarse como `python generar_papeletas.py` en el flujo típico.
+
+## 📁 Estructura del proyecto
 
 ```
-📦 gestion-competencias/
-├── 🌐 app.py                          # Aplicación web principal
-├── 💻 menu_local.py                   # Menú CLI interactivo
-├── 🏊 1-inscripcion_nadadores.py      # Sistema de inscripciones
-├── 📊 2-generar_sembrado.py           # Sembrado por categorías
-├── ⏱️ 3-generar_sembrado_por_tiempo.py # Sembrado por tiempo
-├── 🏆 4-procesar_resultados.py        # Procesamiento de resultados
-├── 🗄️ BASE-DE-DATOS.xlsx             # Base de datos de atletas
-├── 📋 planilla_inscripcion.xlsx      # Template de inscripción
-├── 🖼️ img/TEN.png                    # Logo corporativo
-├── 📦 requirements.txt               # Dependencias Python
-├── 📚 README.md                      # Este archivo
-├── 📝 README_LOCAL.md                # Guía uso local
-├── 🔧 CLAUDE.md                      # Documentación técnica
-└── 🚫 .gitignore                     # Archivos excluidos
+📦 Gestion-Competencias/
+├── app.py                          # Aplicación web Streamlit (punto de entrada principal)
+├── menu_local.py                   # Menú CLI interactivo
+├── event_manager.py                # Lógica de creación/edición de eventos
+├── 1-inscripcion_nadadores.py      # Inscripciones
+├── 2-generar_sembrado.py           # Sembrado por categorías
+├── 3-generar_sembrado_por_tiempo.py # Sembrado por tiempo
+├── 4-procesar_resultados.py        # Resultados y premiación
+├── 5-procesar_sembrado_tiempos.py  # Convierte sembrado con tiempos a formato de resultados
+├── generar_papeletas.py            # Papeletas PDF (ReportLab)
+├── generar_papeletas_excel.py      # Papeletas Excel
+├── img/TEN.png                     # Logo
+├── requirements.txt
+├── README.md                       # Este archivo
+├── README_LOCAL.md                 # Uso sin depender solo de la web
+├── CLAUDE.md                       # Notas técnicas para desarrollo
+├── event_config.json               # Generado al configurar el evento (no suele versionarse vacío)
+├── BASE-DE-DATOS.xlsx              # Base histórica de atletas (inscripción con búsqueda)
+├── planilla_inscripcion.xlsx       # Planilla de inscripción (flujo principal)
+└── …                               # Otros Excel de entrada/salida según la etapa
 ```
 
-## 🔧 Instalación y Configuración
+## 🔧 Instalación y configuración
 
-### 📋 Prerrequisitos
-- Python 3.8+
-- pip (gestor de paquetes)
+### Prerrequisitos
 
-### 📦 Dependencias Principales
-```txt
-streamlit>=1.28.0    # Aplicación web
-pandas>=2.0.0        # Manipulación de datos  
-openpyxl>=3.1.0      # Archivos Excel
-reportlab>=4.0.0     # Generación PDF
-pillow>=10.0.0       # Procesamiento imágenes
-```
+- Python 3.8 o superior
+- `pip`
 
-### ⚙️ Instalación Completa
+### Dependencias destacadas
+
+| Paquete    | Uso principal        |
+|-----------|----------------------|
+| streamlit | Interfaz web         |
+| pandas    | Datos y Excel        |
+| openpyxl  | Lectura/escritura .xlsx |
+| reportlab | PDF (papeletas)      |
+| matplotlib| Gráficos en reportes de inscripción |
+
+Instalación:
+
 ```bash
-# Clonar repositorio
-git clone <repository-url>
-cd gestion-competencias
-
-# Instalar dependencias
 pip install -r requirements.txt
-
-# Verificar instalación
-python3 menu_local.py
 ```
 
-## 🏊 Flujo de Trabajo
+## 🏊 Flujo de trabajo sugerido
 
-### 1️⃣ **Inscripción de Nadadores**
-- **Manual**: Formulario completo con validación
-- **Base de Datos**: Búsqueda en histórico de atletas  
-- **Importación Masiva**: Desde archivos Excel existentes
+1. **Crear o ajustar el evento** (en la app web): define pruebas y edades → se guarda `event_config.json`.
+2. **Inscripción**: genera o completa `planilla_inscripcion.xlsx` (manual, BD o importación).
+3. **Sembrado**: por categorías o por tiempo → `sembrado_competencia.xlsx` o `sembrado_competencia_POR_TIEMPO.xlsx`.
+4. **Papeletas** (opcional): PDF / Excel para jueces.
+5. **Resultados**: introduce tiempos en `resultados_con_tiempos.xlsx` (o usa `5-procesar_sembrado_tiempos.py` si partes de un sembrado ya anotado) y ejecuta el procesamiento → `reporte_premiacion_final_CORREGIDO.xlsx`.
 
-### 2️⃣ **Generación de Sembrado**
-- **Por Categorías**: Grupos por edad + ordenamiento por tiempo
-- **Por Tiempo**: Ordenamiento global ignorando categorías
-- **Distribución Inteligente**: Asignación automática de carriles
+## 📊 Formatos de archivo
 
-### 3️⃣ **Procesamiento de Resultados**
-- **Sistema de Puntos**: 1°=9pts, 2°=7pts, 3°=6pts, etc.
-- **Reportes Múltiples**: Por evento, individual y equipos
-- **Rankings Automáticos**: Por categoría y género
+### Entrada habitual
 
-## 📊 Formatos de Archivo Soportados
+- **`event_config.json`**: Configuración del evento (lo crea la sección “Creación del Evento” en la web).
+- **`planilla_inscripcion.xlsx`**: Nadadores y tiempos de inscripción.
+- **`BASE-DE-DATOS.xlsx`**: Búsqueda de atletas (hojas esperadas según `CLAUDE.md`).
+- **`resultados_con_tiempos.xlsx`**: Tiempos de carrera para premiación.
 
-### Entrada
-- **`.xlsx`** - Planillas de inscripción y resultados
-- **Base de Datos** - Hojas `FPROYECCION 2025T` y `M. PROYECCION 2025`
+### Salida habitual
 
-### Salida  
-- **`.xlsx`** - Sembrados y reportes de resultados
-- **`.pdf`** - Reportes con branding corporativo
+- Excel de sembrado y de premiación.
+- **`papeletas_jueces.pdf`** (u otros nombres según la app) y exportaciones Excel de papeletas.
 
-## 🌐 Deploy en Streamlit Cloud
+## 🌐 Despliegue en Streamlit Cloud
 
-1. **Fork** este repositorio
-2. **Conectar** con Streamlit Cloud  
-3. **Configurar** rama `main` y archivo `app.py`
-4. **Deploy automático** - ¡Listo!
+1. Conecta el repositorio a [Streamlit Community Cloud](https://streamlit.io/cloud).
+2. Punto de entrada: `app.py`, rama principal.
+3. Sube los archivos de datos necesarios o configura secretos/almacenamiento: en la nube no están tus `BASE-DE-DATOS.xlsx` locales salvo que los subas o enlaces una fuente externa.
 
-La aplicación incluye gestión automática de dependencias y archivos base.
+## 🔧 Resolución de problemas
 
-## 🔧 Resolución de Problemas
+### `ModuleNotFoundError: No module named 'reportlab'`
 
-### ❌ Error de ReportLab
+Instala en **el mismo Python** que usa Streamlit:
+
 ```bash
-pip install reportlab --upgrade
+python -m pip install reportlab
 ```
 
-### 📁 Archivos Faltantes
-El sistema verifica automáticamente archivos necesarios y proporciona mensajes claros sobre dependencias faltantes.
+Si usas un entorno virtual, actívalo antes de instalar y de ejecutar `streamlit run app.py`.
 
-### 🐛 Problemas de Importación
+### Comprobar paquetes
+
 ```bash
-# Verificar entorno Python
-python3 --version
-pip list | grep -E "(streamlit|pandas|openpyxl|reportlab)"
+python -m pip show streamlit pandas openpyxl reportlab
 ```
+
+### Archivos faltantes
+
+La aplicación valida entradas y muestra mensajes indicando qué archivo falta o qué configuración crear primero.
 
 ## 🤝 Contribuciones
 
-1. **Fork** el proyecto
-2. **Crear** rama feature (`git checkout -b feature/AmazingFeature`)
-3. **Commit** cambios (`git commit -m 'Add AmazingFeature'`)
-4. **Push** a la rama (`git push origin feature/AmazingFeature`)
-5. **Abrir** Pull Request
+1. Fork del repositorio.
+2. Rama de funcionalidad (`git checkout -b feature/nombre-descriptivo`).
+3. Commits con mensajes claros.
+4. Pull request con descripción del cambio.
 
-## 📝 Changelog
+## 📝 Changelog (resumen)
 
-### v2.0 (Actual)
-- ✅ Interfaz web Streamlit completa
-- ✅ Menú CLI interactivo  
-- ✅ Importación masiva desde Excel
-- ✅ Base de datos dual (femenino/masculino)
-- ✅ PDFs con colores corporativos TEN
-- ✅ Gestión de archivos integrada
-- ✅ Sembrado unificado con pestañas
+### Actual
 
-### v1.0 (Inicial)
-- ✅ Scripts individuales básicos
-- ✅ Procesamiento por categorías
-- ✅ Sistema de puntuación 
-- ✅ Generación de reportes
+- Interfaz web con creación de evento, inscripción, sembrado, papeletas (PDF/Excel), resultados y gestión de archivos.
+- Scripts numerados `1`–`5` y módulos de papeletas alineados con la app.
+
+### Versiones anteriores
+
+- Scripts por consola, sembrado por categorías/tiempo, sistema de puntos y reportes Excel.
 
 ## 📞 Soporte
 
-- 📚 **Documentación Técnica**: Ver `CLAUDE.md`
-- 💻 **Uso Local**: Ver `README_LOCAL.md`  
-- 🐛 **Issues**: Crear issue en GitHub
-- 📧 **Contacto**: [Información de contacto]
+- Documentación técnica: `CLAUDE.md`
+- Uso local y archivos: `README_LOCAL.md`
+- Incidencias: abre un issue en el repositorio si está habilitado.
 
 ## ⚖️ Licencia
 
-Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) para detalles.
+Si el repositorio incluye un archivo `LICENSE`, prevalece su texto. Si no existe, consulta con los mantenedores del proyecto.
 
 ## 🏆 Agradecimientos
 
-- **TEN (Tecnología En Natación)** - Logo y branding
-- **Comunidad de Natación** - Feedback y testing
-- **Desarrolladores** - Contribuciones técnicas
+- **TEN (Tecnología En Natación)** — identidad visual
+- Comunidad y pruebas en competencias reales
 
 ---
 
 <div align="center">
 
-**🏊‍♀️ Sistema TEN - Gestión de Competencias de Natación 🏊‍♂️**
-
-*Optimizando la organización de eventos deportivos acuáticos*
+**Sistema TEN — Gestión de Competencias de Natación**
 
 [![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io/)
 [![Python](https://img.shields.io/badge/Python-3.8+-3776AB?logo=python&logoColor=white)](https://python.org/)
-[![Pandas](https://img.shields.io/badge/Pandas-150458?logo=pandas&logoColor=white)](https://pandas.pydata.org/)
-[![ReportLab](https://img.shields.io/badge/ReportLab-PDF-green)](https://www.reportlab.com/)
 
 </div>

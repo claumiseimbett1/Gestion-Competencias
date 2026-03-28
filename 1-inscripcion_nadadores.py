@@ -15,6 +15,7 @@ try:
 except ImportError:
     REPORTLAB_AVAILABLE = False
 from io import BytesIO
+from planilla_utils import inscrito_en_prueba
 
 class SwimmerRegistration:
     def __init__(self):
@@ -476,7 +477,7 @@ class SwimmerRegistration:
         for index, row in df.iterrows():
             events_registered = []
             for event in available_events:
-                if pd.notna(row.get(event)):
+                if inscrito_en_prueba(row.get(event)):
                     events_registered.append(f"{event}: {row[event]}")
 
             swimmers.append({
@@ -1971,7 +1972,7 @@ class SwimmerRegistration:
         # Extraer eventos inscritos
         events_data = {}
         for event in available_events:
-            if pd.notna(row.get(event)):
+            if inscrito_en_prueba(row.get(event)):
                 events_data[event] = str(row[event])
 
         swimmer_data = {
@@ -2292,7 +2293,7 @@ class SwimmerRegistration:
                     # Procesar tiempos de las pruebas (solo las disponibles en el evento)
                     events_data = {}
                     for event in available_events:
-                        if event in df.columns and pd.notna(row[event]):
+                        if event in df.columns and inscrito_en_prueba(row[event]):
                             time_value = row[event]
 
                             # Convertir a string y normalizar formato

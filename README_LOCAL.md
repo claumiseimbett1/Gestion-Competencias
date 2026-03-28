@@ -1,124 +1,127 @@
-# 🏊‍♀️ Sistema TEN - Uso Local
+# 🏊‍♀️ Sistema TEN — Uso local (CLI y scripts)
 
-## 🚀 Inicio Rápido
+Guía para quien prefiere terminal, scripts sueltos o el menú `menu_local.py` en lugar de solo la interfaz web.
 
-### Opción 1: Menú Interactivo (Recomendado)
+## 🚀 Inicio rápido
+
+### Opción 1: Menú interactivo
+
 ```bash
-python3 menu_local.py
+python menu_local.py
 ```
 
-### Opción 2: Aplicación Web
+Opciones típicas: inscripción, sembrado (categorías o tiempo), procesar resultados, revisar archivos, iniciar la app web.
+
+### Opción 2: Aplicación web (funciones completas)
+
+La **creación del evento**, las **papeletas** (PDF/Excel) y la **gestión de archivos** están en la app Streamlit:
+
 ```bash
 streamlit run app.py
 ```
 
-### Opción 3: Scripts Individuales
+Abre `http://localhost:8501`.
+
+### Opción 3: Scripts por separado
+
 ```bash
-# Inscripción de nadadores
-python3 1-inscripcion_nadadores.py
-
-# Sembrado por categorías 
-python3 2-generar_sembrado.py
-
-# Sembrado por tiempo
-python3 3-generar_sembrado_por_tiempo.py
-
-# Procesar resultados
-python3 4-procesar_resultados.py
+python 1-inscripcion_nadadores.py
+python 2-generar_sembrado.py
+python 3-generar_sembrado_por_tiempo.py
+python 4-procesar_resultados.py
+python 5-procesar_sembrado_tiempos.py
 ```
 
-## 📋 Funcionalidades Disponibles
+En Linux/mac, si no existe el comando `python`, usa `python3`.
 
-### ✍️ Inscripción de Nadadores
-- **Manual**: Formulario completo de registro
-- **Base de Datos**: Búsqueda en atletas existentes  
-- **Importación Masiva**: Desde archivos Excel
-- **Reportes PDF**: Con estadísticas completas
+## 📋 Qué hace cada parte
 
-### 📊 Sembrado de Competencia
-- **Por Categorías**: Agrupa por edad, ordena por tiempo
-- **Por Tiempo**: Ignora categorías, solo ordenamiento temporal
-- **Manual**: Organización personalizada (próximamente)
+### Inscripción (`1-inscripcion_nadadores.py`)
 
-### 🏆 Procesamiento de Resultados  
-- **Sistema de Puntos**: 1°=9pts, 2°=7pts, etc.
-- **Reportes Múltiples**: Por evento, individual y equipos
-- **Clasificaciones**: Automáticas por categoría
+- Registro manual, búsqueda en `BASE-DE-DATOS.xlsx`, importación masiva.
+- Reportes PDF con estadísticas (requiere `reportlab` y dependencias del proyecto).
 
-## 📁 Archivos del Sistema
+### Sembrado (`2` y `3`)
 
-### Archivos de Entrada
-- `planilla_inscripcion.xlsx` - Datos de nadadores registrados
-- `BASE-DE-DATOS.xlsx` - Base histórica de atletas
-- `resultados_con_tiempos.xlsx` - Tiempos finales de competencia
+- **Por categorías** (`2-generar_sembrado.py`): agrupa por edad/categoría y ordena por tiempo dentro de cada grupo.
+- **Por tiempo** (`3-generar_sembrado_por_tiempo.py`): orden global por marca, sin agrupar por categoría.
 
-### Archivos de Salida
-- `sembrado_competencia.xlsx` - Sembrado por categorías
-- `sembrado_competencia_POR_TIEMPO.xlsx` - Sembrado por tiempo
-- `reporte_premiacion_final_CORREGIDO.xlsx` - Resultados procesados
+Salidas habituales: `sembrado_competencia.xlsx`, `sembrado_competencia_POR_TIEMPO.xlsx`.
 
-## ⚙️ Instalación de Dependencias
+### Papeletas
+
+Se generan desde la sección **“Generar Papeletas”** en `app.py`, usando `generar_papeletas.py` (PDF) y `generar_papeletas_excel.py` (Excel).
+
+### Resultados (`4-procesar_resultados.py`)
+
+- Entrada típica: `resultados_con_tiempos.xlsx`.
+- Salida: `reporte_premiacion_final_CORREGIDO.xlsx` (puntos 1.º=9, 2.º=7, …).
+
+### Sembrado con tiempos ya cargados (`5-procesar_sembrado_tiempos.py`)
+
+Útil si tienes un Excel de sembrado donde ya anotaste tiempos de competencia y quieres llevarlos a un formato procesable como resultados. Detalles en `CLAUDE.md`.
+
+## 📁 Archivos que verás con frecuencia
+
+### Entrada
+
+| Archivo | Uso |
+|---------|-----|
+| `event_config.json` | Pruebas y reglas del evento (créalo desde la app web: “Creación del Evento”) |
+| `planilla_inscripcion.xlsx` | Nadadores inscritos |
+| `BASE-DE-DATOS.xlsx` | Histórico para búsqueda en inscripción |
+| `resultados_con_tiempos.xlsx` | Tiempos finales para premiación |
+
+### Salida
+
+| Archivo | Uso |
+|---------|-----|
+| `sembrado_competencia.xlsx` | Sembrado por categorías |
+| `sembrado_competencia_POR_TIEMPO.xlsx` | Sembrado por tiempo |
+| `reporte_premiacion_final_CORREGIDO.xlsx` | Premiación procesada |
+| `papeletas_jueces.pdf` (u otro nombre según la app) | Papeletas PDF |
+
+El menú local incluye **“Gestión de archivos”** para comprobar si existen varios de estos archivos en la carpeta de trabajo.
+
+## ⚙️ Dependencias
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### Dependencias Principales
-- `streamlit` - Aplicación web
-- `pandas` - Procesamiento de datos
-- `openpyxl` - Manejo de Excel
-- `reportlab` - Generación de PDFs
+Imprescindibles para PDF y la web: entre otras, `streamlit`, `pandas`, `openpyxl`, `reportlab`.
 
-## 🔧 Resolución de Problemas
+## 🔧 Problemas frecuentes
 
-### Error de ReportLab
+### `No module named 'reportlab'`
+
 ```bash
-# Instalación manual
-pip install reportlab
-# o
-pip3 install reportlab
+python -m pip install reportlab
 ```
 
-### Archivos Faltantes
-- El sistema verificará automáticamente archivos necesarios
-- Mensajes claros sobre qué archivos faltan
-- Sugerencias de dónde obtenerlos
+Usa el **mismo** intérprete con el que ejecutas Streamlit (misma carpeta `venv` si usas entorno virtual).
 
-## 💡 Consejos de Uso
+### Falta `event_config.json`
 
-### Para Competencias Pequeñas
-1. Usar inscripción manual
-2. Sembrado por categorías
-3. Procesamiento directo
+Créalo desde la app web (**Creación del Evento**) antes de depender de filtros por prueba/edad en inscripción o sembrado.
 
-### Para Competencias Grandes
-1. Importación masiva desde Excel
-2. Base de datos de atletas
-3. Sembrado por tiempo para qualifiers
+### Scripts fallan por archivo no encontrado
 
-### Flujo Completo
-```bash
-python3 menu_local.py
-# 1. Inscripción → 2. Sembrado → 3. Resultados
-```
+Ejecuta el menú → opción de estado de archivos, o revisa mensajes de error: suelen indicar el nombre exacto esperado.
 
-## 🌐 Aplicación Web vs Local
+## 🌐 Web frente a solo CLI
 
-| Característica | Web (Streamlit) | Local (Scripts) |
-|----------------|-----------------|-----------------|
-| **Interfaz** | Moderna, intuitiva | Línea de comandos |
-| **Funcionalidad** | Completa | Completa |
-| **Facilidad** | Muy fácil | Técnica |
-| **Velocidad** | Media | Rápida |
-| **Archivos** | Upload/Download | Directo |
+| Aspecto | Streamlit (`app.py`) | Menú / scripts |
+|--------|----------------------|----------------|
+| Creación de evento | Sí | No (usa la web o edita `event_config.json` manualmente si conoces el formato) |
+| Papeletas PDF/Excel | Sí | Integradas vía módulos; flujo habitual desde la web |
+| Inscripción completa con UI | Sí | `menu_local` delega en el módulo; la experiencia más completa es la web |
+| Sembrado y resultados | Sí | Sí, vía menú o `python 2-…`, `3-…`, `4-…` |
 
-## 📞 Soporte
+## 📞 Más ayuda
 
-Si encuentras problemas:
-1. Revisa `CLAUDE.md` para documentación técnica
-2. Verifica que todos los archivos estén en el directorio correcto
-3. Usa el menú local para estado de archivos
-4. Instala dependencias faltantes con `pip install -r requirements.txt`
+- Detalle de columnas Excel y flujos: `CLAUDE.md`
+- Visión general del proyecto: `README.md`
 
 ---
-🏊‍♀️ **Sistema TEN - Tecnología En Natación**
+🏊‍♀️ **Sistema TEN — Tecnología En Natación**

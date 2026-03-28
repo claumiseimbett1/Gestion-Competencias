@@ -1,6 +1,7 @@
 # generar_papeletas_excel.py
 import pandas as pd
 import os
+from planilla_utils import inscrito_en_prueba
 import math
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, Border, Side
@@ -33,7 +34,7 @@ def leer_datos_sembrado():
             sexo = row['SEXO'].upper()
             
             for prueba in event_cols:
-                if pd.notna(row[prueba]):
+                if inscrito_en_prueba(row[prueba]):
                     nombre_prueba = f"{prueba} - {'Mujeres' if sexo == 'F' else 'Hombres'}"
                     if nombre_prueba not in eventos: eventos[nombre_prueba] = []
                     

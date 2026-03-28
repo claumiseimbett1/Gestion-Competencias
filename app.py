@@ -12,6 +12,7 @@ import sys
 
 # Importar los scripts directly  
 import importlib.util
+from planilla_utils import inscrito_en_prueba
 
 # Importar el módulo de inscripción con el nuevo nombre
 spec = importlib.util.spec_from_file_location("inscripcion_nadadores", "1-inscripcion_nadadores.py")
@@ -1888,7 +1889,7 @@ def sembrado_competencia_interface():
             # Filtrar nadadores para el evento seleccionado
             swimmers_for_event = []
             for index, row in df.iterrows():
-                if pd.notna(row[selected_event]) and pd.notna(row['NOMBRE Y AP']):
+                if inscrito_en_prueba(row[selected_event]) and pd.notna(row['NOMBRE Y AP']):
                     swimmer_gender = "Masculino" if row['SEXO'].upper() == 'M' else "Femenino"
                     if gender_filter == "Todos" or gender_filter == swimmer_gender:
                         swimmers_for_event.append({
@@ -1898,7 +1899,8 @@ def sembrado_competencia_interface():
                             'edad': row['EDAD'],
                             'categoria': row['CAT.'],
                             'sexo': swimmer_gender,
-                            'tiempo': str(row[selected_event])
+                            'tiempo': str(row[selected_event]),
+                            'tiempo_en_segundos': script1.parse_time(row[selected_event]),
                         })
             
             if len(swimmers_for_event) == 0:
@@ -1924,7 +1926,10 @@ def sembrado_competencia_interface():
             
             def create_initial_seeding(swimmers_list):
                 """Crear sembrado inicial automático"""
-                sorted_swimmers = sorted(swimmers_list, key=lambda x: float('inf') if x['tiempo'] == 'nan' else float(x['tiempo'].replace(':', '').replace('.', '')) if ':' in x['tiempo'] else float(x['tiempo']) if x['tiempo'].replace('.', '').isdigit() else float('inf'))
+                sorted_swimmers = sorted(
+                    swimmers_list,
+                    key=lambda x: x.get('tiempo_en_segundos', script1.parse_time(x['tiempo'])),
+                )
                 
                 # Distribución en series de 8 carriles
                 series = []

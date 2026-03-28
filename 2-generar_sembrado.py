@@ -2,6 +2,7 @@
 
 import pandas as pd
 import math
+from planilla_utils import inscrito_en_prueba
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, Border, Side
 
@@ -14,6 +15,9 @@ CARRILES_PISCINA = 8
 
 def parse_time(time_val):
     if pd.isna(time_val): return float('inf')
+    # Sin tiempo (scratch): s/t, S/T, con espacios — sembrar como peor tiempo
+    if ''.join(str(time_val).split()).lower() == 's/t':
+        return float('inf')
     if hasattr(time_val, 'minute'): return time_val.minute * 60 + time_val.second + time_val.microsecond / 1_000_000
     time_str = str(time_val).replace(',', '.')
     try:
@@ -62,7 +66,7 @@ def main():
         sexo = row['SEXO'].upper()
         
         for prueba in event_cols:
-            if pd.notna(row[prueba]):
+            if inscrito_en_prueba(row[prueba]):
                 nombre_prueba = f"{prueba} - {'Mujeres' if sexo == 'F' else 'Hombres'}"
                 if nombre_prueba not in eventos: eventos[nombre_prueba] = []
                 
@@ -149,7 +153,7 @@ def get_seeding_data():
         categoria = row['CAT.']
         
         for prueba in event_cols:
-            if pd.notna(row[prueba]):
+            if inscrito_en_prueba(row[prueba]):
                 nombre_prueba = f"{prueba} - {categoria} - {'Mujeres' if sexo == 'F' else 'Hombres'}"
                 if nombre_prueba not in eventos: eventos[nombre_prueba] = []
                 
