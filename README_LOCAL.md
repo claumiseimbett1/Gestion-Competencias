@@ -44,7 +44,7 @@ En Linux/mac, si no existe el comando `python`, usa `python3`.
 ### Sembrado (`2` y `3`)
 
 - **Por categorías** (`2-generar_sembrado.py`): agrupa por edad/categoría y ordena por tiempo dentro de cada grupo.
-- **Por tiempo** (`3-generar_sembrado_por_tiempo.py`): orden global por marca, sin agrupar por categoría.
+- **Por tiempo** (`3-generar_sembrado_por_tiempo.py`): orden global por marca dentro de cada prueba (sin bloques por categoría). Ambos Excel llevan **una hoja por prueba** con título `PRUEBA N …`.
 
 Salidas habituales: `sembrado_competencia.xlsx`, `sembrado_competencia_POR_TIEMPO.xlsx`.
 
@@ -77,7 +77,7 @@ Se generan desde la sección **“Generar Papeletas”** en `app.py`, usando `ge
 | Archivo | Uso |
 |---------|-----|
 | `sembrado_competencia.xlsx` | Sembrado por categorías |
-| `sembrado_competencia_POR_TIEMPO.xlsx` | Sembrado por tiempo |
+| `sembrado_competencia_POR_TIEMPO.xlsx` | Sembrado por tiempo (una hoja por prueba) |
 | `reporte_premiacion_final_CORREGIDO.xlsx` | Premiación procesada |
 | `papeletas_jueces.pdf` (u otro nombre según la app) | Papeletas PDF |
 

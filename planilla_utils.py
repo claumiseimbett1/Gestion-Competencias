@@ -1,11 +1,30 @@
 """Utilidades compartidas para leer planilla_inscripcion.xlsx."""
+import re
 import pandas as pd
+
+
+def safe_excel_sheet_title(name, used_titles):
+    """Nombre de hoja válido en Excel (máx. 31 caracteres, sin \\ / * ? : [ ])."""
+    s = re.sub(r'[\[\]*?:/\\]', '-', str(name)).strip() or 'Prueba'
+    base = s[:31]
+    candidate = base
+    n = 1
+    while candidate in used_titles:
+        suffix = f' ({n})'
+        max_base = max(0, 31 - len(suffix))
+        candidate = (base[:max_base] + suffix).strip()
+        n += 1
+    used_titles.add(candidate)
+    return candidate
 
 
 def inscrito_en_prueba(cell_val):
     """
     True si el nadador está inscrito en la prueba (celda con dato).
     False si la celda está vacía o solo espacios: no nada esa prueba.
+
+    Incluye marcas sin tiempo **s/t** o **S/T** (con espacios): el nadador **sí nada**
+    la prueba; el sembrado lo trata como peor tiempo (ver parse_time en scripts de sembrado).
     """
     if pd.isna(cell_val):
         return False

@@ -240,9 +240,11 @@ class SwimmerRegistration:
         if not time_str or time_str.strip() == "":
             return True, None
             
-        # Normalizar el formato: coma a punto, eliminar espacios
+        # Normalizar el formato: coma a punto; sin tiempo = sigue inscrito en la prueba
         time_str = str(time_str).strip().replace(',', '.')
-        
+        if ''.join(time_str.split()).lower() == 's/t':
+            return True, 's/t'
+
         # Manejar casos especiales de Excel
         if time_str.lower() in ['nan', 'none', 'null']:
             return True, None

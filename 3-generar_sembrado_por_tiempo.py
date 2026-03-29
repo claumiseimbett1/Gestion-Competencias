@@ -2,9 +2,17 @@
 
 import pandas as pd
 import math
-from planilla_utils import inscrito_en_prueba
+from planilla_utils import (
+    inscrito_en_prueba,
+    ordered_prueba_hoja_keys,
+    titulo_prueba_numerada,
+    safe_excel_sheet_title,
+)
 from openpyxl import Workbook
 from openpyxl.styles import Font
+
+ARCHIVO_SALIDA_TIEMPO = 'sembrado_competencia_POR_TIEMPO.xlsx'
+CARRILES_PISCINA = 8
 
 # Funciones de ayuda
 def parse_time(time_val):
@@ -41,6 +49,41 @@ def seed_series(swimmers, lanes=8):
         series_list.append(serie_data)
     return series_list
 
+def _write_sembrado_sheet_por_tiempo(ws, titulo_prueba, series_list):
+    """Una hoja: título PRUEBA N … y series (sin bloques por categoría)."""
+    fila_actual = 1
+    ws.cell(row=fila_actual, column=1, value=titulo_prueba).font = Font(bold=True, size=16)
+    fila_actual += 2
+
+    for serie in series_list:
+        ws.cell(row=fila_actual, column=1, value=f"Serie {serie['serie']}").font = Font(bold=True)
+        fila_actual += 1
+
+        headers = ["Carril", "Nombre", "Equipo", "Edad", "Categoría", "Tiempo Inscripción", "Tiempo Competencia"]
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=fila_actual, column=col, value=header)
+            cell.font = Font(bold=True)
+            if header == "Tiempo Competencia":
+                cell.font = Font(bold=True, color="FF0000")
+        fila_actual += 1
+
+        for carril_num, nadador in enumerate(serie['carriles'], 1):
+            ws.cell(row=fila_actual, column=1, value=carril_num)
+            if nadador:
+                tiempo_val = nadador['tiempo_inscripcion']
+                tiempo_str = tiempo_val.strftime('%M:%S.%f')[:-4] if hasattr(tiempo_val, 'strftime') else str(tiempo_val)
+                ws.cell(row=fila_actual, column=2, value=nadador['nombre'])
+                ws.cell(row=fila_actual, column=3, value=nadador['equipo'])
+                ws.cell(row=fila_actual, column=4, value=nadador['edad'])
+                ws.cell(row=fila_actual, column=5, value=nadador['categoria'])
+                ws.cell(row=fila_actual, column=6, value=tiempo_str)
+                comp_cell = ws.cell(row=fila_actual, column=7, value="")
+                comp_cell.font = Font(color="0000FF")
+            fila_actual += 1
+        fila_actual += 1
+
+    ws.column_dimensions['B'].width = 40
+
 def main():
     print("Iniciando sembrado por TIEMPO (versión corregida)...")
     try:
@@ -70,50 +113,34 @@ def main():
 
     sembrado_final = {}
     for nombre_prueba, nadadores in eventos.items():
-        sembrado_final[nombre_prueba] = {"series": seed_series(nadadores, 8)}
+        sembrado_final[nombre_prueba] = {"series": seed_series(nadadores, CARRILES_PISCINA)}
 
     wb = Workbook()
-    ws = wb.active
-    ws.title = "Sembrado por Tiempo"
-    
-    fila_actual = 1
-    for nombre_prueba, data_prueba in sembrado_final.items():
-        ws.cell(row=fila_actual, column=1, value=nombre_prueba).font = Font(bold=True, size=16)
-        fila_actual += 2
-        
-        for serie in data_prueba['series']:
-            ws.cell(row=fila_actual, column=1, value=f"Serie {serie['serie']}").font = Font(bold=True)
-            fila_actual += 1
-            
-            # Headers con columna adicional para tiempo de competencia
-            headers = ["Carril", "Nombre", "Equipo", "Edad", "Categoría", "Tiempo Inscripción", "Tiempo Competencia"]
-            for col, header in enumerate(headers, 1):
-                cell = ws.cell(row=fila_actual, column=col, value=header)
-                cell.font = Font(bold=True)
-                # Destacar la columna de tiempo de competencia
-                if header == "Tiempo Competencia":
-                    cell.font = Font(bold=True, color="FF0000")  # Rojo para destacar
-            fila_actual += 1
-            
-            for carril_num, nadador in enumerate(serie['carriles'], 1):
-                ws.cell(row=fila_actual, column=1, value=carril_num)
-                if nadador:
-                    tiempo_val = nadador['tiempo_inscripcion']
-                    tiempo_str = tiempo_val.strftime('%M:%S.%f')[:-4] if hasattr(tiempo_val, 'strftime') else str(tiempo_val)
-                    ws.cell(row=fila_actual, column=2, value=nadador['nombre'])
-                    ws.cell(row=fila_actual, column=3, value=nadador['equipo'])
-                    ws.cell(row=fila_actual, column=4, value=nadador['edad'])
-                    ws.cell(row=fila_actual, column=5, value=nadador['categoria'])
-                    ws.cell(row=fila_actual, column=6, value=tiempo_str)
-                    # Columna vacía para tiempo de competencia (editable)
-                    comp_cell = ws.cell(row=fila_actual, column=7, value="")
-                    comp_cell.font = Font(color="0000FF")  # Azul para indicar que es editable
-                fila_actual += 1
-            fila_actual += 1
+    if not sembrado_final:
+        ws = wb.active
+        ws.title = "Sin datos"
+        ws.cell(row=1, column=1, value="No hay nadadores inscritos para generar sembrado.")
+        wb.save(ARCHIVO_SALIDA_TIEMPO)
+        print(f"Archivo '{ARCHIVO_SALIDA_TIEMPO}' generado (sin datos).")
+        return
 
-    ws.column_dimensions['B'].width = 40
-    wb.save('sembrado_competencia_POR_TIEMPO.xlsx')
-    print("¡Éxito! Archivo 'sembrado_competencia_POR_TIEMPO.xlsx' generado con la columna 'Categoría'.")
+    used_titles = set()
+    first_sheet = True
+    ordered_keys = ordered_prueba_hoja_keys(sembrado_final, event_cols)
+    for idx, nombre_prueba in enumerate(ordered_keys, start=1):
+        data_prueba = sembrado_final[nombre_prueba]
+        titulo_hoja = titulo_prueba_numerada(idx, nombre_prueba)
+        sheet_title = safe_excel_sheet_title(titulo_hoja, used_titles)
+        if first_sheet:
+            ws = wb.active
+            ws.title = sheet_title
+            first_sheet = False
+        else:
+            ws = wb.create_sheet(title=sheet_title)
+        _write_sembrado_sheet_por_tiempo(ws, titulo_hoja, data_prueba['series'])
+
+    wb.save(ARCHIVO_SALIDA_TIEMPO)
+    print(f"¡Éxito! Archivo '{ARCHIVO_SALIDA_TIEMPO}' generado: una hoja por prueba ({len(sembrado_final)} hojas).")
 
 def get_seeding_data():
     """Retorna los datos del sembrado para visualización sin generar archivo"""
@@ -143,9 +170,11 @@ def get_seeding_data():
 
     sembrado_final = {}
     for nombre_prueba, nadadores in eventos.items():
-        sembrado_final[nombre_prueba] = {"series": seed_series(nadadores, 8)}
+        sembrado_final[nombre_prueba] = {"series": seed_series(nadadores, CARRILES_PISCINA)}
 
-    return sembrado_final, "Sembrado generado exitosamente"
+    ordered_keys = ordered_prueba_hoja_keys(sembrado_final, event_cols)
+    sembrado_ordenado = {k: sembrado_final[k] for k in ordered_keys}
+    return sembrado_ordenado, "Sembrado generado exitosamente"
 
 def main_full():
     """Función completa para usar desde app.py"""

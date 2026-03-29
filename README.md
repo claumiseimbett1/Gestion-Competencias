@@ -99,7 +99,7 @@ pip install -r requirements.txt
 
 1. **Crear o ajustar el evento** (en la app web): define pruebas y edades → se guarda `event_config.json`.
 2. **Inscripción**: genera o completa `planilla_inscripcion.xlsx` (manual, BD o importación).
-3. **Sembrado**: por categorías o por tiempo → `sembrado_competencia.xlsx` o `sembrado_competencia_POR_TIEMPO.xlsx`.
+3. **Sembrado**: por categorías o por tiempo → `sembrado_competencia.xlsx` o `sembrado_competencia_POR_TIEMPO.xlsx` (ambos con **una hoja por prueba** numerada `PRUEBA N …`; en por-tiempo el orden dentro de la prueba es global por marca, sin series por categoría).
 4. **Papeletas** (opcional): PDF / Excel para jueces.
 5. **Resultados**: introduce tiempos en `resultados_con_tiempos.xlsx` (o usa `5-procesar_sembrado_tiempos.py` si partes de un sembrado ya anotado) y ejecuta el procesamiento → `reporte_premiacion_final_CORREGIDO.xlsx`.
 

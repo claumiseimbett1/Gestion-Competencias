@@ -2,8 +2,12 @@
 
 import pandas as pd
 import math
-import re
-from planilla_utils import inscrito_en_prueba, ordered_prueba_hoja_keys, titulo_prueba_numerada
+from planilla_utils import (
+    inscrito_en_prueba,
+    ordered_prueba_hoja_keys,
+    titulo_prueba_numerada,
+    safe_excel_sheet_title,
+)
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, Border, Side
 
@@ -47,20 +51,6 @@ def seed_series(swimmers, lanes=8):
             serie_data["carriles"][target_lane] = swimmer
         series_list.append(serie_data)
     return series_list
-
-def _safe_sheet_title(name, used_titles):
-    """Nombre de hoja válido en Excel (máx. 31 caracteres, sin \\ / * ? : [ ])."""
-    s = re.sub(r'[\[\]*?:/\\]', '-', str(name)).strip() or 'Prueba'
-    base = s[:31]
-    candidate = base
-    n = 1
-    while candidate in used_titles:
-        suffix = f' ({n})'
-        max_base = max(0, 31 - len(suffix))
-        candidate = (base[:max_base] + suffix).strip()
-        n += 1
-    used_titles.add(candidate)
-    return candidate
 
 def _write_sembrado_sheet_categoria(ws, nombre_prueba, categorias):
     """Escribe el contenido del sembrado por categorías en una hoja."""
@@ -159,7 +149,7 @@ def main():
     for idx, nombre_prueba in enumerate(ordered_keys, start=1):
         categorias = sembrado_final[nombre_prueba]
         titulo_hoja = titulo_prueba_numerada(idx, nombre_prueba)
-        sheet_title = _safe_sheet_title(titulo_hoja, used_titles)
+        sheet_title = safe_excel_sheet_title(titulo_hoja, used_titles)
         if first_sheet:
             ws = wb.active
             ws.title = sheet_title

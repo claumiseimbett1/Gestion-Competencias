@@ -38,11 +38,10 @@ The application will start a web interface accessible at `http://localhost:8501`
    - Respects event configuration for available events
    - Outputs: `sembrado_competencia.xlsx`
 
-2. **`generar_sembrado_por_tiempo.py`** - Time-based seeding
-   - Sorts all swimmers purely by registration time, ignoring categories
+2. **`3-generar_sembrado_por_tiempo.py`** - Time-based seeding
+   - Sorts all swimmers purely by registration time within each event (mixed categories)
    - Used for open competitions or qualifying events
-   - Respects event configuration for available events
-   - Outputs: `sembrado_competencia_POR_TIEMPO.xlsx`
+   - Outputs: `sembrado_competencia_POR_TIEMPO.xlsx` — **one worksheet per event**, same `PRUEBA N` / sheet-title rules as category seeding (`planilla_utils`)
 
 3. **`generar_papeletas.py`** - Judge scoresheets generation
    - Creates PDF scoresheets for judges with lane assignments, series, and events
