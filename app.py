@@ -3229,7 +3229,7 @@ def inscripcion_nadadores_interface():
                 <ol>
                     <li>Utiliza un archivo Excel con la misma estructura que el archivo <code>planilla_inscripcion.xlsx</code></li>
                     <li>Las columnas requeridas son: <strong>NOMBRE Y AP</strong>, <strong>EQUIPO</strong>, <strong>EDAD</strong>, <strong>CAT.</strong>, <strong>SEXO</strong></li>
-                    <li>Las columnas de pruebas deben tener los tiempos en formato MM:SS.dd (ejemplo: 1:25.30)</li>
+                    <li>Las columnas de pruebas pueden usar texto <strong>MM:SS,dd</strong> o <strong>MM:SS.dd</strong> (ej.: 1:25,30), celda de hora de Excel, o segundos totales como número</li>
                     <li>Los nadadores duplicados serán omitidos automáticamente</li>
                     <li>La categoría se calculará automáticamente si no se proporciona</li>
                 </ol>

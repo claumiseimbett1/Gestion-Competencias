@@ -1,6 +1,7 @@
 import pandas as pd
+import numpy as np
 import os
-from datetime import datetime
+from datetime import datetime, time, timedelta
 from pathlib import Path
 import re
 try:
@@ -236,6 +237,89 @@ class SwimmerRegistration:
             else:
                 return "MASTER"
     
+    def _normalize_planilla_time_cell(self, time_value):
+        """
+        Convierte una celda de Excel (texto mm:ss,00, número, fecha/hora, Timestamp)
+        a string que validate_time_format puede interpretar (coma decimal → punto).
+        """
+        if time_value is None:
+            return None
+        try:
+            if pd.isna(time_value):
+                return None
+        except (TypeError, ValueError):
+            return None
+
+        if isinstance(time_value, str):
+            s = time_value.strip()
+            if not s or s.lower() in ('nan', 'none', 'null'):
+                return None
+            if ''.join(s.split()).lower() == 's/t':
+                return 's/t'
+            return s.replace(',', '.')
+
+        if isinstance(time_value, bool):
+            return None
+
+        if isinstance(time_value, timedelta):
+            total = float(time_value.total_seconds())
+            if total < 0:
+                total = 0.0
+            minutes = int(total // 60)
+            seconds = total % 60
+            return f"{minutes:02d}:{seconds:05.2f}"
+
+        if isinstance(time_value, time):
+            total = (
+                time_value.hour * 3600
+                + time_value.minute * 60
+                + time_value.second
+                + time_value.microsecond / 1_000_000.0
+            )
+            minutes = int(total // 60)
+            seconds = total % 60
+            return f"{minutes:02d}:{seconds:05.2f}"
+
+        if isinstance(time_value, datetime):
+            total = (
+                time_value.hour * 3600
+                + time_value.minute * 60
+                + time_value.second
+                + time_value.microsecond / 1_000_000.0
+            )
+            minutes = int(total // 60)
+            seconds = total % 60
+            return f"{minutes:02d}:{seconds:05.2f}"
+
+        if isinstance(time_value, np.datetime64):
+            ts = pd.Timestamp(time_value)
+            if pd.isna(ts):
+                return None
+            total = (
+                int(ts.hour) * 3600
+                + int(ts.minute) * 60
+                + int(ts.second)
+                + ts.microsecond / 1_000_000.0
+            )
+            minutes = int(total // 60)
+            seconds = total % 60
+            return f"{minutes:02d}:{seconds:05.2f}"
+
+        try:
+            val = float(time_value)
+        except (TypeError, ValueError):
+            s = str(time_value).strip().replace(',', '.')
+            return s if s else None
+
+        # Fracción de día (tiempo solo en Excel: 0 < x < 1)
+        if 0 < val < 1.0:
+            total = val * 86400.0
+        else:
+            total = val
+        minutes = int(total // 60)
+        seconds = total % 60
+        return f"{minutes:02d}:{seconds:05.2f}"
+
     def validate_time_format(self, time_str):
         if not time_str or time_str.strip() == "":
             return True, None
@@ -250,22 +334,44 @@ class SwimmerRegistration:
             return True, None
         
         try:
-            # Formato MM:SS.dd o M:SS.dd
+            # Formato con ':': MM:SS.dd, H:MM:SS.dd (Excel / reloj), etc.
             if ':' in time_str:
                 parts = time_str.split(':')
+                if len(parts) == 3:
+                    try:
+                        h = int(float(parts[0]))
+                        m = int(float(parts[1]))
+                        s = float(parts[2])
+                    except ValueError:
+                        ts = pd.to_datetime(time_str, errors='coerce')
+                        if pd.isna(ts):
+                            raise ValueError("no es fecha/hora")
+                        total_sec = (
+                            ts.hour * 3600
+                            + ts.minute * 60
+                            + ts.second
+                            + ts.microsecond / 1_000_000.0
+                        )
+                        minutes = int(total_sec // 60)
+                        seconds = total_sec % 60
+                        return True, f"{minutes:02d}:{seconds:05.2f}"
+                    total_sec = h * 3600 + m * 60 + s
+                    if total_sec >= 0 and 0 <= s < 60:
+                        minutes = int(total_sec // 60)
+                        seconds = total_sec % 60
+                        formatted_time = f"{minutes:02d}:{seconds:05.2f}"
+                        return True, formatted_time
                 if len(parts) == 2:
-                    minutes = int(float(parts[0]))  # Usar float primero por si hay decimales
+                    minutes = int(float(parts[0]))
                     seconds = float(parts[1])
-                    if 0 <= minutes <= 59 and 0 <= seconds < 60:
-                        # Formatear consistentemente
+                    if minutes >= 0 and 0 <= seconds < 60:
                         formatted_time = f"{minutes:02d}:{seconds:05.2f}"
                         return True, formatted_time
             
             # Formato solo segundos (SS.dd o SSS.dd)
             else:
                 total_seconds = float(time_str)
-                if 0 <= total_seconds <= 3600:  # Máximo 1 hora
-                    # Convertir a formato MM:SS.dd si es mayor a 60 segundos
+                if 0 <= total_seconds <= 14400:  # hasta 4 h (pruebas largas)
                     if total_seconds >= 60:
                         minutes = int(total_seconds // 60)
                         seconds = total_seconds % 60
@@ -2298,13 +2404,12 @@ class SwimmerRegistration:
                         if event in df.columns and inscrito_en_prueba(row[event]):
                             time_value = row[event]
 
-                            # Convertir a string y normalizar formato
-                            if isinstance(time_value, (int, float)):
-                                # Si es numérico (segundos totales), convertir a MM:SS.CS
-                                time_str = f"{int(time_value//60):02d}:{time_value%60:05.2f}"
-                            else:
-                                # Si es texto, normalizar formato (coma a punto)
-                                time_str = str(time_value).strip().replace(',', '.')
+                            time_str = self._normalize_planilla_time_cell(time_value)
+                            if time_str is None:
+                                errors.append(
+                                    f"Fila {index + 2}: Valor de tiempo no reconocido '{time_value}' en {event} para {swimmer_name}"
+                                )
+                                continue
 
                             # Validar formato de tiempo
                             is_valid, validated_time = self.validate_time_format(time_str)
