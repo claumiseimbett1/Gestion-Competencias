@@ -66,9 +66,58 @@ class SwimmerRegistration:
             "MASTER"
         ]
         
+    def get_event_age_reference(self):
+        """Fecha de referencia y criterio de edad según la configuración del evento."""
+        from datetime import date, datetime
+
+        reference_date = date.today()
+        age_criteria = 'event_date'
+
+        if self.event_manager:
+            event_info = self.event_manager.get_event_info()
+            if event_info:
+                age_criteria = event_info.get('age_criteria', 'event_date')
+                start_date = event_info.get('start_date')
+                if start_date:
+                    try:
+                        reference_date = datetime.fromisoformat(start_date).date()
+                    except (ValueError, TypeError):
+                        pass
+
+        return reference_date, age_criteria
+
+    def resolve_age_from_birth_date(self, birth_date):
+        """Calcular edad a partir de fecha de nacimiento usando el criterio del evento."""
+        if birth_date is None or (not isinstance(birth_date, str) and pd.isna(birth_date)):
+            return None
+
+        reference_date, age_criteria = self.get_event_age_reference()
+        return self.calculate_age_by_criteria(birth_date, reference_date, age_criteria)
+
+    def resolve_swimmer_age_and_category(self, gender, birth_date=None, age=None):
+        """Calcular edad y categoría usando fecha de nacimiento y configuración del evento."""
+        if birth_date is not None and not (isinstance(birth_date, float) and pd.isna(birth_date)):
+            calculated_age = self.resolve_age_from_birth_date(birth_date)
+            if calculated_age is not None:
+                age = calculated_age
+
+        if age is None:
+            return None, None
+
+        age = int(age)
+        category = self.get_category_by_age(age, gender, birth_date)
+        return age, category
+
+    def _find_birth_date_column(self, columns):
+        for col in columns:
+            col_upper = str(col).upper()
+            if any(keyword in col_upper for keyword in ['NACIMIENTO', 'BIRTH', 'FECHA_NAC', 'F_NACIMIENTO', 'FECHA DE NA']):
+                return col
+        return None
+
     def calculate_age_by_criteria(self, birth_date, reference_date=None, criteria='event_date'):
         """Calcular edad según el criterio configurado"""
-        if not birth_date or pd.isna(birth_date):
+        if birth_date is None or (not isinstance(birth_date, str) and pd.isna(birth_date)):
             return None
 
         try:
@@ -435,11 +484,6 @@ class SwimmerRegistration:
                 if age_range and self._age_matches_range(age, age_range):
                     return category['name']
 
-            # Si no se encuentra coincidencia específica, retornar la primera categoría como fallback
-            if event_categories:
-                return event_categories[0]['name']
-
-        # Fallback al sistema tradicional de categorías por edad/género
         return self.get_category_by_age(age, gender)
 
     def _age_matches_range(self, age, age_range):
@@ -1787,8 +1831,12 @@ class SwimmerRegistration:
                             print(f"Usando fecha de nacimiento de columna: {col}")
                             break
 
-                if birth_date_column and event_start_date and age_criteria:
-                    calculated_age = self.calculate_age_by_criteria(first_record[birth_date_column], event_start_date, age_criteria)
+                if birth_date_column:
+                    calculated_age = self.calculate_age_by_criteria(
+                        first_record[birth_date_column],
+                        event_start_date,
+                        age_criteria
+                    )
 
                 match_data = {
                     'index': 0,  # No importante ya que agrupamos
@@ -1979,52 +2027,46 @@ class SwimmerRegistration:
     def get_swimmer_info_from_database(self, swimmer_match):
         """Extraer información completa del nadador de la base de datos"""
         row = swimmer_match['full_data']
-        
-        # Extraer información básica
+
         swimmer_info = {
             'name': swimmer_match['name'],
-            'team': 'Club TEN',  # Default team
-            'age': None,
+            'team': 'Club TEN',
+            'age': swimmer_match.get('calculated_age'),
             'category': '',
-            'gender': ''
+            'gender': '',
+            'birth_date': None,
         }
-        
-        # Mapeo de columnas comunes en bases de datos de natación
+
         column_mappings = {
             'equipo': ['equipo', 'club', 'team', 'entidad'],
             'edad': ['edad', 'age', 'años'],
             'categoria': ['cat', 'categoria', 'category', 'cat.'],
             'sexo': ['sexo', 'gender', 'género', 'sex', 'm/f'],
-            'nacimiento': ['nacimiento', 'fecha_nac', 'birth', 'nac']
         }
-        
-        # Buscar información en las columnas
+
+        fallback_age = None
+
         for col in row.index:
             col_str = str(col).lower().strip()
             valor = row[col]
-            
+
             if pd.notna(valor) and str(valor).strip():
                 valor_str = str(valor).strip()
-                
-                # Equipo/Club
+
                 if any(keyword in col_str for keyword in column_mappings['equipo']):
                     swimmer_info['team'] = valor_str
-                
-                # Edad - intentar extraer de diferentes formatos
+
                 elif any(keyword in col_str for keyword in column_mappings['edad']):
                     try:
-                        # Extraer solo números de la cadena
                         age_match = re.search(r'\d+', valor_str)
                         if age_match:
-                            swimmer_info['age'] = int(age_match.group())
-                    except:
+                            fallback_age = int(age_match.group())
+                    except (ValueError, TypeError):
                         pass
-                
-                # Categoría
+
                 elif any(keyword in col_str for keyword in column_mappings['categoria']):
                     swimmer_info['category'] = valor_str
-                
-                # Sexo/Género - normalizar valores
+
                 elif any(keyword in col_str for keyword in column_mappings['sexo']):
                     gender_str = valor_str.upper()
                     if gender_str in ['M', 'MASCULINO', 'HOMBRE', 'MALE']:
@@ -2033,33 +2075,30 @@ class SwimmerRegistration:
                         swimmer_info['gender'] = 'F'
                     else:
                         swimmer_info['gender'] = gender_str[0] if gender_str else ''
-        
-        # Intentar inferir edad desde fecha de nacimiento si no hay edad directa
-        if not swimmer_info['age']:
-            for col in row.index:
-                col_str = str(col).lower()
-                if any(keyword in col_str for keyword in column_mappings['nacimiento']):
-                    try:
-                        birth_date = pd.to_datetime(row[col])
-                        today = datetime.now()
-                        swimmer_info['age'] = today.year - birth_date.year
-                        if today.month < birth_date.month or (today.month == birth_date.month and today.day < birth_date.day):
-                            swimmer_info['age'] -= 1
-                    except:
-                        pass
-        
-        # Asignar categoría automática si no está disponible pero tenemos edad y género
-        if not swimmer_info['category'] and swimmer_info['age'] and swimmer_info['gender']:
-            swimmer_info['category'] = self.find_swimmer_category_by_age_and_gender(swimmer_info['age'], swimmer_info['gender'])
-        
-        # Valores por defecto para datos faltantes
-        if not swimmer_info['age']:
-            swimmer_info['age'] = 12  # Edad por defecto
+
+        birth_date_column = self._find_birth_date_column(row.index)
+        if birth_date_column and pd.notna(row.get(birth_date_column)):
+            swimmer_info['birth_date'] = row[birth_date_column]
+
+        if swimmer_info['birth_date'] is not None:
+            calculated_age = self.resolve_age_from_birth_date(swimmer_info['birth_date'])
+            if calculated_age is not None:
+                swimmer_info['age'] = calculated_age
+        elif swimmer_info['age'] is None and fallback_age is not None:
+            swimmer_info['age'] = fallback_age
+
         if not swimmer_info['gender']:
-            swimmer_info['gender'] = 'M'  # Género por defecto
-        if not swimmer_info['category']:
-            swimmer_info['category'] = self.get_category_by_age(swimmer_info['age'], swimmer_info['gender'])
-        
+            swimmer_info['gender'] = 'M'
+
+        if swimmer_info['age'] is not None:
+            swimmer_info['category'] = self.get_category_by_age(
+                swimmer_info['age'],
+                swimmer_info['gender'],
+                swimmer_info['birth_date']
+            )
+        elif not swimmer_info['category']:
+            swimmer_info['category'] = 'SIN EDAD'
+
         return swimmer_info
     
     def create_swimmer_from_database(self, swimmer_match):
@@ -2071,12 +2110,23 @@ class SwimmerRegistration:
         latest_times, message = self.get_swimmer_latest_times(swimmer_info)
         
         # Preparar datos para inscripción
+        age = swimmer_info.get('age')
+        gender = swimmer_info.get('gender') or 'M'
+        birth_date = swimmer_info.get('birth_date')
+        if age is None and birth_date is not None:
+            age, category = self.resolve_swimmer_age_and_category(gender, birth_date=birth_date)
+        else:
+            category = swimmer_info.get('category') or (
+                self.get_category_by_age(age, gender, birth_date) if age is not None else 'SIN EDAD'
+            )
+
         swimmer_data = {
             'name': swimmer_info['name'],
             'team': swimmer_info['team'],
-            'age': swimmer_info['age'] or 12,
-            'category': swimmer_info['category'] or self.find_swimmer_category_by_age_and_gender(swimmer_info['age'] or 12, swimmer_info['gender'] or 'M'),
-            'gender': swimmer_info['gender'] or 'M',
+            'age': age,
+            'birth_date': birth_date,
+            'category': category,
+            'gender': gender,
             'events': latest_times
         }
         
@@ -2387,22 +2437,28 @@ class SwimmerRegistration:
 
                     # Datos básicos del nadador
                     team = str(row['EQUIPO']).strip() if pd.notna(row['EQUIPO']) else ""
-                    age = int(row['EDAD']) if pd.notna(row['EDAD']) else 0
-                    category = str(row['CAT.']).strip() if pd.notna(row['CAT.']) else ""
                     gender = str(row['SEXO']).strip().upper() if pd.notna(row['SEXO']) else ""
+                    birth_date = row.get('FECHA DE NA') if 'FECHA DE NA' in df.columns else None
+                    age = None
+                    if birth_date is not None and pd.notna(birth_date):
+                        age = self.resolve_age_from_birth_date(birth_date)
+                    if age is None and pd.notna(row['EDAD']):
+                        try:
+                            age = int(row['EDAD'])
+                        except (ValueError, TypeError):
+                            age = None
+                    category = str(row['CAT.']).strip() if pd.notna(row['CAT.']) else ""
 
-                    # Validar datos básicos
-                    if age <= 0:
-                        errors.append(f"Fila {index + 2}: Edad inválida para {swimmer_name}")
+                    if age is None or age <= 0:
+                        errors.append(f"Fila {index + 2}: Edad inválida para {swimmer_name} (use FECHA DE NA o EDAD)")
                         continue
 
                     if gender not in ['M', 'F']:
                         errors.append(f"Fila {index + 2}: Sexo debe ser M o F para {swimmer_name}")
                         continue
 
-                    # Auto-generar categoría si no se proporciona
                     if not category:
-                        category = self.find_swimmer_category_by_age_and_gender(age, gender)
+                        category = self.get_category_by_age(age, gender, birth_date)
 
                     # Verificar si ya existe el nadador
                     if os.path.exists(self.archivo_inscripcion):
@@ -2442,6 +2498,7 @@ class SwimmerRegistration:
                             'EDAD': age,
                             'CAT.': category,
                             'SEXO': gender,
+                            'FECHA DE NA': birth_date if birth_date is not None and pd.notna(birth_date) else "",
                             **{event: events_data.get(event, "") for event in available_events}
                         }
 

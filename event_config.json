@@ -73,78 +73,78 @@
       "25M MARIPOSA"
     ],
     "MENORES 8-9": [
-      "25M CROLL",
-      "25M MARIPOSA",
+      "50M MARIPOSA",
       "25M PATADA LIBRE",
+      "25M CROLL",
       "25M PECHO",
-      "50M CROLL",
-      "50M ESPALDA",
-      "50M LIBRE CON ALETAS",
-      "50M MARIPOSA",
-      "50M PECHO"
-    ],
-    "INFANTIL A": [
-      "100M CROLL",
-      "50M CROLL",
-      "50M ESPALDA",
-      "50M LIBRE CON ALETAS",
-      "50M MARIPOSA",
-      "50M PECHO"
-    ],
-    "INFANTIL B": [
-      "100M CROLL",
-      "50M CROLL",
-      "50M ESPALDA",
-      "50M LIBRE CON ALETAS",
-      "50M MARIPOSA",
-      "50M PECHO"
-    ],
-    "JUVENIL A": [
-      "100M CROLL",
-      "50M CROLL",
-      "50M ESPALDA",
-      "50M LIBRE CON ALETAS",
-      "50M MARIPOSA",
-      "50M PECHO"
-    ],
-    "JUVENIL B": [
+      "25M MARIPOSA",
       "50M CROLL",
       "50M ESPALDA",
       "50M PECHO",
+      "50M LIBRE CON ALETAS"
+    ],
+    "INFANTIL A": [
       "50M MARIPOSA",
       "100M CROLL",
+      "50M CROLL",
+      "50M ESPALDA",
+      "50M PECHO",
+      "50M LIBRE CON ALETAS"
+    ],
+    "INFANTIL B": [
+      "50M MARIPOSA",
+      "100M CROLL",
+      "50M CROLL",
+      "50M ESPALDA",
+      "50M PECHO",
+      "50M LIBRE CON ALETAS"
+    ],
+    "JUVENIL A": [
+      "50M MARIPOSA",
+      "100M CROLL",
+      "50M CROLL",
+      "50M ESPALDA",
+      "50M PECHO",
+      "50M LIBRE CON ALETAS"
+    ],
+    "JUVENIL B": [
+      "50M MARIPOSA",
+      "100M CROLL",
+      "50M CROLL",
+      "50M ESPALDA",
+      "50M PECHO",
       "50M LIBRE CON ALETAS"
     ],
     "MAYORES": [
+      "50M MARIPOSA",
+      "100M CROLL",
       "50M CROLL",
       "50M ESPALDA",
       "50M PECHO",
-      "50M MARIPOSA",
-      "100M CROLL",
       "50M LIBRE CON ALETAS"
     ],
     "MASTER A": [
+      "50M MARIPOSA",
+      "100M CROLL",
       "50M CROLL",
       "50M ESPALDA",
       "50M PECHO",
-      "50M MARIPOSA",
-      "100M CROLL",
       "50M LIBRE CON ALETAS"
     ],
     "MASTER B": [
+      "50M MARIPOSA",
+      "100M CROLL",
       "50M CROLL",
       "50M ESPALDA",
       "50M PECHO",
-      "50M MARIPOSA",
-      "100M CROLL",
       "50M LIBRE CON ALETAS"
     ],
     "MASTER C": [
+      "50M MARIPOSA",
+      "100M CROLL",
       "50M CROLL",
       "50M ESPALDA",
       "50M PECHO",
-      "50M MARIPOSA",
-      "100M CROLL",
       "50M LIBRE CON ALETAS"
     ]
   },
@@ -154,10 +154,10 @@
   "team_fee": 30000,
   "welcome_message": "Bienvenidos al I Festi-Torneo Regional del Sinu - Monteria, 5 de julio de 2026",
   "farewell_message": "",
-  "event_logo": null,
+  "event_logo": "I_Festi-Torneo_Regional_del_Sinu_2026_logo.png",
   "start_date": "2026-07-05",
   "end_date": "2026-07-05",
   "age_criteria": "event_date",
-  "created_date": "2026-07-03T06:34:15.447951",
-  "modified_date": "2026-07-03T06:34:15.447951"
+  "created_date": "2026-07-03T06:52:49.336349",
+  "modified_date": "2026-07-03T06:52:49.336349"
 }

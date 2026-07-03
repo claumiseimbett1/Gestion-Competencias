@@ -2977,22 +2977,23 @@ def inscripcion_nadadores_interface():
                 team = st.text_input("Equipo", placeholder="Ej: Club Natación TEN")
                 from datetime import datetime, date
                 birth_date = st.date_input("Fecha de Nacimiento",
-                                         value=date.today().replace(year=date.today().year - 12),
+                                         value=None,
                                          min_value=date(1900, 1, 1),
                                          max_value=date.today(),
                                          help="Selecciona la fecha de nacimiento del nadador")
 
-                # Calcular edad automáticamente basada en la fecha de nacimiento
-                if birth_date:
-                    age = registration_system.calculate_age_by_criteria(birth_date) if hasattr(registration_system, 'calculate_age_by_criteria') else date.today().year - birth_date.year
-                    st.info(f"Edad calculada: **{age} años**")
-                else:
-                    age = 12  # valor por defecto
-
             with col2:
                 gender = st.selectbox("Sexo", ["M", "F"], format_func=lambda x: "Masculino" if x == "M" else "Femenino")
-                category = registration_system.get_category_by_age(age, gender, birth_date)
-                st.info(f"Categoría automática: **{category}**")
+
+                if birth_date:
+                    age, category = registration_system.resolve_swimmer_age_and_category(gender, birth_date=birth_date)
+                    reference_date, _ = registration_system.get_event_age_reference()
+                    st.info(f"Edad al {reference_date.strftime('%d/%m/%Y')}: **{age} años**")
+                    st.info(f"Categoría automática: **{category}**")
+                else:
+                    age = None
+                    category = None
+                    st.warning("Selecciona la fecha de nacimiento para calcular edad y categoría")
                 
             st.markdown("### Pruebas de Inscripción")
             st.markdown("*Ingresa los tiempos de inscripción en formato MM:SS.dd o SS.dd. Deja en blanco las pruebas en las que no participa.*")
@@ -3001,7 +3002,7 @@ def inscripcion_nadadores_interface():
             col1, col2, col3 = st.columns(3)
             
             # Obtener eventos disponibles filtrados por edad para la categoría del nadador
-            available_events = registration_system.get_available_events_for_swimmer_category(category, age)
+            available_events = registration_system.get_available_events_for_swimmer_category(category, age) if category else []
 
             # Mostrar información sobre restricciones de edad si hay eventos filtrados
             all_events = registration_system.get_available_events()
@@ -3031,6 +3032,10 @@ def inscripcion_nadadores_interface():
                     st.error("El nombre es obligatorio")
                 elif not team.strip():
                     st.error("El equipo es obligatorio")
+                elif not birth_date:
+                    st.error("La fecha de nacimiento es obligatoria")
+                elif age is None or not category:
+                    st.error("No se pudo calcular la edad o categoría")
                 elif not events_data:
                     st.warning("Debe inscribirse en al menos una prueba")
                 else:
@@ -3429,20 +3434,25 @@ def inscripcion_nadadores_interface():
                                                            key=f"edit_birth_date_{i}",
                                                            help="Selecciona la fecha de nacimiento del nadador")
 
-                            # Calcular edad automáticamente
-                            if edit_birth_date:
-                                edit_age = registration_system.calculate_age_by_criteria(edit_birth_date) if hasattr(registration_system, 'calculate_age_by_criteria') else date.today().year - edit_birth_date.year
-                                st.info(f"Edad calculada: **{edit_age} años**")
-                            else:
-                                edit_age = swimmer_data['age']  # mantener edad original
-
                         with col2:
                             edit_gender = st.selectbox("Sexo", ["M", "F"],
                                                      index=0 if swimmer_data['gender'] == 'M' else 1,
                                                      format_func=lambda x: "Masculino" if x == "M" else "Femenino",
                                                      key=f"edit_gender_{i}")
-                            edit_category = registration_system.get_category_by_age(edit_age, edit_gender)
-                            st.info(f"Categoría automática: **{edit_category}**")
+
+                            if edit_birth_date:
+                                edit_age, edit_category = registration_system.resolve_swimmer_age_and_category(
+                                    edit_gender, birth_date=edit_birth_date
+                                )
+                                reference_date, _ = registration_system.get_event_age_reference()
+                                st.info(f"Edad al {reference_date.strftime('%d/%m/%Y')}: **{edit_age} años**")
+                                st.info(f"Categoría automática: **{edit_category}**")
+                            else:
+                                edit_age = swimmer_data['age']
+                                edit_category = registration_system.get_category_by_age(
+                                    edit_age, edit_gender, swimmer_data.get('birth_date')
+                                )
+                                st.info(f"Categoría automática: **{edit_category}**")
                         
                         st.markdown("### Pruebas de Inscripción")
                         st.markdown("*Edita los tiempos de inscripción. Deja en blanco para eliminar la prueba.*")
