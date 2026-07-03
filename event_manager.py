@@ -15,6 +15,12 @@ class EventManager:
     def __init__(self):
         self.config_file = 'event_config.json'
         self.swimming_events = [
+            "25M PATADA LIBRE",
+            "25M LIBRE CON TABLA",
+            "25M LIBRE INSTINTIVO",
+            "25M CROLL",
+            "25M PECHO",
+            "25M MARIPOSA",
             "50M CROLL",
             "100M CROLL",
             "200M CROLL",
@@ -28,12 +34,19 @@ class EventManager:
             "50M MARIPOSA",
             "100M MARIPOSA",
             "200M MARIPOSA",
+            "50M LIBRE CON ALETAS",
             "200M COMBINADO INDIVIDUAL",
             "400M COMBINADO INDIVIDUAL"
         ]
 
         # Definir restricciones de edad por evento (edad mínima)
         self.event_age_restrictions = {
+            "25M PATADA LIBRE": 5,
+            "25M LIBRE CON TABLA": 5,
+            "25M LIBRE INSTINTIVO": 5,
+            "25M CROLL": 6,
+            "25M PECHO": 6,
+            "25M MARIPOSA": 6,
             "50M CROLL": 6,
             "100M CROLL": 8,
             "200M CROLL": 10,
@@ -47,6 +60,7 @@ class EventManager:
             "50M MARIPOSA": 8,
             "100M MARIPOSA": 10,
             "200M MARIPOSA": 12,
+            "50M LIBRE CON ALETAS": 8,
             "200M COMBINADO INDIVIDUAL": 10,
             "400M COMBINADO INDIVIDUAL": 12
         }

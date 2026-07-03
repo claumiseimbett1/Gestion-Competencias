@@ -23,6 +23,12 @@ class SwimmerRegistration:
         self.archivo_inscripcion = 'planilla_inscripcion.xlsx'
         self.archivo_base_datos = 'BASE-DE-DATOS.xlsx'
         self.swimming_events = [
+            "25M PATADA LIBRE",
+            "25M LIBRE CON TABLA",
+            "25M LIBRE INSTINTIVO",
+            "25M CROLL",
+            "25M PECHO",
+            "25M MARIPOSA",
             "50M CROLL",
             "100M CROLL",
             "200M CROLL",
@@ -36,6 +42,7 @@ class SwimmerRegistration:
             "50M MARIPOSA",
             "100M MARIPOSA",
             "200M MARIPOSA",
+            "50M LIBRE CON ALETAS",
             "200M COMBINADO INDIVIDUAL",
             "400M COMBINADO INDIVIDUAL"
         ]
@@ -1823,6 +1830,13 @@ class SwimmerRegistration:
         # Mapear pruebas de la base de datos a eventos del sistema
         # Usamos mapeo directo ya que los nombres deben coincidir exactamente
         prueba_mappings = {
+            '25M PATADA LIBRE': '25M PATADA LIBRE',
+            '25M LIBRE CON TABLA': '25M LIBRE CON TABLA',
+            '25M LIBRE INSTINTIVO': '25M LIBRE INSTINTIVO',
+            '25M CROLL': '25M CROLL',
+            '25M PECHO': '25M PECHO',
+            '25M MARIPOSA': '25M MARIPOSA',
+            '50M LIBRE CON ALETAS': '50M LIBRE CON ALETAS',
             '50M CROLL': '50M CROLL',
             '100M CROLL': '100M CROLL',
             '200M CROLL': '200M CROLL',
