@@ -2996,7 +2996,7 @@ def inscripcion_nadadores_interface():
                     st.warning("Selecciona la fecha de nacimiento para calcular edad y categoría")
                 
             st.markdown("### Pruebas de Inscripción")
-            st.markdown("*Ingresa los tiempos de inscripción en formato MM:SS.dd o SS.dd. Deja en blanco las pruebas en las que no participa.*")
+            st.markdown("*Opcional: ingresa tiempos (MM:SS.dd). Las pruebas sin tiempo se inscriben automáticamente como **s/t**. Se inscribe en **todas** las pruebas de la categoría.*")
             
             events_data = {}
             col1, col2, col3 = st.columns(3)
@@ -3036,9 +3036,8 @@ def inscripcion_nadadores_interface():
                     st.error("La fecha de nacimiento es obligatoria")
                 elif age is None or not category:
                     st.error("No se pudo calcular la edad o categoría")
-                elif not events_data:
-                    st.warning("Debe inscribirse en al menos una prueba")
                 else:
+                    events_data = registration_system.complete_category_events(category, age, events_data)
                     swimmer_data = {
                         'name': name.strip(),
                         'team': team.strip(),

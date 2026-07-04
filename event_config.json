@@ -48,14 +48,14 @@
   ],
   "event_order": [
     "50M MARIPOSA",
-    "100M CROLL",
+    "100M LIBRE",
     "25M PATADA LIBRE",
     "25M LIBRE CON TABLA",
     "25M LIBRE INSTINTIVO",
-    "25M CROLL",
+    "25M LIBRE",
     "25M PECHO",
     "25M MARIPOSA",
-    "50M CROLL",
+    "50M LIBRE",
     "50M ESPALDA",
     "50M PECHO",
     "50M LIBRE CON ALETAS"
@@ -68,81 +68,81 @@
     ],
     "MENORES 6-7": [
       "25M PATADA LIBRE",
-      "25M CROLL",
+      "25M LIBRE",
       "25M PECHO",
       "25M MARIPOSA"
     ],
     "MENORES 8-9": [
       "50M MARIPOSA",
       "25M PATADA LIBRE",
-      "25M CROLL",
+      "25M LIBRE",
       "25M PECHO",
       "25M MARIPOSA",
-      "50M CROLL",
+      "50M LIBRE",
       "50M ESPALDA",
       "50M PECHO",
       "50M LIBRE CON ALETAS"
     ],
     "INFANTIL A": [
       "50M MARIPOSA",
-      "100M CROLL",
-      "50M CROLL",
+      "100M LIBRE",
+      "50M LIBRE",
       "50M ESPALDA",
       "50M PECHO",
       "50M LIBRE CON ALETAS"
     ],
     "INFANTIL B": [
       "50M MARIPOSA",
-      "100M CROLL",
-      "50M CROLL",
+      "100M LIBRE",
+      "50M LIBRE",
       "50M ESPALDA",
       "50M PECHO",
       "50M LIBRE CON ALETAS"
     ],
     "JUVENIL A": [
       "50M MARIPOSA",
-      "100M CROLL",
-      "50M CROLL",
+      "100M LIBRE",
+      "50M LIBRE",
       "50M ESPALDA",
       "50M PECHO",
       "50M LIBRE CON ALETAS"
     ],
     "JUVENIL B": [
       "50M MARIPOSA",
-      "100M CROLL",
-      "50M CROLL",
+      "100M LIBRE",
+      "50M LIBRE",
       "50M ESPALDA",
       "50M PECHO",
       "50M LIBRE CON ALETAS"
     ],
     "MAYORES": [
       "50M MARIPOSA",
-      "100M CROLL",
-      "50M CROLL",
+      "100M LIBRE",
+      "50M LIBRE",
       "50M ESPALDA",
       "50M PECHO",
       "50M LIBRE CON ALETAS"
     ],
     "MASTER A": [
       "50M MARIPOSA",
-      "100M CROLL",
-      "50M CROLL",
+      "100M LIBRE",
+      "50M LIBRE",
       "50M ESPALDA",
       "50M PECHO",
       "50M LIBRE CON ALETAS"
     ],
     "MASTER B": [
       "50M MARIPOSA",
-      "100M CROLL",
-      "50M CROLL",
+      "100M LIBRE",
+      "50M LIBRE",
       "50M ESPALDA",
       "50M PECHO",
       "50M LIBRE CON ALETAS"
     ],
     "MASTER C": [
       "50M MARIPOSA",
-      "100M CROLL",
-      "50M CROLL",
+      "100M LIBRE",
+      "50M LIBRE",
       "50M ESPALDA",
       "50M PECHO",
       "50M LIBRE CON ALETAS"

@@ -16,7 +16,7 @@ try:
 except ImportError:
     REPORTLAB_AVAILABLE = False
 from io import BytesIO
-from planilla_utils import inscrito_en_prueba
+from planilla_utils import inscrito_en_prueba, normalize_prueba_name, normalize_planilla_columns
 
 class SwimmerRegistration:
     def __init__(self):
@@ -26,13 +26,13 @@ class SwimmerRegistration:
             "25M PATADA LIBRE",
             "25M LIBRE CON TABLA",
             "25M LIBRE INSTINTIVO",
-            "25M CROLL",
+            "25M LIBRE",
             "25M PECHO",
             "25M MARIPOSA",
-            "50M CROLL",
-            "100M CROLL",
-            "200M CROLL",
-            "400M CROLL",
+            "50M LIBRE",
+            "100M LIBRE",
+            "200M LIBRE",
+            "400M LIBRE",
             "50M ESPALDA",
             "100M ESPALDA",
             "200M ESPALDA",
@@ -446,11 +446,35 @@ class SwimmerRegistration:
         if os.path.exists(self.archivo_inscripcion):
             try:
                 df = pd.read_excel(self.archivo_inscripcion)
-                return df
+                return normalize_planilla_columns(df)
             except Exception as e:
                 print(f"Error al cargar datos existentes: {e}")
                 return None
         return None
+
+    def _normalize_events_dict(self, events):
+        normalized = {}
+        for event_name, time_val in (events or {}).items():
+            key = normalize_prueba_name(event_name)
+            if key not in normalized or not str(normalized.get(key, '')).strip():
+                normalized[key] = time_val
+        return normalized
+
+    def complete_category_events(self, category, age, events=None):
+        """Inscribe en todas las pruebas de la categoría; sin tiempo queda como s/t."""
+        events = self._normalize_events_dict(events)
+        category_events = self.get_available_events_for_swimmer_category(category, age)
+        if not category_events:
+            return events
+
+        completed = {}
+        for event in category_events:
+            time_val = events.get(event)
+            if time_val is not None and str(time_val).strip():
+                completed[event] = str(time_val).strip()
+            else:
+                completed[event] = 's/t'
+        return completed
     
     def get_available_events(self):
         """Obtener las pruebas disponibles para el evento"""
@@ -563,6 +587,12 @@ class SwimmerRegistration:
                 is_duplicate, duplicate_info = self.check_duplicate_swimmer(swimmer_data['name'])
                 if is_duplicate:
                     return False, f"⚠️ POSIBLE DUPLICADO: El nadador '{duplicate_info['name']}' ya está inscrito", duplicate_info
+
+            swimmer_data['events'] = self.complete_category_events(
+                swimmer_data['category'],
+                swimmer_data['age'],
+                swimmer_data.get('events', {})
+            )
             
             new_row = {
                 'NOMBRE Y AP': swimmer_data['name'],
@@ -600,6 +630,12 @@ class SwimmerRegistration:
             df.loc[index, 'CAT.'] = swimmer_data['category']
             df.loc[index, 'SEXO'] = swimmer_data['gender']
             df.loc[index, 'FECHA DE NA'] = swimmer_data.get('birth_date', '')
+
+            swimmer_data['events'] = self.complete_category_events(
+                swimmer_data['category'],
+                swimmer_data['age'],
+                swimmer_data.get('events', {})
+            )
             
             for event, time in swimmer_data['events'].items():
                 if time and time.strip():
@@ -1881,14 +1917,14 @@ class SwimmerRegistration:
             '25M PATADA LIBRE': '25M PATADA LIBRE',
             '25M LIBRE CON TABLA': '25M LIBRE CON TABLA',
             '25M LIBRE INSTINTIVO': '25M LIBRE INSTINTIVO',
-            '25M CROLL': '25M CROLL',
+            '25M LIBRE': '25M LIBRE',
             '25M PECHO': '25M PECHO',
             '25M MARIPOSA': '25M MARIPOSA',
             '50M LIBRE CON ALETAS': '50M LIBRE CON ALETAS',
-            '50M CROLL': '50M CROLL',
-            '100M CROLL': '100M CROLL',
-            '200M CROLL': '200M CROLL',
-            '400M CROLL': '400M CROLL',
+            '50M LIBRE': '50M LIBRE',
+            '100M LIBRE': '100M LIBRE',
+            '200M LIBRE': '200M LIBRE',
+            '400M LIBRE': '400M LIBRE',
             '50M ESPALDA': '50M ESPALDA',
             '100M ESPALDA': '100M ESPALDA',
             '200M ESPALDA': '200M ESPALDA',
@@ -1901,10 +1937,10 @@ class SwimmerRegistration:
             '200M COMBINADO INDIVIDUAL': '200M COMBINADO INDIVIDUAL',
             '400M COMBINADO INDIVIDUAL': '400M COMBINADO INDIVIDUAL',
             # Mapeos adicionales para variaciones en la base de datos
-            '50M LIBRE': '50M CROLL',
-            '100M LIBRE': '100M CROLL',
-            '200M LIBRE': '200M CROLL',
-            '400M LIBRE': '400M CROLL',
+            '50M CROLL': '50M LIBRE',
+            '100M CROLL': '100M LIBRE',
+            '200M CROLL': '200M LIBRE',
+            '400M CROLL': '400M LIBRE',
             '200M COMBINADO': '200M COMBINADO INDIVIDUAL',
             '400M COMBINADO': '400M COMBINADO INDIVIDUAL'
         }
@@ -2127,10 +2163,11 @@ class SwimmerRegistration:
             'birth_date': birth_date,
             'category': category,
             'gender': gender,
-            'events': latest_times
+            'events': self.complete_category_events(category, age, latest_times)
         }
         
-        return swimmer_data, f"Nadador preparado con {len(latest_times)} pruebas desde la base de datos"
+        events_count = len(swimmer_data['events'])
+        return swimmer_data, f"Nadador preparado con {events_count} prueba(s) de la categoría"
     
     def get_swimmer_for_editing(self, index):
         """Obtener datos de un nadador para edición"""
@@ -2406,7 +2443,7 @@ class SwimmerRegistration:
         """Importa múltiples nadadores desde un archivo Excel"""
         try:
             # Leer archivo Excel
-            df = pd.read_excel(uploaded_file)
+            df = normalize_planilla_columns(pd.read_excel(uploaded_file))
 
             # Validar columnas requeridas
             required_columns = ['NOMBRE Y AP', 'EQUIPO', 'EDAD', 'CAT.', 'SEXO']
@@ -2489,23 +2526,20 @@ class SwimmerRegistration:
                                 # Agregar información de error más específica
                                 errors.append(f"Fila {index + 2}: Formato de tiempo inválido '{time_value}' en {event} para {swimmer_name}")
 
-                    # Solo agregar nadadores con al menos una prueba
-                    if events_data:
-                        # Crear nuevo nadador
-                        new_swimmer = {
-                            'NOMBRE Y AP': swimmer_name,
-                            'EQUIPO': team,
-                            'EDAD': age,
-                            'CAT.': category,
-                            'SEXO': gender,
-                            'FECHA DE NA': birth_date if birth_date is not None and pd.notna(birth_date) else "",
-                            **{event: events_data.get(event, "") for event in available_events}
-                        }
+                    events_data = self.complete_category_events(category, age, events_data)
 
-                        imported_swimmers.append(new_swimmer)
-                        imported_names.append(swimmer_name)
-                    else:
-                        errors.append(f"Fila {index + 2}: {swimmer_name} no tiene pruebas válidas")
+                    new_swimmer = {
+                        'NOMBRE Y AP': swimmer_name,
+                        'EQUIPO': team,
+                        'EDAD': age,
+                        'CAT.': category,
+                        'SEXO': gender,
+                        'FECHA DE NA': birth_date if birth_date is not None and pd.notna(birth_date) else "",
+                        **{event: events_data.get(event, 's/t') for event in events_data}
+                    }
+
+                    imported_swimmers.append(new_swimmer)
+                    imported_names.append(swimmer_name)
 
                 except Exception as e:
                     errors.append(f"Fila {index + 2}: Error procesando datos - {str(e)}")

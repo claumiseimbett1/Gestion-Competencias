@@ -18,6 +18,23 @@ def safe_excel_sheet_title(name, used_titles):
     return candidate
 
 
+def normalize_prueba_name(name):
+    """Unificar nombre de prueba (p. ej. CROLL → LIBRE)."""
+    return re.sub(r'CROLL', 'LIBRE', str(name), flags=re.IGNORECASE)
+
+
+def normalize_planilla_columns(df):
+    """Renombra columnas de pruebas CROLL a LIBRE en la planilla."""
+    rename_map = {
+        col: normalize_prueba_name(col)
+        for col in df.columns
+        if re.search(r'CROLL', str(col), flags=re.IGNORECASE)
+    }
+    if rename_map:
+        df = df.rename(columns=rename_map)
+    return df
+
+
 def inscrito_en_prueba(cell_val):
     """
     True si el nadador está inscrito en la prueba (celda con dato).
@@ -59,5 +76,5 @@ def ordered_prueba_hoja_keys(eventos_dict, event_cols):
 
 
 def titulo_prueba_numerada(indice, nombre_prueba):
-    """Ej.: PRUEBA 1 50M CROLL - Mujeres"""
+    """Ej.: PRUEBA 1 50M LIBRE - Mujeres"""
     return f"PRUEBA {indice} {nombre_prueba}"
