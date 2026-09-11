@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import io
 import os
+import json
 from pathlib import Path
 from datetime import datetime
 #import subprocess  # No longer needed
@@ -12,7 +13,13 @@ import sys
 
 # Importar los scripts directly  
 import importlib.util
-from planilla_utils import inscrito_en_prueba
+from planilla_utils import (
+    inscrito_en_prueba,
+    safe_excel_sheet_title,
+    titulo_prueba_numerada,
+    build_manual_seeding_title,
+    get_manual_prueba_number,
+)
 
 # Importar el módulo de inscripción con el nuevo nombre
 spec = importlib.util.spec_from_file_location("inscripcion_nadadores", "1-inscripcion_nadadores.py")
@@ -40,6 +47,10 @@ spec4.loader.exec_module(papeletas_pdf_module)
 spec5 = importlib.util.spec_from_file_location("generar_papeletas_excel", "generar_papeletas_excel.py")
 papeletas_excel_module = importlib.util.module_from_spec(spec5)
 spec5.loader.exec_module(papeletas_excel_module)
+
+spec7 = importlib.util.spec_from_file_location("generar_sembrado_manual_pdf", "generar_sembrado_manual_pdf.py")
+sembrado_manual_pdf_module = importlib.util.module_from_spec(spec7)
+spec7.loader.exec_module(sembrado_manual_pdf_module)
 
 # Importar el gestor de eventos
 spec6 = importlib.util.spec_from_file_location("event_manager", "event_manager.py")
@@ -1187,26 +1198,31 @@ def generar_sembrado_categoria():
             
             # Sección de papeletas para jueces
             st.markdown("### 📋 Generar Papeletas para Jueces")
-            st.info("Las papeletas se generan en formato Excel con rectángulos imprimibles")
+            st.info("Usa el sembrado manual guardado (series y carriles). No modifica tu sembrado.")
             
             if st.button("📄 Generar Papeletas Excel", type="secondary", key="papeletas_excel_cat"):
                 with st.spinner("Generando papeletas en Excel..."):
-                    success, message = papeletas_excel_module.generar_papeletas_excel()
-                    if success:
+                    prepare_papeletas_from_manual_seedings(st.session_state)
+                    success, message, xlsx_bytes = papeletas_excel_module.generar_papeletas_excel(
+                        session_state=st.session_state
+                    )
+                    if success and xlsx_bytes:
+                        store_papeletas_export(st.session_state, 'xlsx', xlsx_bytes)
                         st.success(message)
+                        st.rerun()
                     else:
                         st.error(message)
             
-            # Botón de descarga para papeletas Excel si existe
-            if os.path.exists("papeletas_jueces.xlsx"):
-                st.info("📄 Papeletas Excel disponibles")
-                with open("papeletas_jueces.xlsx", "rb") as file:
-                    st.download_button(
-                        label="⬇️ Descargar Papeletas Excel",
-                        data=file.read(),
-                        file_name="papeletas_jueces.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
+            xlsx_bytes = st.session_state.get('_papeletas_xlsx_bytes')
+            if xlsx_bytes:
+                xlsx_ts = st.session_state.get('_papeletas_xlsx_ts', 'latest')
+                st.download_button(
+                    label="⬇️ Descargar Papeletas Excel",
+                    data=xlsx_bytes,
+                    file_name=f"papeletas_jueces_{xlsx_ts}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key=f"download_papeletas_cat_{xlsx_ts}",
+                )
 
 def generar_sembrado_tiempo():
     st.markdown("## ⏱️ Generar Sembrado por Tiempo")
@@ -1276,26 +1292,31 @@ def generar_sembrado_tiempo():
             
             # Sección de papeletas para jueces
             st.markdown("### 📋 Generar Papeletas para Jueces")
-            st.info("Las papeletas se generan en formato Excel con rectángulos imprimibles")
+            st.info("Usa el sembrado manual guardado (series y carriles). No modifica tu sembrado.")
             
             if st.button("📄 Generar Papeletas Excel", type="secondary", key="papeletas_excel_tiempo"):
                 with st.spinner("Generando papeletas en Excel..."):
-                    success, message = papeletas_excel_module.generar_papeletas_excel()
-                    if success:
+                    prepare_papeletas_from_manual_seedings(st.session_state)
+                    success, message, xlsx_bytes = papeletas_excel_module.generar_papeletas_excel(
+                        session_state=st.session_state
+                    )
+                    if success and xlsx_bytes:
+                        store_papeletas_export(st.session_state, 'xlsx', xlsx_bytes)
                         st.success(message)
+                        st.rerun()
                     else:
                         st.error(message)
             
-            # Botón de descarga para papeletas Excel si existe
-            if os.path.exists("papeletas_jueces.xlsx"):
-                st.info("📄 Papeletas Excel disponibles")
-                with open("papeletas_jueces.xlsx", "rb") as file:
-                    st.download_button(
-                        label="⬇️ Descargar Papeletas Excel",
-                        data=file.read(),
-                        file_name="papeletas_jueces.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
+            xlsx_bytes = st.session_state.get('_papeletas_xlsx_bytes')
+            if xlsx_bytes:
+                xlsx_ts = st.session_state.get('_papeletas_xlsx_ts', 'latest')
+                st.download_button(
+                    label="⬇️ Descargar Papeletas Excel",
+                    data=xlsx_bytes,
+                    file_name=f"papeletas_jueces_{xlsx_ts}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key=f"download_papeletas_tiempo_{xlsx_ts}",
+                )
 
 def generate_seeding_excel(df_evento, evento_nombre, tipo_sembrado):
     """
@@ -1324,7 +1345,7 @@ def generate_seeding_excel(df_evento, evento_nombre, tipo_sembrado):
             if current_serie is not None:
                 current_row += 1  # Espacio entre series
             
-            ws.cell(row=current_row, column=1, value=f"Serie {serie_num}").font = Font(bold=True, size=14)
+            ws.cell(row=current_row, column=1, value=f"SERIE {serie_num}").font = Font(bold=True, size=14)
             current_row += 1
             
             # Headers
@@ -1365,64 +1386,844 @@ def generate_seeding_excel(df_evento, evento_nombre, tipo_sembrado):
     
     return buffer.getvalue()
 
-def generate_seeding_excel_from_manual(seeding_data, event_name, gender):
+_MANUAL_SERIE_HEADERS = [
+    "Carril", "Nombre", "Equipo", "Edad", "Categoría",
+    "Tiempo Inscripción", "Tiempo Competencia",
+]
+
+
+def _write_manual_serie_block(ws, serie, start_row, start_col):
+    """Escribe una serie de sembrado en un bloque de columnas."""
+    from openpyxl.styles import Font
+
+    row = start_row
+    ws.cell(row=row, column=start_col, value=f"SERIE {serie['serie']}").font = Font(bold=True, size=12)
+    row += 1
+
+    for offset, header in enumerate(_MANUAL_SERIE_HEADERS):
+        cell = ws.cell(row=row, column=start_col + offset, value=header)
+        cell.font = Font(bold=True, color="FF0000" if header == "Tiempo Competencia" else None)
+    row += 1
+
+    for lane_idx, swimmer in enumerate(serie['carriles']):
+        ws.cell(row=row, column=start_col, value=lane_idx + 1)
+        if swimmer:
+            values = [
+                swimmer['nombre'],
+                swimmer['equipo'],
+                swimmer['edad'],
+                swimmer['categoria'],
+                swimmer['tiempo'],
+                swimmer.get('tiempo_competencia', ''),
+            ]
+            for offset, value in enumerate(values, 1):
+                cell = ws.cell(row=row, column=start_col + offset, value=value)
+                if offset == 6:
+                    cell.font = Font(color="0000FF")
+        row += 1
+
+    return row
+
+
+def _adjust_manual_seeding_columns(ws, two_columns=False):
+    from openpyxl.utils import get_column_letter
+
+    widths = [6, 28, 18, 6, 14, 16, 16]
+    block_starts = [1, 9] if two_columns else [1]
+    for start_col in block_starts:
+        for offset, width in enumerate(widths):
+            ws.column_dimensions[get_column_letter(start_col + offset)].width = width
+
+
+def write_manual_seeding_to_worksheet(ws, seeding_data, event_name, gender, two_columns=False, event_cols=None):
+    """Escribe el contenido de un sembrado manual en una hoja de Excel."""
+    from openpyxl.styles import Font, Alignment
+
+    block_width = len(_MANUAL_SERIE_HEADERS)
+    right_start = block_width + 2
+
+    title = seeding_data.get('titulo') or build_manual_seeding_title(event_name, gender, event_cols or [])
+    title_cell = ws.cell(row=1, column=1, value=title)
+    title_cell.font = Font(bold=True, size=16)
+    title_cell.alignment = Alignment(horizontal='center')
+    if two_columns:
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=right_start + block_width - 1)
+        ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE
+
+    series_list = seeding_data.get('series', [])
+    current_row = 3
+
+    if not two_columns:
+        for serie in series_list:
+            current_row = _write_manual_serie_block(ws, serie, current_row, 1) + 1
+    else:
+        idx = 0
+        while idx < len(series_list):
+            row_start = current_row
+            row_end = row_start
+            for col_start in (1, right_start):
+                if idx >= len(series_list):
+                    break
+                row_end = max(row_end, _write_manual_serie_block(ws, series_list[idx], row_start, col_start))
+                idx += 1
+            current_row = row_end + 2
+
+    _adjust_manual_seeding_columns(ws, two_columns=two_columns)
+
+
+def get_swimmers_for_manual_seeding(df, event_col, gender_filter):
+    """Nadadores inscritos en una prueba, filtrados por género."""
+    swimmers = []
+    for index, row in df.iterrows():
+        if inscrito_en_prueba(row[event_col]) and pd.notna(row['NOMBRE Y AP']):
+            swimmer_gender = "Masculino" if str(row['SEXO']).upper() == 'M' else "Femenino"
+            if gender_filter == "Todos" or gender_filter == swimmer_gender:
+                swimmers.append({
+                    'id': index,
+                    'nombre': row['NOMBRE Y AP'],
+                    'equipo': row['EQUIPO'],
+                    'edad': row['EDAD'],
+                    'categoria': row['CAT.'],
+                    'sexo': swimmer_gender,
+                    'tiempo': str(row[event_col]),
+                    'tiempo_en_segundos': script1.parse_time(row[event_col]),
+                })
+    return swimmers
+
+
+def build_initial_manual_seeding(swimmers_list, event_col, gender_filter, event_cols):
+    """Sembrado automático inicial (series de 8, carriles estándar)."""
+    sorted_swimmers = sorted(
+        swimmers_list,
+        key=lambda x: x.get('tiempo_en_segundos', script1.parse_time(x['tiempo'])),
+    )
+
+    series = []
+    swimmers_per_series = 8
+    num_series = (len(sorted_swimmers) + swimmers_per_series - 1) // swimmers_per_series
+
+    for serie_num in range(num_series):
+        serie_swimmers = sorted_swimmers[
+            serie_num * swimmers_per_series:(serie_num + 1) * swimmers_per_series
+        ]
+        lane_assignment = [4, 5, 3, 6, 2, 7, 1, 8]
+
+        serie = {"serie": serie_num + 1, "carriles": [None] * 8}
+        for i, swimmer in enumerate(serie_swimmers):
+            if i < len(lane_assignment):
+                lane_idx = lane_assignment[i] - 1
+                serie["carriles"][lane_idx] = swimmer
+
+        series.append(serie)
+
+    return {
+        'evento': event_col,
+        'genero': gender_filter,
+        'prueba_num': get_manual_prueba_number(event_col, gender_filter, event_cols),
+        'titulo': build_manual_seeding_title(event_col, gender_filter, event_cols),
+        'series': series,
+        'nadadores_disponibles': [],
+        'total_nadadores': len(swimmers_list),
+    }
+
+
+def manual_seeding_session_key(event_col, gender_filter):
+    return f"manual_seeding_{event_col}_{gender_filter}"
+
+
+def sync_todos_splits_to_session(session_state, event_cols):
+    """
+    Si hay sembrado **Todos** editado, copia su contenido a F/M en sesión.
+    Así la UI (filtro Mujeres/Hombres) y el PDF muestran lo mismo.
+    No sobrescribe F/M editados a mano por separado.
+    """
+    from planilla_utils import split_seeding_by_gender, _is_edited_todos_seeding
+
+    updated = 0
+    for key in list(session_state.keys()):
+        if not str(key).startswith('manual_seeding_'):
+            continue
+        if not str(key).endswith('_Todos'):
+            continue
+        data = session_state[key]
+        if not isinstance(data, dict) or 'series' not in data:
+            continue
+        event_col = data.get('evento')
+        if not event_col:
+            continue
+        todos_item = {'evento': event_col, 'genero': 'Todos', 'data': data}
+        if not _is_edited_todos_seeding(todos_item):
+            continue
+        for gender in ('Femenino', 'Masculino'):
+            gender_key = manual_seeding_session_key(event_col, gender)
+            existing = session_state.get(gender_key)
+            if (
+                existing
+                and existing.get('editado_manual')
+                and not existing.get('synced_from_todos')
+            ):
+                continue
+            split = split_seeding_by_gender(todos_item, gender, event_col, event_cols)
+            if split:
+                session_state[gender_key] = split['data']
+                updated += 1
+    return updated
+
+
+APP_ROOT = Path(__file__).resolve().parent
+MANUAL_SEEDINGS_CACHE = APP_ROOT / "manual_seedings_cache.json"
+MANUAL_SEEDINGS_EXCEL = APP_ROOT / "sembrado_manual_completo.xlsx"
+PAPELETAS_PDF_PATH = APP_ROOT / "papeletas_jueces.pdf"
+PAPELETAS_XLSX_PATH = APP_ROOT / "papeletas_jueces.xlsx"
+PAPELETAS_3X2_PDF_PATH = APP_ROOT / "papeletas_jueces_3x2.pdf"
+
+
+def _sanitize_seeding_for_json(obj):
+    """Convierte valores no serializables (inf, numpy) para JSON."""
+    import math
+
+    if isinstance(obj, dict):
+        return {k: _sanitize_seeding_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_seeding_for_json(v) for v in obj]
+    if isinstance(obj, float) and (math.isinf(obj) or math.isnan(obj)):
+        return None
+    if hasattr(obj, 'item'):
+        try:
+            return obj.item()
+        except Exception:
+            return str(obj)
+    return obj
+
+
+def _count_manual_seeding_keys(session_state):
+    return sum(
+        1 for key in session_state
+        if str(key).startswith('manual_seeding_')
+        and isinstance(session_state.get(key), dict)
+        and 'series' in session_state.get(key, {})
+    )
+
+
+def persist_manual_seedings(session_state, event_cols=None):
+    """Guarda en disco todos los sembrados (sesión + lo ya guardado)."""
+    if event_cols:
+        sync_todos_splits_to_session(session_state, event_cols)
+
+    data = {}
+    if MANUAL_SEEDINGS_CACHE.exists():
+        try:
+            with open(MANUAL_SEEDINGS_CACHE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            data = {}
+
+    for key in list(session_state.keys()):
+        if not str(key).startswith('manual_seeding_'):
+            continue
+        value = session_state[key]
+        if isinstance(value, dict) and 'series' in value:
+            data[str(key)] = _sanitize_seeding_for_json(value)
+
+    if not data:
+        return 0
+
+    with open(MANUAL_SEEDINGS_CACHE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    return len(data)
+
+
+def count_manual_seedings_on_disk():
+    if not MANUAL_SEEDINGS_CACHE.exists():
+        return 0
+    try:
+        with open(MANUAL_SEEDINGS_CACHE, 'r', encoding='utf-8') as f:
+            return sum(
+                1 for k, v in json.load(f).items()
+                if str(k).startswith('manual_seeding_') and isinstance(v, dict) and 'series' in v
+            )
+    except (json.JSONDecodeError, OSError):
+        return 0
+
+
+def ensure_manual_seedings_loaded(session_state):
+    """Restaura sembrados del disco si la sesión no tiene ninguno."""
+    in_memory = _count_manual_seeding_keys(session_state)
+    if in_memory:
+        return in_memory, 0
+    if not MANUAL_SEEDINGS_CACHE.exists():
+        return 0, 0
+    loaded = force_load_manual_seedings_from_disk(session_state)
+    return _count_manual_seeding_keys(session_state), loaded
+
+
+def prepare_papeletas_from_manual_seedings(session_state):
+    """Carga sembrado manual para papeletas. Solo lectura — no modifica el cache."""
+    ensure_manual_seedings_loaded(session_state)
+    try:
+        df_ins = pd.read_excel("planilla_inscripcion.xlsx")
+        info_cols = ['NOMBRE Y AP', 'EQUIPO', 'EDAD', 'CAT.', 'SEXO']
+        event_cols_p = [
+            c for c in df_ins.columns
+            if c not in info_cols and 'Nø' not in c and 'FECHA DE NA' not in c
+        ]
+        sync_todos_splits_to_session(session_state, event_cols_p)
+    except Exception:
+        pass
+
+
+def store_papeletas_export(session_state, kind, file_bytes, count=None):
+    """Guarda bytes en sesión para que el download_button sirva la versión recién generada."""
+    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+    session_state[f'_papeletas_{kind}_bytes'] = file_bytes
+    session_state[f'_papeletas_{kind}_ts'] = ts
+    if count is not None:
+        session_state[f'_papeletas_{kind}_count'] = count
+
+
+def hydrate_papeletas_downloads_from_disk(session_state):
+    """Carga PDF/Excel/PDF 3x2 del disco a la sesión si aún no están en memoria."""
+    disk_files = {
+        'pdf': PAPELETAS_PDF_PATH,
+        'xlsx': PAPELETAS_XLSX_PATH,
+        '3x2': PAPELETAS_3X2_PDF_PATH,
+    }
+    for kind, path in disk_files.items():
+        key = f'_papeletas_{kind}_bytes'
+        if session_state.get(key):
+            continue
+        if not path.exists() or path.stat().st_size < 100:
+            continue
+        mtime = datetime.fromtimestamp(path.stat().st_mtime).strftime('%Y%m%d_%H%M%S')
+        session_state[key] = path.read_bytes()
+        session_state[f'_papeletas_{kind}_ts'] = mtime
+
+
+def generate_all_papeletas_exports(session_state, papeletas_count):
+    """Genera PDF, Excel y PDF 3x2 desde el sembrado manual."""
+    prepare_papeletas_from_manual_seedings(session_state)
+    results = {}
+    errors = []
+
+    ok_pdf, msg_pdf, pdf_bytes = papeletas_pdf_module.generar_papeletas_pdf(
+        session_state=session_state
+    )
+    if ok_pdf and pdf_bytes:
+        store_papeletas_export(session_state, 'pdf', pdf_bytes, papeletas_count)
+        results['PDF'] = msg_pdf
+    else:
+        errors.append(msg_pdf or 'PDF')
+
+    ok_xlsx, msg_xlsx, xlsx_bytes = papeletas_excel_module.generar_papeletas_excel(
+        session_state=session_state
+    )
+    if ok_xlsx and xlsx_bytes:
+        store_papeletas_export(session_state, 'xlsx', xlsx_bytes, papeletas_count)
+        results['Excel'] = msg_xlsx
+    else:
+        errors.append(msg_xlsx or 'Excel')
+
+    ok_3x2, msg_3x2, pdf3_bytes = papeletas_pdf_module.generar_papeletas_pdf_3x2(
+        session_state=session_state
+    )
+    if ok_3x2 and pdf3_bytes:
+        store_papeletas_export(session_state, '3x2', pdf3_bytes, papeletas_count)
+        results['PDF 3x2'] = msg_3x2
+    else:
+        errors.append(msg_3x2 or 'PDF 3x2')
+
+    return results, errors
+
+
+def render_papeletas_download(session_state, kind, label, file_prefix, mime, key_prefix):
+    """Muestra botón de descarga para un formato de papeletas."""
+    file_bytes = session_state.get(f'_papeletas_{kind}_bytes')
+    if not file_bytes:
+        return False
+    file_ts = session_state.get(f'_papeletas_{kind}_ts', 'latest')
+    file_count = session_state.get(f'_papeletas_{kind}_count', '?')
+    st.download_button(
+        label=label,
+        data=file_bytes,
+        file_name=f"{file_prefix}_{file_ts}{'.xlsx' if kind == 'xlsx' else '.pdf'}",
+        mime=mime,
+        key=f"{key_prefix}_{file_ts}",
+    )
+    st.caption(f"Generado: {file_ts} · {file_count} papeletas · sembrado manual")
+    return True
+
+
+# Archivos que nunca se eliminan al limpiar intermedios
+PROTECTED_DATA_FILES = frozenset({
+    'manual_seedings_cache.json',
+    'sembrado_manual_completo.pdf',
+    'sembrado_manual_completo.xlsx',
+    'planilla_inscripcion.xlsx',
+    'event_config.json',
+    'BASE-DE-DATOS.xlsx',
+    'BASE-DE-DATOS-BACKUP.xlsx',
+    'papeletas_jueces.pdf',
+    'papeletas_jueces_3x2.pdf',
+    'papeletas_jueces.xlsx',
+    'categorias_festitorneo_2026.xlsx',
+    'pruebas_festitorneo_2026.xlsx',
+})
+
+INTERMEDIATE_FILE_NAMES = (
+    'sembrado_competencia.xlsx',
+    'sembrado_competencia_POR_TIEMPO.xlsx',
+    'resultados_con_tiempos.xlsx',
+    'reporte_premiacion_final_CORREGIDO.xlsx',
+    'BASE-DE-DATOS-TEMP.xlsx',
+    'papeletas_jueces_excel_3_per_row.pdf',
+    'papeletas_jueces_excel_style.pdf',
+)
+
+INTERMEDIATE_FILE_GLOBS = (
+    'resultados_desde_sembrado_*.xlsx',
+    '_test_*.pdf',
+    '_test_*.xlsx',
+    'sembrado_manual_PRUEBA_*.xlsx',
+    'sembrado_manual_*_202*.xlsx',
+)
+
+
+def _is_protected_project_file(path):
+    """True si el archivo es sembrado/papeletas vigentes o datos base del evento."""
+    name = path.name
+    if name in PROTECTED_DATA_FILES:
+        return True
+    if name.startswith('sembrado_manual_completo'):
+        return True
+    return False
+
+
+def clean_intermediate_files(root=None):
+    """
+    Elimina archivos intermedios/auto-generados.
+    No toca sembrado manual, papeletas ni planilla de inscripción.
+    """
+    import glob
+
+    base = Path(root or APP_ROOT)
+    deleted = []
+    skipped = []
+
+    for name in INTERMEDIATE_FILE_NAMES:
+        path = base / name
+        if not path.exists():
+            continue
+        if _is_protected_project_file(path):
+            skipped.append(path.name)
+            continue
+        try:
+            path.unlink()
+            deleted.append(path.name)
+        except OSError as exc:
+            skipped.append(f"{path.name} ({exc})")
+
+    for pattern in INTERMEDIATE_FILE_GLOBS:
+        for path in base.glob(pattern):
+            if not path.is_file() or _is_protected_project_file(path):
+                continue
+            try:
+                path.unlink()
+                deleted.append(path.name)
+            except OSError as exc:
+                skipped.append(f"{path.name} ({exc})")
+
+    return deleted, skipped
+
+
+def commit_manual_seeding(session_state, event_cols=None, export_files=False, event_title=None):
+    """Persiste JSON y, opcionalmente, genera Excel/PDF acumulados."""
+    saved = persist_manual_seedings(session_state, event_cols=event_cols)
+    exported = 0
+    if export_files and event_cols:
+        exported = save_manual_seedings_export_files(
+            session_state, event_cols, event_title=event_title
+        )
+    return saved, exported
+
+
+def _match_swimmer_row_id(df, nombre, equipo):
+    if not nombre:
+        return None
+    name_key = str(nombre).strip().upper()
+    team_key = str(equipo or '').strip().upper()
+    for idx, row in df.iterrows():
+        if str(row.get('NOMBRE Y AP', '')).strip().upper() != name_key:
+            continue
+        if team_key and str(row.get('EQUIPO', '')).strip().upper() != team_key:
+            continue
+        return idx
+    return None
+
+
+def _parse_manual_seeding_worksheet(ws, df):
+    """Lee series/carriles desde una hoja exportada con Guardar Sembrado."""
+    series = []
+    row = 1
+    max_row = ws.max_row or 1
+    while row <= max_row:
+        cell_val = ws.cell(row=row, column=1).value
+        if cell_val and str(cell_val).strip().upper().startswith('SERIE'):
+            parts = str(cell_val).strip().split()
+            serie_num = int(parts[1]) if len(parts) > 1 else len(series) + 1
+            row += 2  # fila de encabezados
+            carriles = [None] * 8
+            for lane_idx in range(8):
+                if row > max_row:
+                    break
+                nombre = ws.cell(row=row, column=2).value
+                if nombre in (None, ''):
+                    row += 1
+                    continue
+                equipo = ws.cell(row=row, column=3).value
+                swimmer = {
+                    'id': _match_swimmer_row_id(df, nombre, equipo),
+                    'nombre': str(nombre).strip(),
+                    'equipo': str(equipo or '').strip(),
+                    'edad': ws.cell(row=row, column=4).value,
+                    'categoria': str(ws.cell(row=row, column=5).value or '').strip(),
+                    'sexo': '',
+                    'tiempo': str(ws.cell(row=row, column=6).value or ''),
+                    'tiempo_competencia': str(ws.cell(row=row, column=7).value or ''),
+                }
+                if swimmer['id'] is not None and 'SEXO' in df.columns:
+                    swimmer['sexo'] = (
+                        'Masculino' if str(df.loc[swimmer['id'], 'SEXO']).upper() == 'M'
+                        else 'Femenino'
+                    )
+                carriles[lane_idx] = swimmer
+                row += 1
+            series.append({'serie': serie_num, 'carriles': carriles})
+        else:
+            row += 1
+    return series
+
+
+def _parse_saved_manual_seeding_file(path, df, event_cols):
+    """Interpreta un sembrado_manual_*.xlsx guardado con el botón Guardar Sembrado."""
+    import re
+    from openpyxl import load_workbook
+    from planilla_utils import (
+        build_manual_seeding_title,
+        event_from_prueba_number,
+        get_manual_prueba_number,
+    )
+
+    filename = Path(path).name
+    gender_filter = None
+    event_col = None
+
+    m = re.search(r'PRUEBA_(\d+)_(Femenino|Masculino|Todos)_', filename)
+    if m:
+        event_col, gender_filter = event_from_prueba_number(
+            int(m.group(1)), m.group(2), event_cols
+        )
+    else:
+        m2 = re.search(
+            r'sembrado_manual_(.+?)_(Femenino|Masculino|Todos)_\d{8}_\d{6}\.xlsx$',
+            filename,
+        )
+        if m2:
+            event_col, gender_filter = m2.group(1), m2.group(2)
+
+    wb = load_workbook(path, read_only=True, data_only=True)
+    ws = wb.active
+    title = str(ws.cell(row=1, column=1).value or '').strip()
+    series = _parse_manual_seeding_worksheet(ws, df)
+    wb.close()
+
+    if not series:
+        return None
+
+    if not event_col and title:
+        for col in event_cols:
+            if col in title:
+                event_col = col
+                break
+    if not gender_filter:
+        if ' - Mujeres' in title or 'Mujeres' in title:
+            gender_filter = 'Femenino'
+        elif ' - Hombres' in title or 'Hombres' in title:
+            gender_filter = 'Masculino'
+        else:
+            gender_filter = 'Todos'
+
+    if not event_col:
+        return None
+
+    total = sum(
+        1 for serie in series for swimmer in serie['carriles'] if swimmer
+    )
+    seeding = {
+        'evento': event_col,
+        'genero': gender_filter,
+        'prueba_num': get_manual_prueba_number(event_col, gender_filter, event_cols),
+        'titulo': title or build_manual_seeding_title(event_col, gender_filter, event_cols),
+        'series': series,
+        'nadadores_disponibles': [],
+        'total_nadadores': total,
+        'editado_manual': True,
+        'recuperado_de': filename,
+    }
+    return seeding
+
+
+def recover_manual_seedings_from_saved_excels(session_state, df, event_cols):
+    """
+    Restaura sembrados desde los Excel individuales (sembrado_manual_PRUEBA_*.xlsx).
+    Usa la copia más reciente por prueba/género.
+    """
+    import re
+
+    latest_files = {}
+    for path in APP_ROOT.glob('sembrado_manual*.xlsx'):
+        if 'completo' in path.name.lower():
+            continue
+        m = re.search(r'PRUEBA_(\d+)_(Femenino|Masculino|Todos)_(\d{8}_\d{6})', path.name)
+        if m:
+            key = (int(m.group(1)), m.group(2))
+            ts = m.group(3)
+        else:
+            m2 = re.search(
+                r'sembrado_manual_(.+?)_(Femenino|Masculino|Todos)_(\d{8}_\d{6})\.xlsx$',
+                path.name,
+            )
+            if not m2:
+                continue
+            key = ('evt', m2.group(1), m2.group(2))
+            ts = m2.group(3)
+        if key not in latest_files or ts > latest_files[key][0]:
+            latest_files[key] = (ts, path)
+
+    restored = 0
+    skipped = 0
+    for _, (_, path) in latest_files.items():
+        seeding = _parse_saved_manual_seeding_file(path, df, event_cols)
+        if not seeding:
+            skipped += 1
+            continue
+        event_col = seeding['evento']
+        gender_filter = seeding['genero']
+        todos_key = manual_seeding_session_key(event_col, 'Todos')
+        if gender_filter in ('Femenino', 'Masculino') and todos_key in session_state:
+            todos_data = session_state.get(todos_key, {})
+            if todos_data.get('editado_manual') or todos_data.get('titulo') == 'EDITADO MANUAL':
+                skipped += 1
+                continue
+        session_state[manual_seeding_session_key(event_col, gender_filter)] = seeding
+        restored += 1
+
+    persist_manual_seedings(session_state, event_cols=event_cols)
+    return restored, skipped, len(latest_files)
+
+
+def load_manual_seedings_from_disk(session_state):
+    """Restaura sembrados desde disco sin sobrescribir los de la sesión actual."""
+    if not MANUAL_SEEDINGS_CACHE.exists():
+        return 0
+    try:
+        with open(MANUAL_SEEDINGS_CACHE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return 0
+
+    loaded = 0
+    for key, value in data.items():
+        if not str(key).startswith('manual_seeding_'):
+            continue
+        if not isinstance(value, dict) or 'series' not in value:
+            continue
+        if key not in session_state:
+            session_state[key] = value
+            loaded += 1
+    return loaded
+
+
+def force_load_manual_seedings_from_disk(session_state):
+    """Recarga todos los sembrados del disco (sobrescribe los de la sesión)."""
+    if not MANUAL_SEEDINGS_CACHE.exists():
+        return 0
+    try:
+        with open(MANUAL_SEEDINGS_CACHE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return 0
+
+    loaded = 0
+    for key, value in data.items():
+        if not str(key).startswith('manual_seeding_'):
+            continue
+        if not isinstance(value, dict) or 'series' not in value:
+            continue
+        session_state[key] = value
+        loaded += 1
+    return loaded
+
+
+def save_manual_seedings_export_files(session_state, event_cols, event_title=None, df=None):
+    """Genera Excel/PDF acumulados en disco con todos los sembrados grabados."""
+    if df is None:
+        df = pd.read_excel("planilla_inscripcion.xlsx")
+    seedings, skipped = get_manual_seedings_from_session(
+        session_state, for_export=True, event_cols=event_cols, df=df
+    )
+    if not seedings:
+        return 0
+
+    excel_bytes = generate_all_manual_seedings_excel(seedings, event_order=event_cols)
+    MANUAL_SEEDINGS_EXCEL.write_bytes(excel_bytes)
+
+    title = event_title or "Sembrado Manual"
+    pdf_bytes = sembrado_manual_pdf_module.generate_all_manual_seedings_pdf(
+        seedings, event_order=event_cols, event_name=title
+    )
+    if pdf_bytes:
+        (APP_ROOT / "sembrado_manual_completo.pdf").write_bytes(pdf_bytes)
+
+    return len(seedings)
+
+
+def count_manual_seeding_status(session_state, df, event_cols):
+    """Cuenta pruebas esperadas vs grabadas (respeta sembrado Todos)."""
+    expected = 0
+    recorded = 0
+    for event_col in event_cols:
+        f_swimmers = get_swimmers_for_manual_seeding(df, event_col, 'Femenino')
+        m_swimmers = get_swimmers_for_manual_seeding(df, event_col, 'Masculino')
+        if not f_swimmers and not m_swimmers:
+            continue
+        if manual_seeding_session_key(event_col, 'Todos') in session_state:
+            expected += 1
+            recorded += 1
+            continue
+        if f_swimmers:
+            expected += 1
+            if manual_seeding_session_key(event_col, 'Femenino') in session_state:
+                recorded += 1
+        if m_swimmers:
+            expected += 1
+            if manual_seeding_session_key(event_col, 'Masculino') in session_state:
+                recorded += 1
+    return recorded, expected
+
+
+def list_expected_manual_pruebas(df, event_cols):
+    """Pruebas con inscripciones (Mujeres y Hombres por separado)."""
+    expected = []
+    for event_col in event_cols:
+        for gender_filter in ('Femenino', 'Masculino'):
+            swimmers = get_swimmers_for_manual_seeding(df, event_col, gender_filter)
+            if swimmers:
+                expected.append((event_col, gender_filter, len(swimmers)))
+    return expected
+
+
+def seed_all_manual_pruebas(session_state, df, event_cols, overwrite=False):
+    """
+    Graba en sesión todas las pruebas con inscripciones.
+    No modifica sembrados existentes. Si el evento ya tiene sembrado **Todos**
+    (editado a mano), no crea copias automáticas M/F encima.
+    """
+    created = 0
+    kept = 0
+    for event_col, gender_filter, _ in list_expected_manual_pruebas(df, event_cols):
+        key = manual_seeding_session_key(event_col, gender_filter)
+        if key in session_state and not overwrite:
+            kept += 1
+            continue
+        if not overwrite and manual_seeding_session_key(event_col, 'Todos') in session_state:
+            kept += 1
+            continue
+        swimmers = get_swimmers_for_manual_seeding(df, event_col, gender_filter)
+        session_state[key] = build_initial_manual_seeding(
+            swimmers, event_col, gender_filter, event_cols
+        )
+        created += 1
+    persist_manual_seedings(session_state, event_cols=event_cols)
+    return created, kept
+
+
+def get_manual_seedings_from_session(session_state, dedupe=True, for_export=False, event_cols=None, df=None):
+    """Recopila sembrados manuales guardados en la sesión."""
+    seedings = []
+    for key, data in session_state.items():
+        if not str(key).startswith('manual_seeding_'):
+            continue
+        if not isinstance(data, dict) or 'series' not in data:
+            continue
+        seedings.append({
+            'key': str(key),
+            'evento': data.get('evento', str(key).replace('manual_seeding_', '')),
+            'genero': data.get('genero', ''),
+            'data': data,
+        })
+    if for_export and event_cols is not None and df is not None:
+        from planilla_utils import prepare_seedings_for_export
+        return prepare_seedings_for_export(seedings, event_cols, df)
+    if dedupe:
+        from planilla_utils import dedupe_manual_seedings
+        seedings, dropped = dedupe_manual_seedings(seedings)
+        return seedings, dropped
+    return seedings, 0
+
+
+def generate_all_manual_seedings_excel(seedings, event_order=None, two_columns=False):
+    """Genera un Excel con una hoja por cada sembrado manual acumulado."""
+    from io import BytesIO
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    wb.remove(wb.active)
+    used_titles = set()
+
+    from planilla_utils import sort_manual_seedings
+
+    for item in sort_manual_seedings(seedings, event_order):
+        titulo = build_manual_seeding_title(item['evento'], item['genero'], event_order or [])
+        sheet_name = safe_excel_sheet_title(titulo, used_titles)
+        ws = wb.create_sheet(title=sheet_name)
+        write_manual_seeding_to_worksheet(
+            ws,
+            item['data'],
+            item['evento'],
+            item['genero'],
+            two_columns=two_columns,
+            event_cols=event_order,
+        )
+
+    if not wb.sheetnames:
+        ws = wb.create_sheet(title="Sembrado Manual")
+        ws.cell(row=1, column=1, value="No hay sembrados manuales")
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+def generate_seeding_excel_from_manual(seeding_data, event_name, gender, two_columns=False, event_cols=None):
     """
     Genera un archivo Excel desde datos de sembrado manual
     """
     from io import BytesIO
     from openpyxl import Workbook
-    from openpyxl.styles import Font
-    
+
     wb = Workbook()
     ws = wb.active
-    ws.title = "Sembrado Manual"
-    
-    # Título
-    ws.cell(row=1, column=1, value=f"{event_name} - {gender}").font = Font(bold=True, size=16)
-    
-    current_row = 3
-    for serie in seeding_data['series']:
-        # Título de serie
-        ws.cell(row=current_row, column=1, value=f"Serie {serie['serie']}").font = Font(bold=True, size=14)
-        current_row += 1
-        
-        # Headers
-        headers = ["Carril", "Nombre", "Equipo", "Edad", "Categoría", "Tiempo Inscripción", "Tiempo Competencia"]
-        for col, header in enumerate(headers, 1):
-            cell = ws.cell(row=current_row, column=col, value=header)
-            cell.font = Font(bold=True)
-            if header == "Tiempo Competencia":
-                cell.font = Font(bold=True, color="FF0000")
-        current_row += 1
-        
-        # Datos de carriles
-        for lane_idx, swimmer in enumerate(serie['carriles']):
-            ws.cell(row=current_row, column=1, value=lane_idx + 1)
-            if swimmer:
-                ws.cell(row=current_row, column=2, value=swimmer['nombre'])
-                ws.cell(row=current_row, column=3, value=swimmer['equipo'])
-                ws.cell(row=current_row, column=4, value=swimmer['edad'])
-                ws.cell(row=current_row, column=5, value=swimmer['categoria'])
-                ws.cell(row=current_row, column=6, value=swimmer['tiempo'])
-                # Tiempo competencia (tomar valor si existe)
-                comp_time = swimmer.get('tiempo_competencia', '')
-                comp_cell = ws.cell(row=current_row, column=7, value=comp_time)
-                comp_cell.font = Font(color="0000FF")
-            current_row += 1
-        
-        current_row += 1  # Espacio entre series
-    
-    # Ajustar columnas
-    ws.column_dimensions['B'].width = 30
-    ws.column_dimensions['C'].width = 25
-    ws.column_dimensions['F'].width = 18
-    ws.column_dimensions['G'].width = 18
-    
-    # Guardar en buffer
+    titulo = seeding_data.get('titulo') or build_manual_seeding_title(event_name, gender, event_cols or [])
+    ws.title = safe_excel_sheet_title(titulo, set())
+    write_manual_seeding_to_worksheet(
+        ws, seeding_data, event_name, gender, two_columns=two_columns, event_cols=event_cols
+    )
+
     buffer = BytesIO()
     wb.save(buffer)
     buffer.seek(0)
-    
+
     return buffer.getvalue()
 
 def sembrado_competencia_interface():
@@ -1451,9 +2252,26 @@ def sembrado_competencia_interface():
         cached_seedings.append("Por Categorías")
     if 'seeding_preview_time' in st.session_state:
         cached_seedings.append("Por Tiempo")
-    if any(key.startswith('manual_seeding_') for key in st.session_state.keys()):
+    if any(str(key).startswith('manual_seeding_') for key in st.session_state.keys()):
         cached_seedings.append("Manual")
     
+    loaded_count, restored_count = ensure_manual_seedings_loaded(st.session_state)
+    keys_on_disk_startup = count_manual_seedings_on_disk()
+    if restored_count:
+        st.success(
+            f"♻️ Restaurados **{restored_count}** sembrado(s) desde "
+            f"`{MANUAL_SEEDINGS_CACHE.name}`."
+        )
+    elif keys_on_disk_startup and loaded_count == 0:
+        st.warning(
+            f"Hay **{keys_on_disk_startup}** sembrado(s) en disco pero no se cargaron. "
+            f"Ve a **Manual** y pulsa **♻️ Recargar desde disco**."
+        )
+
+    if loaded_count or any(str(k).startswith('manual_seeding_') for k in st.session_state.keys()):
+        if "Manual" not in cached_seedings:
+            cached_seedings.append("Manual")
+
     if cached_seedings:
         st.markdown(f"""
         <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; padding: 12px; margin-bottom: 20px;">
@@ -1866,6 +2684,45 @@ def sembrado_competencia_interface():
         except Exception as e:
             st.error(f"❌ Error al leer inscripciones: {e}")
             return
+
+        restored_from_disk = load_manual_seedings_from_disk(st.session_state)
+        keys_in_memory = _count_manual_seeding_keys(st.session_state)
+        keys_on_disk = count_manual_seedings_on_disk()
+
+        if restored_from_disk:
+            keys_in_memory = _count_manual_seeding_keys(st.session_state)
+            st.success(
+                f"♻️ Restaurados **{restored_from_disk}** sembrado(s) adicionales desde "
+                f"`{MANUAL_SEEDINGS_CACHE.name}`."
+            )
+        elif keys_on_disk and keys_in_memory == 0:
+            force_load_manual_seedings_from_disk(st.session_state)
+            keys_in_memory = _count_manual_seeding_keys(st.session_state)
+            if keys_in_memory:
+                st.success(
+                    f"♻️ Cargados **{keys_in_memory}** sembrado(s) automáticamente desde disco."
+                )
+            else:
+                st.warning(
+                    f"Hay **{keys_on_disk}** sembrado(s) en disco pero no se pudieron cargar. "
+                    "Pulsa **♻️ Recargar desde disco**."
+                )
+
+        st.caption(
+            f"Memoria: **{keys_in_memory}** sembrado(s) · Disco: **{keys_on_disk}** en `{MANUAL_SEEDINGS_CACHE.name}`"
+        )
+
+        synced = sync_todos_splits_to_session(st.session_state, event_cols)
+        if synced:
+            persist_manual_seedings(st.session_state, event_cols=event_cols)
+            keys_in_memory = _count_manual_seeding_keys(st.session_state)
+        
+        def _save_manual_edit():
+            if gender_filter == 'Todos':
+                seeding_data['editado_manual'] = True
+                st.session_state[seeding_key] = seeding_data
+            persist_manual_seedings(st.session_state, event_cols=event_cols)
+            sync_todos_splits_to_session(st.session_state, event_cols)
         
         # Selector de evento
         st.markdown("#### 📋 Seleccionar Evento")
@@ -1875,6 +2732,9 @@ def sembrado_competencia_interface():
             selected_event = st.selectbox(
                 "Selecciona el evento para crear sembrado manual:",
                 event_cols,
+                format_func=lambda col: titulo_prueba_numerada(
+                    event_cols.index(col) + 1, col
+                ) if col in event_cols else col,
                 key="manual_event_select"
             )
         
@@ -1886,34 +2746,20 @@ def sembrado_competencia_interface():
             )
         
         if selected_event:
-            # Filtrar nadadores para el evento seleccionado
-            swimmers_for_event = []
-            for index, row in df.iterrows():
-                if inscrito_en_prueba(row[selected_event]) and pd.notna(row['NOMBRE Y AP']):
-                    swimmer_gender = "Masculino" if row['SEXO'].upper() == 'M' else "Femenino"
-                    if gender_filter == "Todos" or gender_filter == swimmer_gender:
-                        swimmers_for_event.append({
-                            'id': index,
-                            'nombre': row['NOMBRE Y AP'],
-                            'equipo': row['EQUIPO'],
-                            'edad': row['EDAD'],
-                            'categoria': row['CAT.'],
-                            'sexo': swimmer_gender,
-                            'tiempo': str(row[selected_event]),
-                            'tiempo_en_segundos': script1.parse_time(row[selected_event]),
-                        })
+            swimmers_for_event = get_swimmers_for_manual_seeding(
+                df, selected_event, gender_filter
+            )
             
             if len(swimmers_for_event) == 0:
                 st.warning(f"⚠️ No hay nadadores inscritos en {selected_event} con el filtro seleccionado")
-                return
-            
-            st.success(f"✅ {len(swimmers_for_event)} nadadores encontrados en **{selected_event}**")
+            else:
+                st.success(f"✅ {len(swimmers_for_event)} nadadores encontrados en **{selected_event}**")
             
             # Botón para actualizar sembrado con nuevas inscripciones
             col_refresh, col_info = st.columns([1, 3])
             with col_refresh:
                 if st.button("🔄 Actualizar Sembrado", help="Cargar nuevas inscripciones"):
-                    seeding_key = f"manual_seeding_{selected_event}_{gender_filter}"
+                    seeding_key = manual_seeding_session_key(selected_event, gender_filter)
                     if seeding_key in st.session_state:
                         del st.session_state[seeding_key]
                     st.rerun()
@@ -1922,43 +2768,13 @@ def sembrado_competencia_interface():
                 st.info("💡 Usa 'Actualizar Sembrado' si agregaste nuevas inscripciones")
 
             # Inicializar sembrado en session state
-            seeding_key = f"manual_seeding_{selected_event}_{gender_filter}"
-            
-            def create_initial_seeding(swimmers_list):
-                """Crear sembrado inicial automático"""
-                sorted_swimmers = sorted(
-                    swimmers_list,
-                    key=lambda x: x.get('tiempo_en_segundos', script1.parse_time(x['tiempo'])),
-                )
-                
-                # Distribución en series de 8 carriles
-                series = []
-                swimmers_per_series = 8
-                num_series = (len(sorted_swimmers) + swimmers_per_series - 1) // swimmers_per_series
-                
-                for serie_num in range(num_series):
-                    serie_swimmers = sorted_swimmers[serie_num * swimmers_per_series:(serie_num + 1) * swimmers_per_series]
-                    lane_assignment = [4, 5, 3, 6, 2, 7, 1, 8]  # Orden standard de carriles
-                    
-                    serie = {"serie": serie_num + 1, "carriles": [None] * 8}
-                    for i, swimmer in enumerate(serie_swimmers):
-                        if i < len(lane_assignment):
-                            lane_idx = lane_assignment[i] - 1
-                            serie["carriles"][lane_idx] = swimmer
-                    
-                    series.append(serie)
-                
-                return {
-                    'evento': selected_event,
-                    'genero': gender_filter, 
-                    'series': series,
-                    'nadadores_disponibles': [],
-                    'total_nadadores': len(swimmers_list)  # Para detectar cambios
-                }
+            seeding_key = manual_seeding_session_key(selected_event, gender_filter)
             
             # Verificar si necesita actualización automática
             if seeding_key not in st.session_state:
-                st.session_state[seeding_key] = create_initial_seeding(swimmers_for_event)
+                st.session_state[seeding_key] = build_initial_manual_seeding(
+                    swimmers_for_event, selected_event, gender_filter, event_cols
+                )
             else:
                 # Verificar si el número de nadadores cambió
                 current_total = st.session_state[seeding_key].get('total_nadadores', 0)
@@ -1966,9 +2782,17 @@ def sembrado_competencia_interface():
                     st.warning(f"⚠️ Se detectaron {len(swimmers_for_event) - current_total} nuevas inscripciones. Usa 'Actualizar Sembrado' para cargarlas.")
             
             seeding_data = st.session_state[seeding_key]
-            
+            if not seeding_data.get('titulo'):
+                seeding_data['titulo'] = build_manual_seeding_title(
+                    selected_event, gender_filter, event_cols
+                )
+                seeding_data['prueba_num'] = get_manual_prueba_number(
+                    selected_event, gender_filter, event_cols
+                )
+                st.session_state[seeding_key] = seeding_data
+
             # Interfaz de edición manual
-            st.markdown("#### 🎯 Editor de Sembrado Manual")
+            st.markdown(f"#### 🎯 {seeding_data['titulo']}")
             
             # Mostrar nadadores disponibles (no asignados)
             if seeding_data['nadadores_disponibles']:
@@ -2008,7 +2832,7 @@ def sembrado_competencia_interface():
             st.markdown("##### 🏊 Series y Carriles")
             
             for serie_idx, serie in enumerate(seeding_data['series']):
-                st.markdown(f"**Serie {serie['serie']}**")
+                st.markdown(f"**SERIE {serie['serie']}**")
                 
                 # Crear columnas para los 8 carriles
                 lane_cols = st.columns(8)
@@ -2063,12 +2887,15 @@ def sembrado_competencia_interface():
                             if new_comp_time != current_comp_time:
                                 seeding_data['series'][serie_idx]['carriles'][lane_idx]['tiempo_competencia'] = new_comp_time
                                 st.session_state[seeding_key] = seeding_data
+                                _save_manual_edit()
 
                             # Botón para remover nadador
                             if st.button("❌", key=f"remove_{serie_idx}_{lane_idx}", help="Remover nadador"):
                                 # Mover a disponibles
                                 seeding_data['nadadores_disponibles'].append(current_swimmer)
                                 seeding_data['series'][serie_idx]['carriles'][lane_idx] = None
+                                st.session_state[seeding_key] = seeding_data
+                                _save_manual_edit()
                                 st.rerun()
                         else:
                             # Carril vacío - mostrar opciones para asignar
@@ -2114,6 +2941,8 @@ def sembrado_competencia_interface():
                                             seeding_data['series'][serie_idx]['carriles'][lane_idx] = selected_swimmer
                                             seeding_data['nadadores_disponibles'].remove(selected_swimmer)
                                         
+                                        st.session_state[seeding_key] = seeding_data
+                                        _save_manual_edit()
                                         st.rerun()
                 
                 st.markdown("---")
@@ -2129,6 +2958,8 @@ def sembrado_competencia_interface():
                         new_serie_num = len(seeding_data['series']) + 1
                         new_serie = {"serie": new_serie_num, "carriles": [None] * 8}
                         seeding_data['series'].append(new_serie)
+                        st.session_state[seeding_key] = seeding_data
+                        _save_manual_edit()
                         st.rerun()
                 
                 with col_remove:
@@ -2138,6 +2969,8 @@ def sembrado_competencia_interface():
                             last_serie = seeding_data['series'][-1]
                             if all(swimmer is None for swimmer in last_serie['carriles']):
                                 seeding_data['series'].pop()
+                                st.session_state[seeding_key] = seeding_data
+                                _save_manual_edit()
                                 st.rerun()
                             else:
                                 st.error("❌ Solo se pueden eliminar series vacías")
@@ -2164,64 +2997,63 @@ def sembrado_competencia_interface():
             
             with col_save:
                 if st.button("💾 Guardar Sembrado", type="primary"):
-                    # Generar archivo Excel con sembrado manual
-                    manual_filename = f"sembrado_manual_{selected_event}_{gender_filter}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-                    
-                    wb = Workbook()
-                    ws = wb.active
-                    ws.title = "Sembrado Manual"
-                    
-                    # Título
-                    ws.cell(row=1, column=1, value=f"{selected_event} - {gender_filter}").font = Font(bold=True, size=16)
-                    
-                    current_row = 3
-                    for serie in seeding_data['series']:
-                        # Título de serie
-                        ws.cell(row=current_row, column=1, value=f"Serie {serie['serie']}").font = Font(bold=True, size=14)
-                        current_row += 1
-                        
-                        # Headers
-                        headers = ["Carril", "Nombre", "Equipo", "Edad", "Categoría", "Tiempo Inscripción", "Tiempo Competencia"]
-                        for col, header in enumerate(headers, 1):
-                            cell = ws.cell(row=current_row, column=col, value=header)
-                            cell.font = Font(bold=True)
-                            if header == "Tiempo Competencia":
-                                cell.font = Font(bold=True, color="FF0000")
-                        current_row += 1
-                        
-                        # Datos de carriles
-                        for lane_idx, swimmer in enumerate(serie['carriles']):
-                            ws.cell(row=current_row, column=1, value=lane_idx + 1)
-                            if swimmer:
-                                ws.cell(row=current_row, column=2, value=swimmer['nombre'])
-                                ws.cell(row=current_row, column=3, value=swimmer['equipo'])
-                                ws.cell(row=current_row, column=4, value=swimmer['edad'])
-                                ws.cell(row=current_row, column=5, value=swimmer['categoria'])
-                                ws.cell(row=current_row, column=6, value=swimmer['tiempo'])
-                                comp_cell = ws.cell(row=current_row, column=7, value="")
-                                comp_cell.font = Font(color="0000FF")
-                            current_row += 1
-                        
-                        current_row += 1  # Espacio entre series
-                    
-                    # Ajustar columnas
-                    ws.column_dimensions['B'].width = 30
-                    ws.column_dimensions['C'].width = 25
-                    ws.column_dimensions['F'].width = 18
-                    ws.column_dimensions['G'].width = 18
-                    
-                    wb.save(manual_filename)
-                    st.success(f"✅ Sembrado manual guardado: {manual_filename}")
+                    prueba_slug = f"PRUEBA_{seeding_data.get('prueba_num', 0)}"
+                    manual_filename = (
+                        f"sembrado_manual_{prueba_slug}_{gender_filter}_"
+                        f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+                    )
+                    excel_data = generate_seeding_excel_from_manual(
+                        seeding_data, selected_event, gender_filter, event_cols=event_cols
+                    )
+                    with open(manual_filename, "wb") as f:
+                        f.write(excel_data)
+                    st.session_state[seeding_key] = seeding_data
+                    if gender_filter == 'Todos':
+                        seeding_data['editado_manual'] = True
+                    event_title = "Sembrado Manual"
+                    try:
+                        if event_manager_module.EventManager().load_event_config():
+                            event_title = f"Sembrado Manual - {event_manager_module.EventManager().get_event_name()}"
+                    except Exception:
+                        pass
+                    saved_disk, exported = commit_manual_seeding(
+                        st.session_state,
+                        event_cols=event_cols,
+                        export_files=True,
+                        event_title=event_title,
+                    )
+                    sync_todos_splits_to_session(st.session_state, event_cols)
+                    persist_manual_seedings(st.session_state, event_cols=event_cols)
+                    st.success(
+                        f"✅ Guardado: `{manual_filename}` · "
+                        f"**{saved_disk}** en JSON · **{exported}** en Excel/PDF acumulado"
+                    )
             
             with col_download:
-                if st.button("⬇️ Descargar Excel"):
-                    # Crear archivo temporal para descarga
-                    manual_buffer = generate_seeding_excel_from_manual(seeding_data, selected_event, gender_filter)
+                dl_col1, dl_col2 = st.columns(2)
+                with dl_col1:
+                    manual_buffer = generate_seeding_excel_from_manual(
+                        seeding_data, selected_event, gender_filter,
+                        two_columns=False, event_cols=event_cols,
+                    )
                     st.download_button(
-                        label="📥 Descargar Sembrado Manual",
+                        label="📥 Excel (1 columna)",
                         data=manual_buffer,
-                        file_name=f"sembrado_manual_{selected_event}_{gender_filter}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        file_name=f"sembrado_manual_PRUEBA_{seeding_data.get('prueba_num', 0)}_{gender_filter}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key=f"download_manual_single_{seeding_key}",
+                    )
+                with dl_col2:
+                    manual_buffer_2col = generate_seeding_excel_from_manual(
+                        seeding_data, selected_event, gender_filter,
+                        two_columns=True, event_cols=event_cols,
+                    )
+                    st.download_button(
+                        label="📥 Excel (2 columnas)",
+                        data=manual_buffer_2col,
+                        file_name=f"sembrado_manual_PRUEBA_{seeding_data.get('prueba_num', 0)}_{gender_filter}_2col.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key=f"download_manual_single_2col_{seeding_key}",
                     )
             
             with col_reset:
@@ -2229,6 +3061,189 @@ def sembrado_competencia_interface():
                     if seeding_key in st.session_state:
                         del st.session_state[seeding_key]
                     st.rerun()
+
+        st.markdown("---")
+        st.markdown("#### 📦 Grabar todas las pruebas")
+        recorded_count, expected_count = count_manual_seeding_status(
+            st.session_state, df, event_cols
+        )
+        missing_count = expected_count - recorded_count
+        st.caption(
+            f"**{expected_count}** pruebas con inscripciones · "
+            f"**{recorded_count}** grabadas · **{missing_count}** faltantes"
+        )
+        col_seed_all, col_seed_reload, col_seed_recover, col_seed_info = st.columns([1, 1, 1, 2])
+        with col_seed_all:
+            if st.button(
+                "📦 Grabar todas las pruebas",
+                type="primary",
+                help="Genera el sembrado automático de cada prueba con inscripciones. "
+                     "No modifica las que ya están grabadas.",
+                key="seed_all_manual_pruebas",
+            ):
+                created, kept = seed_all_manual_pruebas(
+                    st.session_state, df, event_cols, overwrite=False
+                )
+                event_title = "Sembrado Manual"
+                try:
+                    if event_manager_module.EventManager().load_event_config():
+                        event_title = f"Sembrado Manual - {event_manager_module.EventManager().get_event_name()}"
+                except Exception:
+                    pass
+                saved_disk, exported = commit_manual_seeding(
+                    st.session_state,
+                    event_cols=event_cols,
+                    export_files=True,
+                    event_title=event_title,
+                )
+                total = _count_manual_seeding_keys(st.session_state)
+                if created:
+                    st.success(
+                        f"✅ **{created}** nueva(s) · **{kept}** sin cambio · "
+                        f"**{total}** total · **{saved_disk}** en JSON · **{exported}** en Excel/PDF"
+                    )
+                else:
+                    st.success(
+                        f"✅ **{total}** prueba(s) ya grabada(s) (sin cambios). "
+                        f"JSON y Excel/PDF actualizados (**{saved_disk}** / **{exported}**)."
+                    )
+                st.rerun()
+        with col_seed_reload:
+            if st.button(
+                "♻️ Recargar desde disco",
+                help="Vuelve a cargar sembrados guardados en manual_seedings_cache.json",
+                key="reload_manual_seedings_disk",
+            ):
+                loaded = force_load_manual_seedings_from_disk(st.session_state)
+                sync_todos_splits_to_session(st.session_state, event_cols)
+                persist_manual_seedings(st.session_state, event_cols=event_cols)
+                st.success(f"♻️ **{loaded}** sembrado(s) cargado(s) desde disco.")
+                st.rerun()
+        with col_seed_recover:
+            if st.button(
+                "🔧 Recuperar desde Excel",
+                help="Restaura sembrados desde los archivos sembrado_manual_PRUEBA_*.xlsx "
+                     "guardados con 💾 Guardar Sembrado (usa la copia más reciente de cada prueba).",
+                key="recover_manual_seedings_excel",
+            ):
+                restored, skipped, found = recover_manual_seedings_from_saved_excels(
+                    st.session_state, df, event_cols
+                )
+                event_title = "Sembrado Manual"
+                try:
+                    if event_manager_module.EventManager().load_event_config():
+                        event_title = f"Sembrado Manual - {event_manager_module.EventManager().get_event_name()}"
+                except Exception:
+                    pass
+                saved_disk, exported = commit_manual_seeding(
+                    st.session_state,
+                    event_cols=event_cols,
+                    export_files=True,
+                    event_title=event_title,
+                )
+                st.success(
+                    f"🔧 **{restored}** recuperado(s) de **{found}** Excel · "
+                    f"**{skipped}** omitido(s) · **{saved_disk}** en JSON · **{exported}** en PDF"
+                )
+                st.rerun()
+        with col_seed_info:
+            st.info(
+                "Graba el sembrado automático (por tiempo) de **Mujeres** y **Hombres** "
+                "para las pruebas faltantes. Si perdiste ediciones, usa **🔧 Recuperar desde Excel**. "
+                f"También genera `{MANUAL_SEEDINGS_EXCEL.name}` y `sembrado_manual_completo.pdf`."
+            )
+
+        sync_todos_splits_to_session(st.session_state, event_cols)
+        saved_disk = persist_manual_seedings(st.session_state, event_cols=event_cols)
+
+        export_seedings, export_skipped = get_manual_seedings_from_session(
+            st.session_state, for_export=True, event_cols=event_cols, df=df
+        )
+        raw_seedings, _ = get_manual_seedings_from_session(st.session_state, dedupe=False)
+        if export_seedings:
+            st.markdown("---")
+            st.markdown("#### 📥 Descarga acumulada")
+            st.markdown(
+                "Descarga **todas las pruebas del cronograma** (Mujeres + Hombres) en un solo archivo. "
+                "El **PDF** va consecutivo en **hoja vertical**, a **2 columnas**. "
+                "Si editaste con filtro **Todos** (ej. 100m LIBRE), se divide en Mujeres/Hombres "
+                "sin duplicar nadadores."
+            )
+            if export_skipped:
+                st.caption(
+                    f"**{export_skipped}** prueba(s) sin sembrado grabado aún (faltan en el PDF)."
+                )
+
+            summary_lines = [
+                f"• {build_manual_seeding_title(item['evento'], item['genero'], event_cols)}"
+                for item in export_seedings
+            ]
+            if len(summary_lines) <= 8:
+                st.info(f"**{len(export_seedings)} prueba(s) en PDF/Excel:**\n" + "\n".join(summary_lines))
+            else:
+                st.info(
+                    f"**{len(export_seedings)} prueba(s) en PDF/Excel:**\n"
+                    + "\n".join(summary_lines[:8])
+                    + f"\n• ... y {len(summary_lines) - 8} más"
+                )
+
+            dl_all_col1, dl_all_col2, dl_all_col3 = st.columns(3)
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            event_title = "Sembrado Manual - I Festi-Torneo Regional del Sinu 2026"
+            try:
+                if event_manager_module.EventManager().load_event_config():
+                    event_title = f"Sembrado Manual - {event_manager_module.EventManager().get_event_name()}"
+            except Exception:
+                pass
+
+            with dl_all_col1:
+                pdf_buffer = sembrado_manual_pdf_module.generate_all_manual_seedings_pdf(
+                    export_seedings, event_order=event_cols, event_name=event_title
+                )
+                if pdf_buffer:
+                    st.download_button(
+                        label=f"📄 PDF consecutivo 2 col. ({len(export_seedings)} pruebas)",
+                        data=pdf_buffer,
+                        file_name=f"sembrado_manual_completo_{timestamp}.pdf",
+                        mime="application/pdf",
+                        type="primary",
+                        key="download_all_manual_seedings_pdf",
+                    )
+            with dl_all_col2:
+                all_manual_buffer = generate_all_manual_seedings_excel(
+                    export_seedings, event_order=event_cols, two_columns=False
+                )
+                st.download_button(
+                    label=f"📥 Todos — 1 columna ({len(export_seedings)} hojas)",
+                    data=all_manual_buffer,
+                    file_name=f"sembrado_manual_completo_{timestamp}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    type="primary",
+                    key="download_all_manual_seedings",
+                )
+            with dl_all_col3:
+                all_manual_buffer_2col = generate_all_manual_seedings_excel(
+                    export_seedings, event_order=event_cols, two_columns=True
+                )
+                st.download_button(
+                    label=f"📥 Todos — 2 columnas ({len(export_seedings)} hojas)",
+                    data=all_manual_buffer_2col,
+                    file_name=f"sembrado_manual_completo_2col_{timestamp}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    type="primary",
+                    key="download_all_manual_seedings_2col",
+                )
+            if MANUAL_SEEDINGS_EXCEL.exists():
+                st.caption(
+                    f"Archivos en disco: `{MANUAL_SEEDINGS_EXCEL.name}`, "
+                    f"`sembrado_manual_completo.pdf`, `{MANUAL_SEEDINGS_CACHE.name}` · "
+                    f"**{len(raw_seedings)}** sembrado(s) en memoria/disco"
+                )
+        elif keys_on_disk or saved_disk:
+            st.warning(
+                f"No hay sembrados listos para descargar en pantalla, pero hay **{max(keys_on_disk, saved_disk)}** "
+                f"guardado(s) en `{MANUAL_SEEDINGS_CACHE.name}`. Pulsa **♻️ Recargar desde disco**."
+            )
     
     # Sección de limpieza de sembrados
     st.markdown("---")
@@ -2237,7 +3252,10 @@ def sembrado_competencia_interface():
     col_clean_sem1, col_clean_sem2, col_clean_sem3 = st.columns([2, 1, 1])
     
     with col_clean_sem1:
-        st.info("🗑️ Eliminar archivos de sembrado para generar nuevos")
+        st.info(
+            "🗑️ Solo elimina sembrados **automáticos** (por categoría/tiempo). "
+            "No toca el **sembrado manual** ni las **papeletas**."
+        )
     
     with col_clean_sem2:
         if st.button("📊 Limpiar Por Categoría", help="Eliminar sembrado por categoría"):
@@ -2279,12 +3297,14 @@ def procesar_resultados():
     </div>
     """, unsafe_allow_html=True)
 
+    ensure_manual_seedings_loaded(st.session_state)
+
     # Verificar si hay datos de sembrado manual con tiempos de competencia
     tiempos_competencia_disponibles = False
     total_tiempos = 0
 
     for key in st.session_state.keys():
-        if key.startswith('manual_seeding_'):
+        if str(key).startswith('manual_seeding_'):
             seeding_data = st.session_state[key]
             for serie in seeding_data.get('series', []):
                 for swimmer in serie['carriles']:
@@ -2487,8 +3507,9 @@ def generar_papeletas_interface():
     
     st.markdown("""
     <div class="info-message">
-        <p>Genera papeletas <strong>individuales por nadador</strong> para que los jueces registren los tiempos durante la competencia.</p>
-        <p><strong>Requisito:</strong> Debes tener el archivo de inscripción cargado.</p>
+        <p>Genera papeletas <strong>individuales por nadador</strong> usando el <strong>sembrado manual guardado</strong>
+        (series y carriles que ya definiste). Solo incluye nadadores <strong>inscritos</strong> en la planilla.</p>
+        <p><strong>No modifica</strong> tu sembrado — solo lee <code>manual_seedings_cache.json</code>.</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -2501,15 +3522,31 @@ def generar_papeletas_interface():
         </div>
         """, unsafe_allow_html=True)
         return
+
+    if not os.path.exists(MANUAL_SEEDINGS_CACHE):
+        st.warning(
+            "⚠️ No hay sembrado manual guardado. Ve a **Sembrado → Manual**, "
+            "graba tus pruebas y vuelve aquí."
+        )
+        return
+
+    prepare_papeletas_from_manual_seedings(st.session_state)
+    hydrate_papeletas_downloads_from_disk(st.session_state)
     
     # Leer y mostrar vista previa de papeletas
     try:
-        papeletas_data = papeletas_excel_module.leer_datos_sembrado()
+        papeletas_data = papeletas_excel_module.leer_datos_sembrado(session_state=st.session_state)
         if not papeletas_data:
-            st.error("No se encontraron datos del sembrado")
+            st.error(
+                "No se encontraron papeletas desde el sembrado manual. "
+                "Pulsa **📦 Grabar todas las pruebas** o **💾 Guardar Sembrado** en Sembrado → Manual."
+            )
             return
         
-        st.success(f"✅ Se generarán {len(papeletas_data)} papeletas individuales")
+        st.success(
+            f"✅ Se generarán **{len(papeletas_data)}** papeletas desde tu sembrado manual "
+            f"({count_manual_seedings_on_disk()} sembrado(s) en disco)"
+        )
         
         # Vista previa de papeletas
         st.markdown("### 👁️ Vista Previa de Papeletas")
@@ -2689,7 +3726,29 @@ def generar_papeletas_interface():
         return
     
     st.markdown("---")
-    
+
+    papeletas_count = len(papeletas_data)
+    gen_all_col1, gen_all_col2 = st.columns([2, 1])
+    with gen_all_col1:
+        st.markdown("### 🚀 Generar archivos")
+        st.caption("Incluye **PDF**, **Excel** y **PDF 3x2** (6 papeletas/hoja: 2×3).")
+    with gen_all_col2:
+        if st.button("Generar TODAS", type="primary", key="gen_all_papeletas", use_container_width=True):
+            with st.spinner("Generando PDF, Excel y PDF 3x2..."):
+                results, errors = generate_all_papeletas_exports(st.session_state, papeletas_count)
+                if results:
+                    st.session_state['_papeletas_pdf_count'] = papeletas_count
+                    st.session_state['_papeletas_xlsx_count'] = papeletas_count
+                    st.session_state['_papeletas_3x2_count'] = papeletas_count
+                    st.success(
+                        "✅ Generados: **" + "**, **".join(results.keys()) + "**. Usa Descargar abajo."
+                    )
+                    if errors:
+                        st.warning("Algunos formatos fallaron: " + "; ".join(errors))
+                    st.rerun()
+                else:
+                    st.error("No se pudo generar ningún formato. " + "; ".join(errors))
+
     # Tres columnas para las opciones de generación
     col1, col2, col3 = st.columns(3)
     
@@ -2700,24 +3759,41 @@ def generar_papeletas_interface():
         if st.button("🚀 Generar Papeletas PDF", type="primary", key="gen_pdf"):
             with st.spinner("Generando papeletas PDF..."):
                 try:
-                    success, message = papeletas_pdf_module.generar_papeletas_pdf()
-                    if success:
-                        st.success(message)
+                    prepare_papeletas_from_manual_seedings(st.session_state)
+                    success, message, pdf_bytes = papeletas_pdf_module.generar_papeletas_pdf(
+                        session_state=st.session_state
+                    )
+                    if success and pdf_bytes:
+                        store_papeletas_export(
+                            st.session_state, 'pdf', pdf_bytes, papeletas_count
+                        )
+                        ok_3x2, _, pdf3_bytes = papeletas_pdf_module.generar_papeletas_pdf_3x2(
+                            session_state=st.session_state
+                        )
+                        if ok_3x2 and pdf3_bytes:
+                            store_papeletas_export(
+                                st.session_state, '3x2', pdf3_bytes, papeletas_count
+                            )
+                        st.success(message + " (incluye PDF 3x2). Usa **Descargar** abajo.")
+                        st.rerun()
+                    elif success:
+                        st.error("PDF generado pero vacío. Revisa el sembrado manual.")
                     else:
                         st.error(message)
                 except Exception as e:
                     st.error(f"Error al generar papeletas PDF: {e}")
-        
-        # Descarga PDF
-        if os.path.exists("papeletas_jueces.pdf"):
-            with open("papeletas_jueces.pdf", "rb") as file:
-                st.download_button(
-                    label="⬇️ Descargar Papeletas PDF",
-                    data=file.read(),
-                    file_name="papeletas_jueces.pdf",
-                    mime="application/pdf",
-                    key="download_pdf"
-                )
+
+        pdf_bytes = st.session_state.get('_papeletas_pdf_bytes')
+        if pdf_bytes:
+            render_papeletas_download(
+                st.session_state, 'pdf',
+                "⬇️ Descargar Papeletas PDF",
+                "papeletas_jueces",
+                "application/pdf",
+                "download_pdf",
+            )
+        else:
+            st.info("Pulsa **Generar TODAS** o **Generar Papeletas PDF**.")
     
     with col2:
         st.markdown("### 📊 Papeletas Excel") 
@@ -2726,49 +3802,68 @@ def generar_papeletas_interface():
         if st.button("🚀 Generar Papeletas Excel", type="primary", key="gen_excel"):
             with st.spinner("Generando papeletas Excel..."):
                 try:
-                    success, message = papeletas_excel_module.generar_papeletas_excel()
-                    if success:
-                        st.success(message)
+                    prepare_papeletas_from_manual_seedings(st.session_state)
+                    success, message, xlsx_bytes = papeletas_excel_module.generar_papeletas_excel(
+                        session_state=st.session_state
+                    )
+                    if success and xlsx_bytes:
+                        store_papeletas_export(
+                            st.session_state, 'xlsx', xlsx_bytes, papeletas_count
+                        )
+                        st.success(message + " Usa **Descargar** abajo.")
+                        st.rerun()
+                    elif success:
+                        st.error("Excel generado pero vacío. Revisa el sembrado manual.")
                     else:
                         st.error(message)
                 except Exception as e:
                     st.error(f"Error al generar papeletas Excel: {e}")
-        
-        # Descarga Excel
-        if os.path.exists("papeletas_jueces.xlsx"):
-            with open("papeletas_jueces.xlsx", "rb") as file:
-                st.download_button(
-                    label="⬇️ Descargar Papeletas Excel",
-                    data=file.read(),
-                    file_name="papeletas_jueces.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key="download_excel"
-                )
+
+        if not render_papeletas_download(
+            st.session_state, 'xlsx',
+            "⬇️ Descargar Papeletas Excel",
+            "papeletas_jueces",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "download_excel",
+        ):
+            st.info("Pulsa **Generar TODAS** o **Generar Papeletas Excel**.")
 
     with col3:
-        st.markdown("### 📊 Papeletas 3x3 Excel")
-        st.info("Formato: Exacto como Excel, 3 papeletas por fila para imprimir y recortar")
+        st.markdown("### 📊 PDF 3x2")
+        st.info("6 papeletas por hoja (2 columnas × 3 filas). Letra grande y legible.")
 
-        if st.button("🚀 Generar 3x3 Excel", type="primary", key="gen_excel_3x3"):
-            with st.spinner("Generando papeletas 3x3 Excel..."):
+        if st.button("🚀 Generar PDF 3x2", type="primary", key="gen_pdf_3x2"):
+            with st.spinner("Generando PDF 3x2..."):
                 try:
-                    success, message = papeletas_pdf_module.generar_papeletas_pdf_excel_3_per_row()
-                    if success:
-                        st.success(message)
+                    prepare_papeletas_from_manual_seedings(st.session_state)
+                    success, message, pdf3_bytes = papeletas_pdf_module.generar_papeletas_pdf_3x2(
+                        session_state=st.session_state
+                    )
+                    if success and pdf3_bytes:
+                        store_papeletas_export(
+                            st.session_state, '3x2', pdf3_bytes, papeletas_count
+                        )
+                        st.success(message + " Usa **Descargar** abajo.")
+                        st.rerun()
+                    elif success:
+                        st.error("PDF 3x2 generado pero vacío. Revisa el sembrado manual.")
                     else:
                         st.error(message)
                 except Exception as e:
-                    st.error(f"Error al generar papeletas 3x3 Excel: {e}")
+                    st.error(f"Error al generar PDF 3x2: {e}")
 
-        # Descarga 3x3 Excel PDF
-        if os.path.exists("papeletas_jueces_excel_3_per_row.pdf"):
-            with open("papeletas_jueces_excel_3_per_row.pdf", "rb") as file:
-                st.download_button(
-                    label="⬇️ Descargar 3x3 Excel PDF",
-                    data=file.read(),
-                    file_name="papeletas_jueces_excel_3_per_row.pdf",
-                    mime="application/pdf",
-                    key="download_excel_3x3"
+        if not render_papeletas_download(
+            st.session_state, '3x2',
+            "⬇️ Descargar PDF 3x2",
+            "papeletas_jueces_3x2",
+            "application/pdf",
+            "download_pdf_3x2",
+        ):
+            st.info("Pulsa **Generar TODAS** o **Generar PDF 3x2**.")
+            if PAPELETAS_3X2_PDF_PATH.exists():
+                st.caption(
+                    f"En disco: `{PAPELETAS_3X2_PDF_PATH.name}` "
+                    f"({PAPELETAS_3X2_PDF_PATH.stat().st_size // 1024} KB) — pulsa Generar para refrescar."
                 )
 
 def gestion_archivos():
@@ -2904,6 +3999,32 @@ def gestion_archivos():
                     st.rerun()
                 except Exception as e:
                     st.error(f"❌ Error al restaurar: {e}")
+
+    st.markdown("---")
+    st.markdown("### 🧹 Limpiar archivos intermedios")
+    st.caption(
+        "Elimina sembrados automáticos, respaldos viejos por prueba "
+        "(`sembrado_manual_PRUEBA_*.xlsx`) y PDFs obsoletos. "
+        "**Conserva** sembrado manual, papeletas, inscripción, base de datos y evento."
+    )
+    col_int1, col_int2 = st.columns([2, 1])
+    with col_int1:
+        st.info(
+            f"🔒 Protegidos: `{MANUAL_SEEDINGS_CACHE.name}`, `sembrado_manual_*`, "
+            f"`papeletas_jueces.*`, planilla e inscripción."
+        )
+    with col_int2:
+        if st.button("🗑️ Limpiar intermedios", type="secondary", key="clean_intermediate_files"):
+            deleted, skipped = clean_intermediate_files()
+            for key in ('seeding_preview_cat', 'seeding_preview_time'):
+                st.session_state.pop(key, None)
+            if deleted:
+                st.success("✅ Eliminados: " + ", ".join(deleted))
+                st.rerun()
+            else:
+                st.info("ℹ️ No había archivos intermedios que eliminar.")
+            if skipped:
+                st.warning("Omitidos: " + ", ".join(skipped))
     
     # Mostrar archivos existentes
     st.markdown("### 📄 Archivos Disponibles")
@@ -2996,7 +4117,7 @@ def inscripcion_nadadores_interface():
                     st.warning("Selecciona la fecha de nacimiento para calcular edad y categoría")
                 
             st.markdown("### Pruebas de Inscripción")
-            st.markdown("*Opcional: ingresa tiempos (MM:SS.dd). Las pruebas sin tiempo se inscriben automáticamente como **s/t**. Se inscribe en **todas** las pruebas de la categoría.*")
+            st.markdown("*Ingresa los tiempos de inscripción en formato MM:SS.dd o SS.dd. Deja en blanco las pruebas en las que no participa.*")
             
             events_data = {}
             col1, col2, col3 = st.columns(3)
@@ -3014,10 +4135,10 @@ def inscripcion_nadadores_interface():
             for i, event in enumerate(available_events):
                 with [col1, col2, col3][i % 3]:
                     time_input = st.text_input(
-                        event,
+                        registration_system.get_prueba_column_label(event),
                         key=f"manual_event_{i}",
-                        placeholder="MM:SS.dd",
-                        help="Ejemplo: 1:25.30 o 85.30"
+                        placeholder="MM:SS.dd o s/t",
+                        help="Ejemplo: 1:25.30, 85.30 o s/t"
                     )
                     
                     if time_input:
@@ -3037,7 +4158,6 @@ def inscripcion_nadadores_interface():
                 elif age is None or not category:
                     st.error("No se pudo calcular la edad o categoría")
                 else:
-                    events_data = registration_system.complete_category_events(category, age, events_data)
                     swimmer_data = {
                         'name': name.strip(),
                         'team': team.strip(),
@@ -3358,164 +4478,238 @@ def inscripcion_nadadores_interface():
                 st.info("📤 Selecciona un archivo Excel para importar nadadores masivamente")
     
     with tab2:
+        from datetime import datetime, date
+
         st.markdown("### Nadadores Inscritos")
-        
+
         swimmers = registration_system.get_swimmers_list()
-        
+        editing_index = st.session_state.get('editing_swimmer_index')
+
         if not swimmers:
             st.info("No hay nadadores inscritos aún. Usa la pestaña 'Nuevo Nadador' para registrar.")
         else:
             st.success(f"Total de nadadores inscritos: **{len(swimmers)}**")
-            
-            for i, swimmer in enumerate(swimmers):
-                with st.expander(f"🏊‍♂️ {swimmer['name']} - {swimmer['team']} ({swimmer['age']} años)"):
-                    col1, col2 = st.columns([3, 1])
-                    
-                    with col1:
-                        st.write(f"**Categoría:** {swimmer['category']}")
-                        st.write(f"**Sexo:** {'Masculino' if swimmer['gender'] == 'M' else 'Femenino'}")
-                        
-                        if swimmer['events']:
-                            st.write("**Pruebas inscritas:**")
-                            for event in swimmer['events']:
-                                st.write(f"• {event}")
-                        else:
-                            st.write("*Sin pruebas registradas*")
-                    
-                    with col2:
-                        col_edit, col_delete = st.columns(2)
-                        
-                        with col_edit:
-                            if st.button("✏️ Editar", key=f"edit_{i}"):
-                                st.session_state[f'editing_swimmer_{i}'] = True
-                                st.rerun()
-                        
-                        with col_delete:
-                            if st.button("🗑️ Eliminar", key=f"delete_{i}"):
-                                success, message = registration_system.delete_swimmer(swimmer['index'])
-                                if success:
-                                    st.success(message)
-                                    st.rerun()
-                                else:
-                                    st.error(message)
-            
-            # Formulario de edición (aparece cuando se hace clic en editar)
-            for i, swimmer in enumerate(swimmers):
-                if f'editing_swimmer_{i}' in st.session_state and st.session_state[f'editing_swimmer_{i}']:
-                    st.markdown("---")
-                    st.markdown(f"### ✏️ Editando: {swimmer['name']}")
-                    
-                    # Obtener datos actuales del nadador
-                    swimmer_data, message = registration_system.get_swimmer_for_editing(swimmer['index'])
-                    
-                    if swimmer_data:
+
+            search_query = st.text_input(
+                "🔍 Buscar nadador",
+                placeholder="Nombre o equipo...",
+                key="swimmer_search",
+            )
+            display_swimmers = swimmers
+            if search_query.strip():
+                q = search_query.strip().lower()
+                display_swimmers = [
+                    s for s in swimmers
+                    if q in s['name'].lower() or q in s['team'].lower()
+                ]
+
+            if editing_index is not None:
+                swimmer_data, edit_message = registration_system.get_swimmer_for_editing(editing_index)
+                editing_summary = next((s for s in swimmers if s['index'] == editing_index), None)
+
+                st.markdown("---")
+                if swimmer_data and editing_summary:
+                    st.markdown(
+                        f"### ✏️ Editando: **{swimmer_data['name']}** — {editing_summary['team']}"
+                    )
+
+                    with st.form(key=f"edit_swimmer_form_{editing_index}", clear_on_submit=False):
                         col1, col2 = st.columns(2)
-                        
+
                         with col1:
-                            edit_name = st.text_input("Nombre y Apellidos", value=swimmer_data['name'], key=f"edit_name_{i}")
-                            edit_team = st.text_input("Equipo", value=swimmer_data['team'], key=f"edit_team_{i}")
-
-                            # Usar fecha de nacimiento si está disponible, sino calcular desde la edad
-                            current_birth_date = swimmer_data.get('birth_date')
-                            if current_birth_date is None:
-                                # Si no hay fecha de nacimiento, estimar desde la edad
-                                current_birth_date = date.today().replace(year=date.today().year - swimmer_data['age'])
-                            elif isinstance(current_birth_date, str):
-                                try:
-                                    current_birth_date = datetime.strptime(current_birth_date, '%Y-%m-%d').date()
-                                except:
-                                    current_birth_date = date.today().replace(year=date.today().year - swimmer_data['age'])
-
-                            edit_birth_date = st.date_input("Fecha de Nacimiento",
-                                                           value=current_birth_date,
-                                                           min_value=date(1900, 1, 1),
-                                                           max_value=date.today(),
-                                                           key=f"edit_birth_date_{i}",
-                                                           help="Selecciona la fecha de nacimiento del nadador")
+                            edit_name = st.text_input(
+                                "Nombre y Apellidos",
+                                value=swimmer_data['name'],
+                            )
+                            edit_team = st.text_input(
+                                "Equipo",
+                                value=swimmer_data['team'],
+                            )
+                            current_birth_date = registration_system.parse_birth_date_for_form(
+                                swimmer_data.get('birth_date'),
+                                fallback_age=swimmer_data.get('age'),
+                            )
+                            edit_birth_date = st.date_input(
+                                "Fecha de Nacimiento",
+                                value=current_birth_date,
+                                min_value=date(1900, 1, 1),
+                                max_value=date.today(),
+                                help="Selecciona la fecha de nacimiento del nadador",
+                            )
 
                         with col2:
-                            edit_gender = st.selectbox("Sexo", ["M", "F"],
-                                                     index=0 if swimmer_data['gender'] == 'M' else 1,
-                                                     format_func=lambda x: "Masculino" if x == "M" else "Femenino",
-                                                     key=f"edit_gender_{i}")
+                            edit_gender = st.selectbox(
+                                "Sexo",
+                                ["M", "F"],
+                                index=0 if swimmer_data['gender'] == 'M' else 1,
+                                format_func=lambda x: "Masculino" if x == "M" else "Femenino",
+                            )
+                            edit_age, edit_category = registration_system.resolve_swimmer_age_and_category(
+                                edit_gender, birth_date=edit_birth_date
+                            )
+                            reference_date, _ = registration_system.get_event_age_reference()
+                            st.info(f"Edad al {reference_date.strftime('%d/%m/%Y')}: **{edit_age} años**")
+                            st.info(f"Categoría automática: **{edit_category}**")
 
-                            if edit_birth_date:
-                                edit_age, edit_category = registration_system.resolve_swimmer_age_and_category(
-                                    edit_gender, birth_date=edit_birth_date
-                                )
-                                reference_date, _ = registration_system.get_event_age_reference()
-                                st.info(f"Edad al {reference_date.strftime('%d/%m/%Y')}: **{edit_age} años**")
-                                st.info(f"Categoría automática: **{edit_category}**")
-                            else:
-                                edit_age = swimmer_data['age']
-                                edit_category = registration_system.get_category_by_age(
-                                    edit_age, edit_gender, swimmer_data.get('birth_date')
-                                )
-                                st.info(f"Categoría automática: **{edit_category}**")
-                        
-                        st.markdown("### Pruebas de Inscripción")
-                        st.markdown("*Edita los tiempos de inscripción. Deja en blanco para eliminar la prueba.*")
-                        
+                        all_editable_events = registration_system.get_editable_events_for_swimmer(
+                            edit_age, swimmer_data['events']
+                        )
+                        missing_events = [
+                            e for e in all_editable_events if e not in swimmer_data['events']
+                        ]
+
+                        st.markdown("#### ➕ Agregar prueba")
+                        st.caption(
+                            "Elige una prueba que aún no tenga inscrita e ingresa el tiempo o **s/t**."
+                        )
+                        add_col1, add_col2 = st.columns([2, 1])
+                        with add_col1:
+                            add_event_options = ["— Elegir prueba —"] + missing_events
+                            new_event = st.selectbox(
+                                "Prueba a inscribir",
+                                add_event_options,
+                                format_func=lambda e: (
+                                    registration_system.get_prueba_column_label(e)
+                                    if e != "— Elegir prueba —"
+                                    else e
+                                ),
+                            )
+                        with add_col2:
+                            new_event_time = st.text_input(
+                                "Tiempo de inscripción",
+                                placeholder="s/t o MM:SS.dd",
+                                help="Ejemplo: 1:25.30, 85.30 o s/t",
+                            )
+
+                        st.markdown("#### Pruebas inscritas")
+                        st.caption(
+                            "Modifica tiempos existentes o deja en blanco para quitar la prueba."
+                        )
+
+                        registered_event_inputs = {}
+                        if swimmer_data['events']:
+                            reg_col1, reg_col2, reg_col3 = st.columns(3)
+                            for j, event in enumerate(swimmer_data['events'].keys()):
+                                with [reg_col1, reg_col2, reg_col3][j % 3]:
+                                    registered_event_inputs[event] = st.text_input(
+                                        registration_system.get_prueba_column_label(event),
+                                        value=swimmer_data['events'][event],
+                                        placeholder="MM:SS.dd o s/t",
+                                    )
+                        else:
+                            st.info("Este nadador no tiene pruebas inscritas aún.")
+
+                        form_save, form_spacer = st.columns([1, 3])
+                        with form_save:
+                            submitted = st.form_submit_button(
+                                "💾 Guardar Cambios",
+                                type="primary",
+                                use_container_width=True,
+                            )
+
+                    cancel_col, _ = st.columns([1, 3])
+                    with cancel_col:
+                        if st.button("❌ Cancelar edición", key=f"cancel_edit_{editing_index}"):
+                            del st.session_state['editing_swimmer_index']
+                            st.rerun()
+
+                    if submitted:
                         edit_events_data = {}
-                        col1, col2, col3 = st.columns(3)
+                        form_errors = []
 
-                        # Obtener eventos disponibles filtrados por edad para la categoría del nadador
-                        edit_available_events = registration_system.get_available_events_for_swimmer_category(edit_category, edit_age)
-
-                        # Mostrar información sobre restricciones de edad si hay eventos filtrados
-                        all_edit_events = registration_system.get_available_events()
-                        if len(edit_available_events) < len(all_edit_events):
-                            excluded_edit_events = [e for e in all_edit_events if e not in edit_available_events]
-                            if excluded_edit_events:
-                                st.info(f"ℹ️ Eventos no disponibles para edad {edit_age}: {', '.join(excluded_edit_events)}")
-
-                        for j, event in enumerate(edit_available_events):
-                            with [col1, col2, col3][j % 3]:
-                                current_time = swimmer_data['events'].get(event, "")
-                                edit_time_input = st.text_input(
-                                    event,
-                                    value=current_time,
-                                    key=f"edit_event_{i}_{j}",
-                                    placeholder="MM:SS.dd",
-                                    help="Ejemplo: 1:25.30 o 85.30"
-                                )
-                                
-                                if edit_time_input:
-                                    is_valid, error_msg = registration_system.validate_time_format(edit_time_input)
-                                    if not is_valid:
-                                        st.error(error_msg)
-                                    else:
-                                        edit_events_data[event] = edit_time_input
-                        
-                        col_save, col_cancel = st.columns(2)
-                        
-                        with col_save:
-                            if st.button("💾 Guardar Cambios", key=f"save_{i}", type="primary"):
-                                updated_swimmer_data = {
-                                    'name': edit_name.strip(),
-                                    'team': edit_team.strip(),
-                                    'age': edit_age,
-                                    'birth_date': edit_birth_date,
-                                    'category': edit_category,
-                                    'gender': edit_gender,
-                                    'events': edit_events_data
-                                }
-                                
-                                success, message = registration_system.update_swimmer(swimmer['index'], updated_swimmer_data)
-                                if success:
-                                    st.success(message)
-                                    del st.session_state[f'editing_swimmer_{i}']
-                                    st.balloons()
-                                    st.rerun()
+                        for event, time_input in registered_event_inputs.items():
+                            if time_input and time_input.strip():
+                                is_valid, result = registration_system.validate_time_format(time_input)
+                                if is_valid:
+                                    edit_events_data[event] = result if result else time_input.strip()
                                 else:
-                                    st.error(message)
-                        
-                        with col_cancel:
-                            if st.button("❌ Cancelar", key=f"cancel_{i}"):
-                                del st.session_state[f'editing_swimmer_{i}']
+                                    form_errors.append(f"{event}: {result}")
+
+                        if new_event and new_event != "— Elegir prueba —":
+                            if not new_event_time or not new_event_time.strip():
+                                form_errors.append(
+                                    f"Debes ingresar un tiempo o s/t para {new_event}"
+                                )
+                            else:
+                                is_valid, result = registration_system.validate_time_format(new_event_time)
+                                if is_valid:
+                                    edit_events_data[new_event] = result if result else new_event_time.strip()
+                                else:
+                                    form_errors.append(f"{new_event}: {result}")
+
+                        if form_errors:
+                            for err in form_errors:
+                                st.error(err)
+                        elif edit_age is None or not edit_category:
+                            st.error("No se pudo calcular la edad o categoría del nadador")
+                        elif not edit_name.strip() or not edit_team.strip():
+                            st.error("Nombre y equipo son obligatorios")
+                        else:
+                            updated_swimmer_data = {
+                                'name': edit_name.strip(),
+                                'team': edit_team.strip(),
+                                'age': edit_age,
+                                'birth_date': edit_birth_date,
+                                'category': edit_category,
+                                'gender': edit_gender,
+                                'events': edit_events_data,
+                            }
+                            success, message = registration_system.update_swimmer(
+                                editing_index, updated_swimmer_data
+                            )
+                            if success:
+                                st.success(message)
+                                del st.session_state['editing_swimmer_index']
                                 st.rerun()
-                    else:
-                        st.error(message)
+                            else:
+                                st.error(message)
+                else:
+                    st.error(edit_message or "No se pudo cargar el nadador para editar")
+                    if st.button("Cerrar", key="close_failed_edit"):
+                        del st.session_state['editing_swimmer_index']
+                        st.rerun()
+                st.markdown("---")
+
+            if search_query.strip() and not display_swimmers:
+                st.warning("No se encontraron nadadores con ese criterio.")
+            else:
+                for swimmer in display_swimmers:
+                    row_index = swimmer['index']
+                    with st.expander(
+                        f"🏊‍♂️ {swimmer['name']} - {swimmer['team']} ({swimmer['age']} años)",
+                        expanded=(editing_index == row_index),
+                    ):
+                        col1, col2 = st.columns([3, 1])
+
+                        with col1:
+                            st.write(f"**Categoría:** {swimmer['category']}")
+                            st.write(f"**Sexo:** {'Masculino' if swimmer['gender'] == 'M' else 'Femenino'}")
+
+                            if swimmer['events']:
+                                st.write("**Pruebas inscritas:**")
+                                for event in swimmer['events']:
+                                    st.write(f"• {event}")
+                            else:
+                                st.write("*Sin pruebas registradas*")
+
+                        with col2:
+                            col_edit, col_delete = st.columns(2)
+
+                            with col_edit:
+                                if st.button("✏️ Editar", key=f"edit_{row_index}"):
+                                    st.session_state['editing_swimmer_index'] = row_index
+                                    st.rerun()
+
+                            with col_delete:
+                                if st.button("🗑️ Eliminar", key=f"delete_{row_index}"):
+                                    success, message = registration_system.delete_swimmer(row_index)
+                                    if success:
+                                        if st.session_state.get('editing_swimmer_index') == row_index:
+                                            del st.session_state['editing_swimmer_index']
+                                        st.success(message)
+                                        st.rerun()
+                                    else:
+                                        st.error(message)
     
     with tab3:
         st.markdown("### 📊 Reporte de Inscripción")

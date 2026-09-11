@@ -6,11 +6,11 @@
       "age_range": "5"
     },
     {
-      "name": "MENORES 6-7",
+      "name": "MENORES A",
       "age_range": "6-7"
     },
     {
-      "name": "MENORES 8-9",
+      "name": "MENORES B",
       "age_range": "8-9"
     },
     {
@@ -32,120 +32,135 @@
     {
       "name": "MAYORES",
       "age_range": "18-24"
-    },
-    {
-      "name": "MASTER A",
-      "age_range": "25-29"
-    },
-    {
-      "name": "MASTER B",
-      "age_range": "30-34"
-    },
-    {
-      "name": "MASTER C",
-      "age_range": "35-80"
     }
   ],
   "event_order": [
-    "50M MARIPOSA",
-    "100M LIBRE",
-    "25M PATADA LIBRE",
-    "25M LIBRE CON TABLA",
-    "25M LIBRE INSTINTIVO",
-    "25M LIBRE",
-    "25M PECHO",
-    "25M MARIPOSA",
-    "50M LIBRE",
-    "50M ESPALDA",
-    "50M PECHO",
-    "50M LIBRE CON ALETAS"
+    "50m MARIPOSA Menores Torneo",
+    "100m LIBRE desde Inf. A Torneo",
+    "25m PATADA LIBRE Especial-Menores Festival",
+    "50m MARIPOSA Inf. A-B Juv. A Festival",
+    "25m LIBRE CON TABLA Especial Festival",
+    "50m LIBRE CON ALETAS Festival",
+    "25m LIBRE INSTINTIVO Festival",
+    "25m PECHO Menores Festival",
+    "50m PECHO Festival",
+    "25m MARIPOSA Menores Festival",
+    "50m ESPALDA Festival",
+    "25m LIBRE Menores Festival",
+    "50m LIBRE Festival",
+    "50m ESPALDA desde Menores Torneo",
+    "50m PECHO desde Menores Torneo",
+    "50m LIBRE CON ALETAS desde Menores Torneo",
+    "50m MARIPOSA desde Inf. A Torneo",
+    "50m LIBRE desde Menores Torneo"
   ],
   "category_events": {
-    "ESPECIAL": [
-      "25M PATADA LIBRE",
-      "25M LIBRE CON TABLA",
-      "25M LIBRE INSTINTIVO"
-    ],
-    "MENORES 6-7": [
-      "25M PATADA LIBRE",
-      "25M LIBRE",
-      "25M PECHO",
-      "25M MARIPOSA"
-    ],
-    "MENORES 8-9": [
-      "50M MARIPOSA",
-      "25M PATADA LIBRE",
-      "25M LIBRE",
-      "25M PECHO",
-      "25M MARIPOSA",
-      "50M LIBRE",
-      "50M ESPALDA",
-      "50M PECHO",
-      "50M LIBRE CON ALETAS"
+    "MENORES B": [
+      "50m MARIPOSA Menores Torneo",
+      "25m PATADA LIBRE Especial-Menores Festival",
+      "50m LIBRE CON ALETAS Festival",
+      "25m PECHO Menores Festival",
+      "25m MARIPOSA Menores Festival",
+      "25m LIBRE Menores Festival",
+      "50m ESPALDA desde Menores Torneo",
+      "50m PECHO desde Menores Torneo",
+      "50m LIBRE CON ALETAS desde Menores Torneo",
+      "50m LIBRE desde Menores Torneo"
     ],
     "INFANTIL A": [
-      "50M MARIPOSA",
-      "100M LIBRE",
-      "50M LIBRE",
-      "50M ESPALDA",
-      "50M PECHO",
-      "50M LIBRE CON ALETAS"
+      "100m LIBRE desde Inf. A Torneo",
+      "50m MARIPOSA Inf. A-B Juv. A Festival",
+      "25m LIBRE CON TABLA Especial Festival",
+      "50m LIBRE CON ALETAS Festival",
+      "25m LIBRE INSTINTIVO Festival",
+      "50m PECHO Festival",
+      "50m ESPALDA Festival",
+      "25m LIBRE Menores Festival",
+      "50m LIBRE Festival",
+      "50m ESPALDA desde Menores Torneo",
+      "50m PECHO desde Menores Torneo",
+      "50m LIBRE CON ALETAS desde Menores Torneo",
+      "50m MARIPOSA desde Inf. A Torneo",
+      "50m LIBRE desde Menores Torneo"
     ],
     "INFANTIL B": [
-      "50M MARIPOSA",
-      "100M LIBRE",
-      "50M LIBRE",
-      "50M ESPALDA",
-      "50M PECHO",
-      "50M LIBRE CON ALETAS"
+      "100m LIBRE desde Inf. A Torneo",
+      "50m MARIPOSA Inf. A-B Juv. A Festival",
+      "50m LIBRE CON ALETAS Festival",
+      "50m PECHO Festival",
+      "50m ESPALDA Festival",
+      "50m LIBRE Festival",
+      "50m ESPALDA desde Menores Torneo",
+      "50m PECHO desde Menores Torneo",
+      "50m LIBRE CON ALETAS desde Menores Torneo",
+      "50m MARIPOSA desde Inf. A Torneo",
+      "50m LIBRE desde Menores Torneo"
     ],
     "JUVENIL A": [
-      "50M MARIPOSA",
-      "100M LIBRE",
-      "50M LIBRE",
-      "50M ESPALDA",
-      "50M PECHO",
-      "50M LIBRE CON ALETAS"
+      "100m LIBRE desde Inf. A Torneo",
+      "50m MARIPOSA Inf. A-B Juv. A Festival",
+      "50m LIBRE CON ALETAS Festival",
+      "50m PECHO Festival",
+      "50m ESPALDA Festival",
+      "50m LIBRE Festival",
+      "50m ESPALDA desde Menores Torneo",
+      "50m PECHO desde Menores Torneo",
+      "50m LIBRE CON ALETAS desde Menores Torneo",
+      "50m MARIPOSA desde Inf. A Torneo",
+      "50m LIBRE desde Menores Torneo"
     ],
     "JUVENIL B": [
-      "50M MARIPOSA",
-      "100M LIBRE",
-      "50M LIBRE",
-      "50M ESPALDA",
-      "50M PECHO",
-      "50M LIBRE CON ALETAS"
+      "100m LIBRE desde Inf. A Torneo",
+      "50m ESPALDA desde Menores Torneo",
+      "50m PECHO desde Menores Torneo",
+      "50m LIBRE CON ALETAS desde Menores Torneo",
+      "50m MARIPOSA desde Inf. A Torneo",
+      "50m LIBRE desde Menores Torneo"
     ],
     "MAYORES": [
-      "50M MARIPOSA",
-      "100M LIBRE",
-      "50M LIBRE",
-      "50M ESPALDA",
-      "50M PECHO",
-      "50M LIBRE CON ALETAS"
+      "100m LIBRE desde Inf. A Torneo",
+      "50m ESPALDA desde Menores Torneo",
+      "50m PECHO desde Menores Torneo",
+      "50m LIBRE CON ALETAS desde Menores Torneo",
+      "50m MARIPOSA desde Inf. A Torneo",
+      "50m LIBRE desde Menores Torneo"
     ],
     "MASTER A": [
-      "50M MARIPOSA",
-      "100M LIBRE",
-      "50M LIBRE",
-      "50M ESPALDA",
-      "50M PECHO",
-      "50M LIBRE CON ALETAS"
+      "100m LIBRE desde Inf. A Torneo",
+      "50m ESPALDA desde Menores Torneo",
+      "50m PECHO desde Menores Torneo",
+      "50m LIBRE CON ALETAS desde Menores Torneo",
+      "50m MARIPOSA desde Inf. A Torneo",
+      "50m LIBRE desde Menores Torneo"
     ],
     "MASTER B": [
-      "50M MARIPOSA",
-      "100M LIBRE",
-      "50M LIBRE",
-      "50M ESPALDA",
-      "50M PECHO",
-      "50M LIBRE CON ALETAS"
+      "100m LIBRE desde Inf. A Torneo",
+      "50m ESPALDA desde Menores Torneo",
+      "50m PECHO desde Menores Torneo",
+      "50m LIBRE CON ALETAS desde Menores Torneo",
+      "50m MARIPOSA desde Inf. A Torneo",
+      "50m LIBRE desde Menores Torneo"
     ],
     "MASTER C": [
-      "50M MARIPOSA",
-      "100M LIBRE",
-      "50M LIBRE",
-      "50M ESPALDA",
-      "50M PECHO",
-      "50M LIBRE CON ALETAS"
+      "100m LIBRE desde Inf. A Torneo",
+      "50m ESPALDA desde Menores Torneo",
+      "50m PECHO desde Menores Torneo",
+      "50m LIBRE CON ALETAS desde Menores Torneo",
+      "50m MARIPOSA desde Inf. A Torneo",
+      "50m LIBRE desde Menores Torneo"
+    ],
+    "ESPECIAL": [
+      "25m PATADA LIBRE Especial-Menores Festival",
+      "25m LIBRE CON TABLA Especial Festival",
+      "25m LIBRE INSTINTIVO Festival"
+    ],
+    "MENORES A": [
+      "25m PATADA LIBRE Especial-Menores Festival",
+      "50m LIBRE CON ALETAS Festival",
+      "25m LIBRE INSTINTIVO Festival",
+      "25m PECHO Menores Festival",
+      "25m MARIPOSA Menores Festival",
+      "25m LIBRE Menores Festival"
     ]
   },
   "min_age": 5,
@@ -157,7 +172,7 @@
   "event_logo": "I_Festi-Torneo_Regional_del_Sinu_2026_logo.png",
   "start_date": "2026-07-05",
   "end_date": "2026-07-05",
-  "age_criteria": "event_date",
-  "created_date": "2026-07-03T06:52:49.336349",
-  "modified_date": "2026-07-03T06:52:49.336349"
+  "age_criteria": "december_31",
+  "created_date": "2026-07-04T14:57:58.092848",
+  "modified_date": "2026-07-04T14:57:58.092848"
 }

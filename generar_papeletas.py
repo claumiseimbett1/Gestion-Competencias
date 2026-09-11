@@ -1,6 +1,7 @@
 # generar_papeletas.py
 import pandas as pd
 import os
+from io import BytesIO
 from planilla_utils import inscrito_en_prueba, ordered_prueba_hoja_keys, titulo_prueba_numerada
 import math
 from pathlib import Path
@@ -12,10 +13,13 @@ from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
 # --- CONFIGURACIÓN ---
-ARCHIVO_SEMBRADO = 'sembrado_competencia.xlsx'
-ARCHIVO_PAPELETAS = 'papeletas_jueces.pdf'
+SCRIPT_DIR = Path(__file__).resolve().parent
+ARCHIVO_SEMBRADO = str(SCRIPT_DIR / 'sembrado_competencia.xlsx')
+ARCHIVO_PAPELETAS = str(SCRIPT_DIR / 'papeletas_jueces.pdf')
+ARCHIVO_PAPELETAS_3X2 = str(SCRIPT_DIR / 'papeletas_jueces_3x2.pdf')
+ARCHIVO_PAPELETAS_EXCEL_STYLE = str(SCRIPT_DIR / 'papeletas_jueces_excel_style.pdf')
 CARRILES_POR_PAGINA = 8
-LOGO_PATH = 'img/TEN.png'
+LOGO_PATH = str(SCRIPT_DIR / 'img' / 'TEN.png')
 
 def parse_time(time_val):
     """Convierte tiempo a segundos para ordenamiento"""
@@ -28,83 +32,20 @@ def parse_time(time_val):
         return float(time_str)
     except (ValueError, IndexError): return float('inf')
 
-def leer_datos_sembrado():
-    """Lee los datos del sembrado con series y carriles asignados"""
-    try:
-        df = pd.read_excel('planilla_inscripcion.xlsx')
-        info_cols = ['NOMBRE Y AP', 'EQUIPO', 'EDAD', 'CAT.', 'SEXO']
-        event_cols = [col for col in df.columns if col not in info_cols and 'Nø' not in col and 'FECHA DE NA' not in col]
-        
-        eventos = {}
-        for index, row in df.iterrows():
-            if pd.isna(row['NOMBRE Y AP']): continue
-            sexo = row['SEXO'].upper()
-            
-            for prueba in event_cols:
-                if inscrito_en_prueba(row[prueba]):
-                    nombre_prueba = f"{prueba} - {'Mujeres' if sexo == 'F' else 'Hombres'}"
-                    if nombre_prueba not in eventos: eventos[nombre_prueba] = []
-                    
-                    nadador_info = {
-                        "nombre": row['NOMBRE Y AP'], 
-                        "equipo": row['EQUIPO'], 
-                        "edad": int(row['EDAD']),
-                        "categoria": row['CAT.'],
-                        "sexo": sexo,
-                        "tiempo_inscripcion": row[prueba], 
-                        "tiempo_en_segundos": parse_time(row[prueba])
-                    }
-                    eventos[nombre_prueba].append(nadador_info)
-        
-        # Agrupar por categoría y crear series con carriles asignados (orden planilla: Mujeres → Hombres)
-        papeletas_con_carriles = []
-        for idx, nombre_prueba in enumerate(ordered_prueba_hoja_keys(eventos, event_cols), start=1):
-            titulo = titulo_prueba_numerada(idx, nombre_prueba)
-            nadadores = eventos[nombre_prueba]
-            nadadores_por_categoria = {}
-            for nadador in nadadores:
-                cat = nadador['categoria']
-                if cat not in nadadores_por_categoria: 
-                    nadadores_por_categoria[cat] = []
-                nadadores_por_categoria[cat].append(nadador)
-            
-            for categoria, lista_nadadores in sorted(nadadores_por_categoria.items()):
-                # Ordenar por tiempo
-                lista_nadadores_ordenada = sorted(lista_nadadores, key=lambda x: x['tiempo_en_segundos'])
-                
-                # Crear series de 8 nadadores
-                num_nadadores = len(lista_nadadores_ordenada)
-                num_series = math.ceil(num_nadadores / 8)
-                
-                for serie_num in range(1, num_series + 1):
-                    inicio = (serie_num - 1) * 8
-                    fin = min(serie_num * 8, num_nadadores)
-                    nadadores_serie = lista_nadadores_ordenada[inicio:fin]
-                    
-                    # Asignar carriles usando el orden estándar
-                    lane_order = [4, 5, 3, 6, 2, 7, 1, 8]
-                    
-                    for i, nadador in enumerate(nadadores_serie):
-                        if i < len(lane_order):
-                            carril_asignado = lane_order[i]
-                            
-                            papeleta = {
-                                "nombre": nadador['nombre'],
-                                "equipo": nadador['equipo'],
-                                "categoria": nadador['categoria'],
-                                "sexo": nadador['sexo'],
-                                "prueba": titulo,
-                                "serie": serie_num,
-                                "carril": carril_asignado,
-                                "tiempo_inscripcion": nadador['tiempo_inscripcion']
-                            }
-                            papeletas_con_carriles.append(papeleta)
-        
-        return papeletas_con_carriles
-    
-    except Exception as e:
-        print(f"Error al leer datos del sembrado: {e}")
+def leer_datos_sembrado(session_state=None):
+    """Lee series y carriles del sembrado manual guardado (no regenera sembrado)."""
+    from planilla_utils import get_papeletas_from_manual_sembrado
+
+    papeletas, skipped, error = get_papeletas_from_manual_sembrado(session_state=session_state)
+    if error:
+        print(f"Papeletas: {error}")
+        if skipped:
+            print(f"  Omitidos (no inscritos en planilla): {skipped}")
         return []
+    if skipped:
+        print(f"Papeletas: omitidos {skipped} nadador(es) no inscritos en planilla")
+    return papeletas
+
 
 def crear_papeleta_compacta(papeleta_data, styles):
     """Crea una papeleta compacta para múltiples por página"""
@@ -306,133 +247,228 @@ def crear_tabla_excel_style(papeletas_grupo, styles):
 
     return table
 
-def crear_papeleta_individual_excel(papeleta, width_per_papeleta):
-    """Crea una papeleta individual en formato Excel"""
+def _papeleta_paragraph(text, font_name='Helvetica', font_size=10, bold=False):
+    """Texto con salto de línea automático para celdas de papeleta."""
+    safe = str(text or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    style = ParagraphStyle(
+        'PapeletaCell',
+        fontName='Helvetica-Bold' if bold else font_name,
+        fontSize=font_size,
+        leading=font_size + 3,
+        wordWrap='CJK',
+    )
+    return Paragraph(safe, style)
+
+
+def _papeleta_paragraph(text, font_name='Helvetica', font_size=10, bold=False):
+    """Texto con salto de línea automático para celdas de papeleta."""
+    safe = str(text or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    style = ParagraphStyle(
+        f'PapeletaCell_{font_size}_{"B" if bold else "R"}',
+        fontName='Helvetica-Bold' if bold else font_name,
+        fontSize=font_size,
+        leading=font_size + 2,
+        wordWrap='CJK',
+    )
+    return Paragraph(safe, style)
+
+
+def _empty_papeleta_cell(width_per_papeleta, height):
+    label_col = width_per_papeleta * 0.38
+    value_col = width_per_papeleta * 0.62
+    t = Table([['', '']], colWidths=[label_col, value_col], rowHeights=[height])
+    t.setStyle(TableStyle([('FONTSIZE', (0, 0), (-1, -1), 1)]))
+    return t
+
+
+def crear_papeleta_individual_excel(papeleta, width_per_papeleta, large=False, max_height=None):
+    """Crea una papeleta individual. `large=True` usa tipografía ampliada (layout 3x2)."""
+    if large:
+        label_size, value_size, pad = 9, 10, 4
+        serie_size, carril_size = 12, 12
+        final_size = 10
+    else:
+        label_size, value_size, pad = 8, 8, 3
+        serie_size, carril_size = 8, 8
+        final_size = 8
+
+    prueba_short = str(papeleta.get('prueba', ''))
+    if ' - ' in prueba_short:
+        prueba_short = prueba_short.split(' - ')[0]
+
     papeleta_data = [
-        ['Evento:', papeleta['prueba']],
-        ['SERIE:', str(papeleta['serie'])],
-        ['CARRIL:', str(papeleta['carril'])],
-        ['NADADOR:', papeleta['nombre']],
-        ['EQUIPO:', papeleta['equipo']],
-        ['CATEGORÍA:', papeleta['categoria']],
-        ['T. INSCRIPCIÓN:', str(papeleta.get('tiempo_inscripcion', ''))],
-        ['T. FINAL:', '']
+        [_papeleta_paragraph('Evento:', bold=True, font_size=label_size),
+         _papeleta_paragraph(prueba_short, font_size=value_size)],
+        [_papeleta_paragraph('SERIE:', bold=True, font_size=label_size),
+         _papeleta_paragraph(str(papeleta['serie']), bold=True, font_size=serie_size)],
+        [_papeleta_paragraph('CARRIL:', bold=True, font_size=label_size),
+         _papeleta_paragraph(str(papeleta['carril']), bold=True, font_size=carril_size)],
+        [_papeleta_paragraph('NADADOR:', bold=True, font_size=label_size),
+         _papeleta_paragraph(papeleta['nombre'], font_size=value_size + 1)],
+        [_papeleta_paragraph('EQUIPO:', bold=True, font_size=label_size),
+         _papeleta_paragraph(papeleta['equipo'], font_size=value_size)],
+        [_papeleta_paragraph('CAT.:', bold=True, font_size=label_size),
+         _papeleta_paragraph(papeleta['categoria'], font_size=value_size)],
+        [_papeleta_paragraph('T. INSCR.:', bold=True, font_size=label_size),
+         _papeleta_paragraph(str(papeleta.get('tiempo_inscripcion', '')), font_size=value_size)],
+        [_papeleta_paragraph('T. FINAL:', bold=True, font_size=label_size),
+         _papeleta_paragraph(' ', font_size=final_size)],
     ]
 
-    papeleta_table = Table(papeleta_data, colWidths=[width_per_papeleta * 0.4, width_per_papeleta * 0.6])
+    label_col = width_per_papeleta * 0.36
+    value_col = width_per_papeleta * 0.64
+    row_heights = None
+    if max_height:
+        weights = [1.0, 1.05, 1.05, 1.15, 1.0, 0.95, 0.95, 1.35]
+        total_w = sum(weights)
+        row_heights = [max_height * w / total_w for w in weights]
+
+    papeleta_table = Table(
+        papeleta_data,
+        colWidths=[label_col, value_col],
+        rowHeights=row_heights,
+    )
 
     papeleta_table.setStyle(TableStyle([
-        # Estilo general
         ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 8),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('FONTSIZE', (0, 0), (-1, -1), value_size),
+        ('GRID', (0, 0), (-1, -1), 1.2 if large else 1, colors.black),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING', (0, 0), (-1, -1), 3),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-        ('LEFTPADDING', (0, 0), (-1, -1), 3),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 3),
-
-        # Encabezados de campo en negrita
-        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('TOPPADDING', (0, 0), (-1, -1), pad),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), pad),
+        ('LEFTPADDING', (0, 0), (-1, -1), pad),
+        ('RIGHTPADDING', (0, 0), (-1, -1), pad),
         ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#E6F3FF')),
-
-        # Campo de tiempo final resaltado
         ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#FFE6E6')),
-        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.HexColor('#FAFAFA')]),
     ]))
 
     return papeleta_table
 
-def generar_papeletas_pdf_excel_3_per_row():
-    """Genera papeletas exactas como Excel con 3 por fila para ahorrar papel"""
-    papeletas_sembrado = leer_datos_sembrado()
+
+def _build_papeletas_page_table(chunk, width_per_papeleta, row_height, large=True):
+    """Tabla fija 3 filas × 2 columnas = 6 papeletas por página."""
+    grid = []
+    for row_idx in range(3):
+        row_cells = []
+        for col_idx in range(2):
+            idx = row_idx * 2 + col_idx
+            if idx < len(chunk):
+                row_cells.append(
+                    crear_papeleta_individual_excel(
+                        chunk[idx],
+                        width_per_papeleta,
+                        large=large,
+                        max_height=row_height - 4,
+                    )
+                )
+            else:
+                row_cells.append(_empty_papeleta_cell(width_per_papeleta, row_height))
+        grid.append(row_cells)
+
+    page_table = Table(
+        grid,
+        colWidths=[width_per_papeleta, width_per_papeleta],
+        rowHeights=[row_height, row_height, row_height],
+    )
+    page_table.splitByRow = 0
+    page_table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 3),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+        ('TOPPADDING', (0, 0), (-1, -1), 2),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+    ]))
+    return page_table
+
+
+def generar_papeletas_pdf_3x2(session_state=None):
+    """PDF compacto: 2 columnas × 3 filas = 6 papeletas por página, tipografía ampliada."""
+    papeletas_sembrado = leer_datos_sembrado(session_state=session_state)
 
     if not papeletas_sembrado:
-        return False, "No se pudieron leer los datos del sembrado"
+        return False, "No se pudieron leer los datos del sembrado", None
+
+    PAPELETAS_POR_PAGINA = 6
+    COLS = 2
+    ROWS = 3
 
     try:
-        # Crear documento PDF en orientación horizontal (landscape) para 3 columnas
+        buffer = BytesIO()
+        page_w, page_h = landscape(A4)
+        margin_lr = 8 * mm
+        margin_tb = 8 * mm
+
         doc = SimpleDocTemplate(
-            ARCHIVO_PAPELETAS.replace('.pdf', '_excel_3_per_row.pdf'),
+            buffer,
             pagesize=landscape(A4),
-            rightMargin=10*mm,
-            leftMargin=10*mm,
-            topMargin=15*mm,
-            bottomMargin=15*mm
+            rightMargin=margin_lr,
+            leftMargin=margin_lr,
+            topMargin=margin_tb,
+            bottomMargin=margin_tb,
         )
 
         styles = getSampleStyleSheet()
         elements = []
 
-        # Título del documento
         title_style = ParagraphStyle(
-            'DocumentTitle',
+            'DocumentTitle3x2',
             parent=styles['Heading1'],
-            fontSize=16,
+            fontSize=13,
             textColor=colors.black,
             alignment=TA_CENTER,
-            spaceAfter=20,
-            fontName='Helvetica-Bold'
+            spaceAfter=4,
+            spaceBefore=0,
+            fontName='Helvetica-Bold',
         )
-        elements.append(Paragraph("PAPELETAS DE JUECES - COMPETENCIA DE NATACIÓN", title_style))
-        elements.append(Spacer(1, 15))
+        title_block_h = 24
+        usable_h = page_h - 2 * margin_tb
+        row_h_first = (usable_h - title_block_h) / ROWS * 0.97
+        row_h_next = usable_h / ROWS * 0.97
+        page_width = page_w - 2 * margin_lr
+        width_per_papeleta = page_width / COLS
 
-        # Ancho disponible para 3 papeletas
-        page_width = landscape(A4)[0] - 20*mm  # Restar márgenes
-        width_per_papeleta = page_width / 3
+        pages = [
+            papeletas_sembrado[i:i + PAPELETAS_POR_PAGINA]
+            for i in range(0, len(papeletas_sembrado), PAPELETAS_POR_PAGINA)
+        ]
 
-        # Agrupar papeletas de 3 en 3
-        PAPELETAS_POR_FILA = 3
-        for i in range(0, len(papeletas_sembrado), PAPELETAS_POR_FILA):
-            # Crear fila con hasta 3 papeletas
-            fila_papeletas = papeletas_sembrado[i:i+PAPELETAS_POR_FILA]
-
-            # Crear tablas individuales para cada papeleta
-            tablas_fila = []
-            for papeleta in fila_papeletas:
-                tabla_papeleta = crear_papeleta_individual_excel(papeleta, width_per_papeleta)
-                tablas_fila.append(tabla_papeleta)
-
-            # Rellenar con espacios vacíos si quedan menos de 3
-            while len(tablas_fila) < PAPELETAS_POR_FILA:
-                tabla_vacia = Table([['', '']], colWidths=[width_per_papeleta * 0.4, width_per_papeleta * 0.6])
-                tabla_vacia.setStyle(TableStyle([('FONTSIZE', (0, 0), (-1, -1), 1)]))
-                tablas_fila.append(tabla_vacia)
-
-            # Crear tabla contenedora para las 3 papeletas en una fila
-            fila_table = Table([tablas_fila], colWidths=[width_per_papeleta] * PAPELETAS_POR_FILA)
-            fila_table.setStyle(TableStyle([
-                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                ('LEFTPADDING', (0, 0), (-1, -1), 5),
-                ('RIGHTPADDING', (0, 0), (-1, -1), 5),
-            ]))
-
-            elements.append(fila_table)
-            elements.append(Spacer(1, 10))
-
-            # Salto de página cada 6 filas (18 papeletas por página)
-            if (i // PAPELETAS_POR_FILA + 1) % 6 == 0 and i + PAPELETAS_POR_FILA < len(papeletas_sembrado):
+        for page_idx, chunk in enumerate(pages):
+            if page_idx > 0:
                 elements.append(PageBreak())
+            if page_idx == 0:
+                elements.append(Paragraph("PAPELETAS DE JUECES - COMPETENCIA DE NATACIÓN", title_style))
+                row_h = row_h_first
+            else:
+                row_h = row_h_next
 
-        # Construir el PDF
+            elements.append(_build_papeletas_page_table(chunk, width_per_papeleta, row_h, large=True))
+
         doc.build(elements)
-        total_pages = math.ceil(len(papeletas_sembrado) / 18)  # 18 papeletas por página (6 filas x 3)
-        return True, f"Papeletas Excel 3x3 generadas exitosamente: {ARCHIVO_PAPELETAS.replace('.pdf', '_excel_3_per_row.pdf')} ({len(papeletas_sembrado)} papeletas en ~{total_pages} páginas)"
+        pdf_bytes = buffer.getvalue()
+        Path(ARCHIVO_PAPELETAS_3X2).write_bytes(pdf_bytes)
+        total_pages = len(pages)
+        msg = (
+            f"Papeletas PDF 3x2 generadas: {len(papeletas_sembrado)} papeletas "
+            f"(6 por página: 2×3) en {total_pages} páginas"
+        )
+        return True, msg, pdf_bytes
 
     except Exception as e:
-        return False, f"Error al generar papeletas Excel 3x3: {e}"
+        return False, f"Error al generar papeletas PDF 3x2: {e}", None
 
-def generar_papeletas_pdf_excel_style():
+
+def generar_papeletas_pdf_excel_style(session_state=None):
     """Genera papeletas en formato de tabla Excel para ahorrar papel"""
-    papeletas_sembrado = leer_datos_sembrado()
+    papeletas_sembrado = leer_datos_sembrado(session_state=session_state)
 
     if not papeletas_sembrado:
-        return False, "No se pudieron leer los datos del sembrado"
+        return False, "No se pudieron leer los datos del sembrado", None
 
     try:
-        # Crear documento PDF en orientación horizontal (landscape) para más espacio
+        buffer = BytesIO()
         doc = SimpleDocTemplate(
-            ARCHIVO_PAPELETAS.replace('.pdf', '_excel_style.pdf'),
+            buffer,
             pagesize=landscape(A4),
             rightMargin=15*mm,
             leftMargin=15*mm,
@@ -494,25 +530,30 @@ def generar_papeletas_pdf_excel_style():
             if event_name != list(events_grouped.keys())[-1]:
                 elements.append(PageBreak())
 
-        # Construir el PDF
         doc.build(elements)
+        pdf_bytes = buffer.getvalue()
+        Path(ARCHIVO_PAPELETAS_EXCEL_STYLE).write_bytes(pdf_bytes)
         total_pages = math.ceil(len(papeletas_sembrado) / 15)
-        return True, f"Papeletas Excel-style generadas exitosamente: {ARCHIVO_PAPELETAS.replace('.pdf', '_excel_style.pdf')} ({len(papeletas_sembrado)} registros en ~{total_pages} páginas)"
+        msg = (
+            f"Papeletas Excel-style generadas: {len(papeletas_sembrado)} registros "
+            f"en ~{total_pages} páginas"
+        )
+        return True, msg, pdf_bytes
 
     except Exception as e:
-        return False, f"Error al generar papeletas Excel-style: {e}"
+        return False, f"Error al generar papeletas Excel-style: {e}", None
 
-def generar_papeletas_pdf():
+def generar_papeletas_pdf(session_state=None):
     """Genera el archivo PDF con 3 papeletas por página, optimizado para impresión"""
-    papeletas_sembrado = leer_datos_sembrado()
+    papeletas_sembrado = leer_datos_sembrado(session_state=session_state)
 
     if not papeletas_sembrado:
-        return False, "No se pudieron leer los datos del sembrado"
+        return False, "No se pudieron leer los datos del sembrado", None
 
     try:
-        # Crear documento PDF en orientación vertical (portrait) con márgenes optimizados
+        buffer = BytesIO()
         doc = SimpleDocTemplate(
-            ARCHIVO_PAPELETAS,
+            buffer,
             pagesize=A4,
             rightMargin=15*mm,
             leftMargin=15*mm,
@@ -542,12 +583,17 @@ def generar_papeletas_pdf():
             pagina_elements = crear_pagina_con_3_papeletas(grupo_papeletas, styles)
             elements.extend(pagina_elements)
 
-        # Construir el PDF
         doc.build(elements)
-        return True, f"Papeletas PDF generadas exitosamente: {ARCHIVO_PAPELETAS} ({len(papeletas_sembrado)} papeletas en {math.ceil(len(papeletas_sembrado)/3)} páginas)"
+        pdf_bytes = buffer.getvalue()
+        Path(ARCHIVO_PAPELETAS).write_bytes(pdf_bytes)
+        msg = (
+            f"Papeletas PDF generadas: {len(papeletas_sembrado)} papeletas "
+            f"en {math.ceil(len(papeletas_sembrado) / 3)} páginas"
+        )
+        return True, msg, pdf_bytes
 
     except Exception as e:
-        return False, f"Error al generar papeletas: {e}"
+        return False, f"Error al generar papeletas: {e}", None
 
 def main():
     """Función principal para ejecutar desde línea de comandos"""
@@ -560,7 +606,7 @@ def main():
         print("Primero genera el sembrado usando la aplicacion Streamlit.")
         return
     
-    success, message = generar_papeletas_pdf()
+    success, message, _pdf_bytes = generar_papeletas_pdf()
     print(message)
     
     if success:

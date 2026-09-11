@@ -56,7 +56,7 @@ def _write_sembrado_sheet_por_tiempo(ws, titulo_prueba, series_list):
     fila_actual += 2
 
     for serie in series_list:
-        ws.cell(row=fila_actual, column=1, value=f"Serie {serie['serie']}").font = Font(bold=True)
+        ws.cell(row=fila_actual, column=1, value=f"SERIE {serie['serie']}").font = Font(bold=True)
         fila_actual += 1
 
         headers = ["Carril", "Nombre", "Equipo", "Edad", "Categoría", "Tiempo Inscripción", "Tiempo Competencia"]

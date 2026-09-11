@@ -1,6 +1,8 @@
 # generar_papeletas_excel.py
 import pandas as pd
 import os
+from io import BytesIO
+from pathlib import Path
 from planilla_utils import inscrito_en_prueba, ordered_prueba_hoja_keys, titulo_prueba_numerada
 import math
 from openpyxl import Workbook
@@ -8,7 +10,8 @@ from openpyxl.styles import Font, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 # --- CONFIGURACIÓN ---
-ARCHIVO_PAPELETAS_EXCEL = 'papeletas_jueces.xlsx'
+SCRIPT_DIR = Path(__file__).resolve().parent
+ARCHIVO_PAPELETAS_EXCEL = str(SCRIPT_DIR / 'papeletas_jueces.xlsx')
 
 def parse_time(time_val):
     """Convierte tiempo a segundos para ordenamiento"""
@@ -21,91 +24,26 @@ def parse_time(time_val):
         return float(time_str)
     except (ValueError, IndexError): return float('inf')
 
-def leer_datos_sembrado():
-    """Lee los datos del sembrado con series y carriles asignados"""
-    try:
-        df = pd.read_excel('planilla_inscripcion.xlsx')
-        info_cols = ['NOMBRE Y AP', 'EQUIPO', 'EDAD', 'CAT.', 'SEXO']
-        event_cols = [col for col in df.columns if col not in info_cols and 'Nø' not in col and 'FECHA DE NA' not in col]
-        
-        eventos = {}
-        for index, row in df.iterrows():
-            if pd.isna(row['NOMBRE Y AP']): continue
-            sexo = row['SEXO'].upper()
-            
-            for prueba in event_cols:
-                if inscrito_en_prueba(row[prueba]):
-                    nombre_prueba = f"{prueba} - {'Mujeres' if sexo == 'F' else 'Hombres'}"
-                    if nombre_prueba not in eventos: eventos[nombre_prueba] = []
-                    
-                    nadador_info = {
-                        "nombre": row['NOMBRE Y AP'], 
-                        "equipo": row['EQUIPO'], 
-                        "edad": int(row['EDAD']),
-                        "categoria": row['CAT.'],
-                        "sexo": sexo,
-                        "tiempo_inscripcion": row[prueba], 
-                        "tiempo_en_segundos": parse_time(row[prueba])
-                    }
-                    eventos[nombre_prueba].append(nadador_info)
-        
-        # Agrupar por categoría y crear series con carriles asignados (orden planilla: Mujeres → Hombres)
-        papeletas_con_carriles = []
-        for idx, nombre_prueba in enumerate(ordered_prueba_hoja_keys(eventos, event_cols), start=1):
-            titulo = titulo_prueba_numerada(idx, nombre_prueba)
-            nadadores = eventos[nombre_prueba]
-            nadadores_por_categoria = {}
-            for nadador in nadadores:
-                cat = nadador['categoria']
-                if cat not in nadadores_por_categoria: 
-                    nadadores_por_categoria[cat] = []
-                nadadores_por_categoria[cat].append(nadador)
-            
-            for categoria, lista_nadadores in sorted(nadadores_por_categoria.items()):
-                # Ordenar por tiempo
-                lista_nadadores_ordenada = sorted(lista_nadadores, key=lambda x: x['tiempo_en_segundos'])
-                
-                # Crear series de 8 nadadores
-                num_nadadores = len(lista_nadadores_ordenada)
-                num_series = math.ceil(num_nadadores / 8)
-                
-                for serie_num in range(1, num_series + 1):
-                    inicio = (serie_num - 1) * 8
-                    fin = min(serie_num * 8, num_nadadores)
-                    nadadores_serie = lista_nadadores_ordenada[inicio:fin]
-                    
-                    # Asignar carriles usando el orden estándar
-                    lane_order = [4, 5, 3, 6, 2, 7, 1, 8]
-                    
-                    for i, nadador in enumerate(nadadores_serie):
-                        if i < len(lane_order):
-                            carril_asignado = lane_order[i]
-                            
-                            papeleta = {
-                                "nombre": nadador['nombre'],
-                                "equipo": nadador['equipo'],
-                                "categoria": nadador['categoria'],
-                                "sexo": nadador['sexo'],
-                                "prueba": titulo,
-                                "serie": serie_num,
-                                "carril": carril_asignado,
-                                "tiempo_inscripcion": nadador['tiempo_inscripcion']
-                            }
-                            papeletas_con_carriles.append(papeleta)
-        
-        return papeletas_con_carriles
-    
-    except Exception as e:
-        print(f"Error al leer datos del sembrado: {e}")
-        return []
+def leer_datos_sembrado(session_state=None):
+    """Lee series y carriles del sembrado manual guardado (no regenera sembrado)."""
+    from planilla_utils import get_papeletas_from_manual_sembrado
 
-def generar_papeletas_excel():
-    """Genera papeletas con datos completos del sembrado, 3 por hoja"""
-    papeletas_sembrado = leer_datos_sembrado()
-    
+    papeletas, skipped, error = get_papeletas_from_manual_sembrado(session_state=session_state)
+    if error:
+        print(f"Papeletas: {error}")
+        return []
+    if skipped:
+        print(f"Papeletas: omitidos {skipped} nadador(es) no inscritos en planilla")
+    return papeletas
+
+
+def generar_papeletas_excel(session_state=None):
+    """Genera papeletas con datos del sembrado manual, 3 por hoja."""
+    papeletas_sembrado = leer_datos_sembrado(session_state=session_state)
+
     if not papeletas_sembrado:
-        return False, "No se pudieron leer los datos del sembrado"
-    
+        return False, "No se pudieron leer los datos del sembrado manual. Graba el sembrado en Sembrado → Manual primero.", None
+
     try:
         wb = Workbook()
         ws = wb.active
@@ -246,11 +184,18 @@ def generar_papeletas_excel():
         ws.print_options.gridLines = True
         ws.print_options.gridLinesSet = True
         
-        wb.save(ARCHIVO_PAPELETAS_EXCEL)
-        return True, f"Papeletas Excel generadas exitosamente: {ARCHIVO_PAPELETAS_EXCEL}"
+        buffer = BytesIO()
+        wb.save(buffer)
+        xlsx_bytes = buffer.getvalue()
+        Path(ARCHIVO_PAPELETAS_EXCEL).write_bytes(xlsx_bytes)
+        msg = (
+            f"Papeletas Excel generadas: {len(papeletas_sembrado)} papeletas "
+            f"desde sembrado manual"
+        )
+        return True, msg, xlsx_bytes
         
     except Exception as e:
-        return False, f"Error al generar papeletas Excel: {e}"
+        return False, f"Error al generar papeletas Excel: {e}", None
 
 def main():
     """Función principal para ejecutar desde línea de comandos"""
@@ -261,7 +206,7 @@ def main():
         print("Este archivo es necesario para generar las papeletas.")
         return
     
-    success, message = generar_papeletas_excel()
+    success, message, _xlsx_bytes = generar_papeletas_excel()
     print(message)
     
     if success:

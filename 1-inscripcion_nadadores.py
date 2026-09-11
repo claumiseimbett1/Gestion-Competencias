@@ -84,6 +84,9 @@ class SwimmerRegistration:
                     except (ValueError, TypeError):
                         pass
 
+        if age_criteria == 'december_31':
+            reference_date = date(reference_date.year, 12, 31)
+
         return reference_date, age_criteria
 
     def resolve_age_from_birth_date(self, birth_date):
@@ -469,12 +472,45 @@ class SwimmerRegistration:
 
         completed = {}
         for event in category_events:
-            time_val = events.get(event)
+            time_val = self._resolve_time_for_prueba_column(event, events)
             if time_val is not None and str(time_val).strip():
                 completed[event] = str(time_val).strip()
             else:
                 completed[event] = 's/t'
         return completed
+
+    def _resolve_time_for_prueba_column(self, prueba_col, events):
+        if prueba_col in events and str(events.get(prueba_col, '')).strip():
+            return events[prueba_col]
+        if self.event_manager:
+            schedule = self.event_manager.get_program_schedule()
+            col_upper = str(prueba_col).strip().upper()
+            base_name = None
+            for entry in schedule:
+                columna = str(entry.get('columna', '')).strip()
+                if columna and col_upper == columna.upper():
+                    base_name = normalize_prueba_name(entry.get('prueba', ''))
+                    break
+            if base_name is None and col_upper.startswith('PRUEBA '):
+                try:
+                    orden = int(col_upper.replace('PRUEBA', '').strip())
+                except ValueError:
+                    orden = None
+                if orden:
+                    for entry in schedule:
+                        if int(entry.get('orden', 0)) == orden:
+                            base_name = normalize_prueba_name(entry.get('prueba', ''))
+                            break
+            if base_name:
+                for key, val in events.items():
+                    if normalize_prueba_name(key) == base_name and str(val).strip():
+                        return val
+        return None
+
+    def get_prueba_column_label(self, column_name):
+        if self.event_manager:
+            return self.event_manager.get_prueba_column_label(column_name)
+        return column_name
     
     def get_available_events(self):
         """Obtener las pruebas disponibles para el evento"""
@@ -489,6 +525,21 @@ class SwimmerRegistration:
         if self.event_manager:
             return self.event_manager.get_available_events_for_swimmer(category_name, swimmer_age)
         return self.get_available_events()
+
+    def get_editable_events_for_swimmer(self, swimmer_age, registered_events=None):
+        """Todas las pruebas del evento que el nadador puede inscribir o editar (por edad)."""
+        registered_events = registered_events or {}
+        all_events = self.get_available_events()
+        if self.event_manager and swimmer_age is not None:
+            editable = self.event_manager.filter_events_by_age(all_events, swimmer_age)
+        else:
+            editable = list(all_events)
+        for event in registered_events:
+            if event not in editable:
+                editable.append(event)
+        order = {name: i for i, name in enumerate(all_events)}
+        editable.sort(key=lambda e: order.get(e, len(order)))
+        return editable
 
     def get_event_categories(self):
         """Obtener las categorías configuradas para el evento"""
@@ -588,12 +639,6 @@ class SwimmerRegistration:
                 if is_duplicate:
                     return False, f"⚠️ POSIBLE DUPLICADO: El nadador '{duplicate_info['name']}' ya está inscrito", duplicate_info
 
-            swimmer_data['events'] = self.complete_category_events(
-                swimmer_data['category'],
-                swimmer_data['age'],
-                swimmer_data.get('events', {})
-            )
-            
             new_row = {
                 'NOMBRE Y AP': swimmer_data['name'],
                 'EQUIPO': swimmer_data['team'],
@@ -631,17 +676,17 @@ class SwimmerRegistration:
             df.loc[index, 'SEXO'] = swimmer_data['gender']
             df.loc[index, 'FECHA DE NA'] = swimmer_data.get('birth_date', '')
 
-            swimmer_data['events'] = self.complete_category_events(
-                swimmer_data['category'],
-                swimmer_data['age'],
-                swimmer_data.get('events', {})
-            )
-            
-            for event, time in swimmer_data['events'].items():
-                if time and time.strip():
-                    df.loc[index, event] = time
-                else:
-                    df.loc[index, event] = None
+            available_events = self.get_available_events()
+            for event in available_events:
+                df.loc[index, event] = None
+
+            for event, time in swimmer_data.get('events', {}).items():
+                if time and str(time).strip():
+                    is_valid, validated = self.validate_time_format(str(time).strip())
+                    if not is_valid:
+                        return False, f"Tiempo inválido en {event}: {validated}"
+                    if validated:
+                        df.loc[index, event] = validated
                     
             df.to_excel(self.archivo_inscripcion, index=False)
             return True, "Nadador actualizado exitosamente"
@@ -2163,11 +2208,11 @@ class SwimmerRegistration:
             'birth_date': birth_date,
             'category': category,
             'gender': gender,
-            'events': self.complete_category_events(category, age, latest_times)
+            'events': latest_times
         }
         
         events_count = len(swimmer_data['events'])
-        return swimmer_data, f"Nadador preparado con {events_count} prueba(s) de la categoría"
+        return swimmer_data, f"Nadador preparado con {events_count} prueba(s)"
     
     def get_swimmer_for_editing(self, index):
         """Obtener datos de un nadador para edición"""
@@ -2195,7 +2240,38 @@ class SwimmerRegistration:
         }
 
         return swimmer_data, "Datos del nadador obtenidos"
-    
+
+    def parse_birth_date_for_form(self, birth_date, fallback_age=None):
+        """Normaliza FECHA DE NA (Excel/str/Timestamp) a date para formularios."""
+        from datetime import date, datetime
+
+        if birth_date is None or (not isinstance(birth_date, str) and pd.isna(birth_date)):
+            if fallback_age is not None:
+                try:
+                    return date.today().replace(year=date.today().year - int(fallback_age))
+                except (ValueError, TypeError):
+                    pass
+            return date.today()
+
+        if isinstance(birth_date, str):
+            text = birth_date.strip()
+            if not text or text.lower() in ('nan', 'none', 'nat'):
+                return self.parse_birth_date_for_form(None, fallback_age)
+            for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%Y-%m-%d %H:%M:%S'):
+                try:
+                    return datetime.strptime(text[:19], fmt).date()
+                except ValueError:
+                    continue
+            return self.parse_birth_date_for_form(None, fallback_age)
+
+        if hasattr(birth_date, 'date'):
+            try:
+                return birth_date.date()
+            except Exception:
+                pass
+
+        return self.parse_birth_date_for_form(None, fallback_age)
+
     def generate_pdf_report(self, swimmers, teams, categories, genders, events_stats):
         """Generar reporte PDF con logo de la empresa"""
         if not REPORTLAB_AVAILABLE:
@@ -2526,8 +2602,6 @@ class SwimmerRegistration:
                                 # Agregar información de error más específica
                                 errors.append(f"Fila {index + 2}: Formato de tiempo inválido '{time_value}' en {event} para {swimmer_name}")
 
-                    events_data = self.complete_category_events(category, age, events_data)
-
                     new_swimmer = {
                         'NOMBRE Y AP': swimmer_name,
                         'EQUIPO': team,
@@ -2535,8 +2609,10 @@ class SwimmerRegistration:
                         'CAT.': category,
                         'SEXO': gender,
                         'FECHA DE NA': birth_date if birth_date is not None and pd.notna(birth_date) else "",
-                        **{event: events_data.get(event, 's/t') for event in events_data}
                     }
+                    for event, time_val in events_data.items():
+                        if time_val and str(time_val).strip():
+                            new_swimmer[event] = str(time_val).strip()
 
                     imported_swimmers.append(new_swimmer)
                     imported_names.append(swimmer_name)

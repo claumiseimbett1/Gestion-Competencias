@@ -61,6 +61,8 @@ Thumbs.db
 test_*.py
 test_*.csv
 test_*.xlsx
+_test_*.pdf
+_test_*.xlsx
 
 # Archivos de configuración local
 config.local.py

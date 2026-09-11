@@ -63,7 +63,7 @@ def _write_sembrado_sheet_categoria(ws, nombre_prueba, categorias):
         fila_actual += 1
 
         for serie in data_categoria['series']:
-            ws.cell(row=fila_actual, column=1, value=f"Serie {serie['serie']}").font = Font(bold=True)
+            ws.cell(row=fila_actual, column=1, value=f"SERIE {serie['serie']}").font = Font(bold=True)
             fila_actual += 1
 
             headers = ["Carril", "Nombre", "Equipo", "Edad", "Categoría", "Tiempo Inscripción", "Tiempo Competencia"]

@@ -440,15 +440,76 @@ class EventManager:
 
         filtered_events = []
         for event in events:
-            min_age = self.event_age_restrictions.get(event, 6)  # edad mínima por defecto es 6
+            min_age = self.get_event_age_restriction(event)
             if swimmer_age >= min_age:
                 filtered_events.append(event)
 
         return filtered_events
 
+    def get_program_schedule(self):
+        """Cronograma oficial: una entrada por columna de planilla (PRUEBA 1..N)."""
+        config = self.load_event_config()
+        if config:
+            return config.get('program_schedule', [])
+        return []
+
+    def get_prueba_column_label(self, column_name):
+        """Etiqueta legible para columna de prueba (planilla / inscripción)."""
+        if not column_name:
+            return column_name
+        col = str(column_name).strip()
+        col_upper = col.upper()
+        for entry in self.get_program_schedule():
+            columna = str(entry.get('columna', '')).strip()
+            if columna and col_upper == columna.upper():
+                orden = entry.get('orden')
+                if orden:
+                    return f"PRUEBA {orden}: {columna}"
+                return columna
+        if col_upper.startswith('PRUEBA '):
+            try:
+                orden = int(col_upper.replace('PRUEBA', '').strip())
+            except ValueError:
+                orden = None
+            if orden:
+                for entry in self.get_program_schedule():
+                    if int(entry.get('orden', 0)) == orden:
+                        return f"PRUEBA {orden}: {entry.get('columna', column_name)}"
+        return column_name
+
+    def _base_prueba_min_age(self, prueba_base):
+        """Edad mínima según la prueba base (distancia/estilo)."""
+        base = str(prueba_base).upper()
+        rules = [
+            ("25M PATADA", 5), ("25M LIBRE CON TABLA", 5), ("25M LIBRE INSTINTIVO", 5),
+            ("25M LIBRE", 6), ("25M PECHO", 6), ("25M MARIPOSA", 6),
+            ("50M LIBRE CON ALETAS", 8), ("50M MARIPOSA", 8),
+            ("50M LIBRE", 6), ("50M ESPALDA", 6), ("50M PECHO", 7),
+            ("100M LIBRE", 8),
+        ]
+        for key, min_age in sorted(rules, key=lambda x: -len(x[0])):
+            if key in base:
+                return min_age
+        return 6
+
     def get_event_age_restriction(self, event_name):
         """Obtener la restricción de edad para un evento específico"""
-        return self.event_age_restrictions.get(event_name, 6)
+        col = str(event_name).strip()
+        col_upper = col.upper()
+        for entry in self.get_program_schedule():
+            columna = str(entry.get('columna', '')).strip()
+            if columna and col_upper == columna.upper():
+                return self._base_prueba_min_age(entry.get('prueba', ''))
+        if col_upper.startswith('PRUEBA '):
+            try:
+                orden = int(col_upper.replace('PRUEBA', '').strip())
+            except ValueError:
+                orden = None
+            if orden:
+                for entry in self.get_program_schedule():
+                    if int(entry.get('orden', 0)) == orden:
+                        return self._base_prueba_min_age(entry.get('prueba', ''))
+        return self._base_prueba_min_age(col)
 
     def parse_age_range(self, age_range_str):
         """Parsear un string de rango de edad y retornar min_age, max_age"""
