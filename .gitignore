@@ -75,6 +75,9 @@ temp/
 *.bak
 *.backup
 
+# Backups de competencias
+backups/
+
 # Archivos de datos sensibles
 secrets.toml
 .env.local
