@@ -42,7 +42,8 @@ Las papeletas (`generar_papeletas.py` / `generar_papeletas_excel.py`) se usan de
 
 ## Flujo sugerido
 
-1. Crear/ajustar el evento en la app → `event_config.json`
+1. Crear/ajustar el evento en la app → `event_config.json`  
+   (categorías y **orden de pruebas** se pueden cargar desde Excel)
 2. Inscribir nadadores → `planilla_inscripcion.xlsx`
 3. Sembrar (manual recomendado, o automático por categoría/tiempo)
 4. Generar papeletas PDF/Excel para jueces
@@ -58,6 +59,7 @@ Las papeletas (`generar_papeletas.py` / `generar_papeletas_excel.py`) se usan de
 | `planilla_inscripcion.xlsx` | Nadadores inscritos |
 | `BASE-DE-DATOS.xlsx` | Histórico para búsqueda en inscripción |
 | `categorias_festitorneo_2026.xlsx` | Categorías (carga/edición de evento) |
+| `pruebas_festitorneo_2026.xlsx` | Orden de pruebas (hoja `Orden evento`) |
 | `resultados_con_tiempos.xlsx` | Tiempos finales para premiación |
 
 ### Salida

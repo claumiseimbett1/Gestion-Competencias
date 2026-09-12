@@ -336,6 +336,125 @@ class EventManager:
         except Exception as e:
             return False, f"Error al leer archivo: {str(e)}"
 
+    def _pick_excel_sheet_for_event_order(self, xl):
+        """Prefiere hoja 'Orden evento' / similar; si no, la primera."""
+        names = list(xl.sheet_names)
+        for name in names:
+            low = str(name).lower()
+            if 'orden' in low and 'evento' in low:
+                return name
+        for name in names:
+            if 'orden' in str(name).lower():
+                return name
+        return names[0] if names else None
+
+    def _truthy_include_flag(self, value):
+        if value is None or (isinstance(value, float) and pd.isna(value)):
+            return False
+        text = str(value).strip().lower()
+        return text in {'si', 'sí', 'yes', 'y', 'true', '1', 'x', 'ok'}
+
+    def load_event_order_from_excel(self, uploaded_file, only_marked=True):
+        """
+        Cargar orden de pruebas desde Excel.
+
+        Columnas flexibles:
+        - Orden / Order / #
+        - Prueba / Prueba sistema / Evento / Nombre
+        - En app actual / Incluir / Activo (opcional): Si/Yes/1
+
+        Si hay varias hojas, usa preferentemente \"Orden evento\".
+        """
+        try:
+            from planilla_utils import normalize_prueba_name
+
+            xl = pd.ExcelFile(uploaded_file)
+            sheet = self._pick_excel_sheet_for_event_order(xl)
+            if not sheet:
+                return False, "El archivo Excel no tiene hojas"
+
+            df = pd.read_excel(xl, sheet_name=sheet)
+            if df.empty:
+                return False, f"La hoja '{sheet}' está vacía"
+
+            order_col = None
+            prueba_col = None
+            include_col = None
+
+            for col in df.columns:
+                col_lower = str(col).lower().strip()
+                if order_col is None and (
+                    col_lower in {'orden', 'order', '#', 'n', 'no', 'num', 'numero', 'número'}
+                    or col_lower.startswith('orden')
+                ):
+                    order_col = col
+                elif prueba_col is None and any(
+                    key in col_lower
+                    for key in (
+                        'prueba sistema', 'nombre en sistema', 'prueba', 'evento',
+                        'event', 'nombre', 'prueba pdf'
+                    )
+                ):
+                    prueba_col = col
+                elif include_col is None and any(
+                    key in col_lower
+                    for key in ('en app', 'incluir', 'activo', 'usar', 'seleccion', 'selección')
+                ):
+                    include_col = col
+
+            if not prueba_col:
+                return False, (
+                    "No se encontró columna de prueba "
+                    "(debe contener 'prueba', 'evento' o 'nombre')"
+                )
+
+            working = df.copy()
+            if include_col is not None and only_marked:
+                marked = working[include_col].map(self._truthy_include_flag)
+                if marked.any():
+                    working = working[marked]
+
+            rows = []
+            for idx, row in working.iterrows():
+                raw = row.get(prueba_col)
+                if pd.isna(raw):
+                    continue
+                name = normalize_prueba_name(str(raw).strip())
+                if not name:
+                    continue
+                order_val = None
+                if order_col is not None and pd.notna(row.get(order_col)):
+                    try:
+                        order_val = float(row[order_col])
+                    except (TypeError, ValueError):
+                        order_val = None
+                rows.append((order_val if order_val is not None else idx, name))
+
+            if not rows:
+                hint = ""
+                if include_col is not None and only_marked:
+                    hint = " (revisa la columna de inclusión: Si/Yes/1)"
+                return False, f"No se encontraron pruebas válidas en '{sheet}'{hint}"
+
+            rows.sort(key=lambda item: (item[0], item[1]))
+            event_order = []
+            seen = set()
+            for _, name in rows:
+                key = name.upper()
+                if key in seen:
+                    continue
+                seen.add(key)
+                event_order.append(name)
+
+            return True, {
+                'event_order': event_order,
+                'sheet': sheet,
+                'count': len(event_order),
+            }
+
+        except Exception as e:
+            return False, f"Error al leer archivo: {str(e)}"
+
     def validate_category_name(self, name, existing_categories, exclude_index=None):
         """Validar que el nombre de categoría no esté duplicado"""
         name_lower = name.lower().strip()

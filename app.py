@@ -818,44 +818,57 @@ def mostrar_paso_pruebas_evento(event_manager):
     """Paso 3: Selección y orden de pruebas del evento"""
     st.markdown("### 🏊‍♀️ Configuración de Pruebas del Evento")
 
+    tab_manual, tab_excel = st.tabs(["Selección Manual", "Cargar orden desde Excel"])
+
+    with tab_manual:
+        mostrar_seleccion_manual_pruebas(event_manager)
+
+    with tab_excel:
+        mostrar_carga_excel_orden_pruebas(event_manager)
+
+    if st.session_state.evento_event_order:
+        st.markdown("### 📋 Orden actual del evento")
+        preview = pd.DataFrame({
+            'Orden': list(range(1, len(st.session_state.evento_event_order) + 1)),
+            'Prueba': st.session_state.evento_event_order,
+        })
+        st.dataframe(preview, use_container_width=True, hide_index=True)
+
+
+def mostrar_seleccion_manual_pruebas(event_manager):
+    """Lista disponible ↔ orden del evento (manual)."""
     st.markdown("""
     <div class="info-message">
-        <strong>Instrucciones:</strong> Seleccione las pruebas disponibles de la lista de la izquierda
-        y arrástrelas a la lista de la derecha para definir el orden del evento.
+        <strong>Instrucciones:</strong> Agrega pruebas desde la lista de la izquierda
+        y reordénalas a la derecha. También puedes cargar el orden desde Excel.
     </div>
     """, unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns([2, 1, 2])
 
-    # Lista de pruebas disponibles
     with col1:
         st.markdown("**🏊 Pruebas Disponibles**")
         all_events = event_manager.get_available_events()
         selected_events = st.session_state.evento_event_order
-
-        # Filtrar eventos que ya no están en el orden
         available_events = [event for event in all_events if event not in selected_events]
 
         if available_events:
             for event in available_events:
                 col_a, col_b = st.columns([3, 1])
                 with col_a:
-                    # Obtener restricción de edad para el evento
                     min_age = event_manager.get_event_age_restriction(event)
                     st.write(f"• {event} <small>(≥{min_age} años)</small>", unsafe_allow_html=True)
                 with col_b:
-                    if st.button("➡️", key=f"add_event_{event}", help=f"Agregar {event} (edad mínima: {min_age} años)"):
+                    if st.button("➡️", key=f"add_event_{event}", help=f"Agregar {event}"):
                         st.session_state.evento_event_order.append(event)
                         st.rerun()
         else:
-            st.info("Todas las pruebas han sido seleccionadas")
+            st.info("Todas las pruebas del catálogo están en el orden (o carga un Excel)")
 
-    # Separador visual
     with col2:
         st.markdown("<br>" * 8, unsafe_allow_html=True)
         st.markdown("**⬅️ ➡️**", unsafe_allow_html=True)
 
-    # Lista de pruebas seleccionadas (orden del evento)
     with col3:
         st.markdown("**🏆 Pruebas del Evento (Orden)**")
 
@@ -870,27 +883,90 @@ def mostrar_paso_pruebas_evento(event_manager):
                     st.write(event)
 
                 with col_c:
-                    # Botones para reordenar
                     if i > 0 and st.button("⬆️", key=f"up_{i}", help="Subir"):
-                        # Intercambiar con el anterior
                         st.session_state.evento_event_order[i], st.session_state.evento_event_order[i-1] = \
                         st.session_state.evento_event_order[i-1], st.session_state.evento_event_order[i]
                         st.rerun()
 
                 with col_d:
-                    # Botón para remover
                     if st.button("❌", key=f"remove_event_{i}", help="Quitar del evento"):
                         st.session_state.evento_event_order.pop(i)
                         st.rerun()
-
         else:
-            st.info("Agregue pruebas desde la lista de la izquierda")
+            st.info("Agregue pruebas desde la izquierda o cargue un Excel")
 
-        # Botones adicionales
         if st.session_state.evento_event_order:
             if st.button("🔄 Limpiar Orden"):
                 st.session_state.evento_event_order = []
                 st.rerun()
+
+
+def mostrar_carga_excel_orden_pruebas(event_manager):
+    """Carga el orden de pruebas desde Excel (hoja Orden evento u Orden/Prueba)."""
+    st.markdown("""
+    **Formato del Excel**
+
+    Preferible una hoja llamada **Orden evento** con columnas:
+    - **Orden** — número de secuencia (1, 2, 3…)
+    - **Prueba** / **Prueba sistema** — nombre de la prueba
+    - **En app actual** / **Incluir** (opcional) — `Si` para incluirla
+
+    También acepta un Excel simple con solo `Orden` + `Prueba`.
+    Los nombres con **CROLL** se normalizan a **LIBRE**.
+    """)
+
+    only_marked = st.checkbox(
+        "Solo pruebas marcadas como Si / Incluir",
+        value=True,
+        key="event_order_excel_only_marked",
+        help="Si el archivo tiene columna de inclusión, carga solo las marcadas",
+    )
+
+    uploaded_file = st.file_uploader(
+        "Seleccionar archivo Excel de orden de pruebas",
+        type=['xlsx', 'xls'],
+        key="event_order_upload",
+    )
+
+    disk_path = APP_ROOT / "pruebas_festitorneo_2026.xlsx"
+    col_up, col_disk = st.columns(2)
+
+    with col_up:
+        load_clicked = st.button(
+            "📤 Cargar orden desde archivo",
+            type="primary",
+            key="load_event_order_btn",
+            disabled=uploaded_file is None,
+        )
+
+    with col_disk:
+        load_disk = False
+        if disk_path.exists():
+            load_disk = st.button(
+                f"📂 Usar {disk_path.name}",
+                key="load_event_order_disk_btn",
+            )
+        else:
+            st.caption("Opcional: coloca `pruebas_festitorneo_2026.xlsx` en la carpeta del proyecto.")
+
+    source = None
+    if load_clicked and uploaded_file is not None:
+        source = uploaded_file
+    elif load_disk:
+        source = str(disk_path)
+
+    if source is not None:
+        success, result = event_manager.load_event_order_from_excel(
+            source, only_marked=only_marked
+        )
+        if success:
+            st.session_state.evento_event_order = result['event_order']
+            st.success(
+                f"✅ {result['count']} pruebas cargadas desde hoja **{result['sheet']}**"
+            )
+            st.rerun()
+        else:
+            st.error(f"❌ {result}")
 
 
 def mostrar_paso_asignacion_categorias(event_manager):
