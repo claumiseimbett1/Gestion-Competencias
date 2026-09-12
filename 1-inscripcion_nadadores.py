@@ -16,7 +16,16 @@ try:
 except ImportError:
     REPORTLAB_AVAILABLE = False
 from io import BytesIO
+import importlib
+import planilla_utils
 from planilla_utils import inscrito_en_prueba, normalize_prueba_name, normalize_planilla_columns
+
+
+def _align_planilla_columns_to_events(df, event_names):
+    """Import seguro ante hot-reload de Streamlit (módulo cacheado sin la función nueva)."""
+    importlib.reload(planilla_utils)
+    return planilla_utils.align_planilla_columns_to_events(df, event_names)
+
 
 class SwimmerRegistration:
     def __init__(self):
@@ -448,10 +457,9 @@ class SwimmerRegistration:
     def load_existing_data(self):
         if os.path.exists(self.archivo_inscripcion):
             try:
-                from planilla_utils import align_planilla_columns_to_events
                 df = pd.read_excel(self.archivo_inscripcion)
                 events = self.get_available_events()
-                return align_planilla_columns_to_events(df, events)
+                return _align_planilla_columns_to_events(df, events)
             except Exception as e:
                 print(f"Error al cargar datos existentes: {e}")
                 return None
@@ -716,8 +724,7 @@ class SwimmerRegistration:
 
         available_events = self.get_available_events()
         try:
-            from planilla_utils import align_planilla_columns_to_events, match_column_to_event
-            df = align_planilla_columns_to_events(df, available_events)
+            df = _align_planilla_columns_to_events(df, available_events)
         except Exception:
             pass
 
@@ -729,9 +736,8 @@ class SwimmerRegistration:
                 if cell is None:
                     # buscar columna equivalente
                     try:
-                        from planilla_utils import match_column_to_event
                         for col in df.columns:
-                            if match_column_to_event(col, [event]) == event:
+                            if planilla_utils.match_column_to_event(col, [event]) == event:
                                 cell = row[col]
                                 break
                     except Exception:
@@ -2537,12 +2543,10 @@ class SwimmerRegistration:
     def bulk_import_from_excel(self, uploaded_file):
         """Importa múltiples nadadores desde un archivo Excel"""
         try:
-            from planilla_utils import align_planilla_columns_to_events
-
             # Leer archivo Excel y alinear nombres de pruebas al evento
             df = pd.read_excel(uploaded_file)
             available_events = self.get_available_events()
-            df = align_planilla_columns_to_events(df, available_events)
+            df = _align_planilla_columns_to_events(df, available_events)
 
             # Validar columnas requeridas
             required_columns = ['NOMBRE Y AP', 'EQUIPO', 'EDAD', 'CAT.', 'SEXO']
