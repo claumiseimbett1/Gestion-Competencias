@@ -3,6 +3,7 @@ import pandas as pd
 import io
 import os
 import json
+import re
 from pathlib import Path
 from datetime import datetime
 #import subprocess  # No longer needed
@@ -1676,6 +1677,126 @@ def get_pool_lanes(session_state=None):
     return clamp_pool_lanes(state.get('carriles_piscina', DEFAULT_POOL_LANES))
 
 
+def resolve_typed_prueba(typed_text, event_cols):
+    """
+    Resuelve texto digitado a una columna de prueba de la planilla.
+    Acepta nombre parcial, 'hasta'/' - ', o número (3 / PRUEBA 3).
+    """
+    from planilla_utils import match_column_to_event, prueba_match_key, event_from_prueba_number
+
+    typed = str(typed_text or '').strip()
+    if not typed or not event_cols:
+        return None
+
+    # Número de prueba: "3", "PRUEBA 3", "prueba 3"
+    num_match = re.match(r'^(?:PRUEBA\s*)?(\d+)\s*$', typed, flags=re.IGNORECASE)
+    if num_match:
+        n = int(num_match.group(1))
+        if 1 <= n <= len(event_cols):
+            return event_cols[n - 1]
+        evento, _ = event_from_prueba_number(n, 'Todos', event_cols)
+        if evento:
+            return evento
+
+    for e in event_cols:
+        if str(e).strip().upper() == typed.upper():
+            return e
+
+    matched = match_column_to_event(typed, event_cols)
+    if matched:
+        return matched
+
+    typed_key = prueba_match_key(typed)
+    if not typed_key:
+        return None
+    candidates = []
+    for e in event_cols:
+        ek = prueba_match_key(e)
+        if typed_key == ek or typed_key in ek or ek in typed_key:
+            candidates.append(e)
+    if len(candidates) == 1:
+        return candidates[0]
+    if candidates:
+        # prefer shortest title that still contains the typed key
+        return sorted(candidates, key=lambda x: len(str(x)))[0]
+    return None
+
+
+def suggest_typed_pruebas(typed_text, event_cols, limit=5):
+    """Sugerencias al digitar el nombre de la prueba."""
+    from planilla_utils import prueba_match_key
+
+    typed = str(typed_text or '').strip()
+    if not typed or not event_cols:
+        return []
+    typed_key = prueba_match_key(typed)
+    scored = []
+    for i, e in enumerate(event_cols):
+        ek = prueba_match_key(e)
+        score = 0
+        if typed.upper() in str(e).upper():
+            score += 3
+        if typed_key and typed_key in ek:
+            score += 2
+        if typed_key and ek.startswith(typed_key):
+            score += 1
+        if score:
+            scored.append((score, i, e))
+    scored.sort(key=lambda t: (-t[0], t[1]))
+    return [e for _, _, e in scored[:limit]]
+
+
+def render_prueba_picker(event_cols, key_prefix, label="Prueba"):
+    """
+    Permite elegir prueba de lista o digitar el nombre.
+    Devuelve el nombre canónico de event_cols o None.
+    """
+    mode = st.radio(
+        "Cómo elegir la prueba",
+        ["Lista", "Digitar"],
+        horizontal=True,
+        key=f"{key_prefix}_prueba_mode",
+        help="Lista = menú del cronograma. Digitar = escribe el nombre o el número (ej. 3).",
+    )
+    if mode == "Lista":
+        if not event_cols:
+            st.warning("No hay pruebas en la planilla.")
+            return None
+        return st.selectbox(
+            f"Selecciona {label.lower()}:",
+            event_cols,
+            format_func=lambda col: titulo_prueba_numerada(
+                event_cols.index(col) + 1, col
+            ) if col in event_cols else col,
+            key=f"{key_prefix}_prueba_lista",
+        )
+
+    typed = st.text_input(
+        f"Digita {label.lower()} (nombre o número):",
+        key=f"{key_prefix}_prueba_typed",
+        placeholder="Ej: 50 mts libre…  ·  o  PRUEBA 3  ·  o  3",
+    )
+    if not typed.strip():
+        st.caption("Escribe el nombre completo/parcial o el número de prueba del cronograma.")
+        return None
+
+    resolved = resolve_typed_prueba(typed, event_cols)
+    if resolved:
+        n = event_cols.index(resolved) + 1 if resolved in event_cols else None
+        titulo = titulo_prueba_numerada(n, resolved) if n else resolved
+        st.success(f"Coincide con: **{titulo}**")
+        return resolved
+
+    suggestions = suggest_typed_pruebas(typed, event_cols)
+    st.warning("No se encontró esa prueba en la planilla.")
+    if suggestions:
+        st.caption("¿Quisiste decir?")
+        for s in suggestions:
+            idx = event_cols.index(s) + 1 if s in event_cols else '?'
+            st.write(f"• PRUEBA {idx}: {s}")
+    return None
+
+
 def render_pool_lanes_selector():
     """Pregunta el número de carriles antes de generar cualquier sembrado."""
     st.markdown("#### 🏊 Carriles de la piscina")
@@ -2813,12 +2934,65 @@ def render_auto_seeding_manual_editor(mode, key_prefix):
         f"{s['data'].get('titulo') or s['evento']} ({'✏️' if s['data'].get('editado_manual') else 'auto'})"
         for s in session_seedings
     ]
-    idx = st.selectbox(
-        "Prueba a editar:",
-        range(len(session_seedings)),
-        format_func=lambda i: labels[i],
-        key=f"{key_prefix}_pick",
+    pick_mode = st.radio(
+        "Cómo elegir la prueba a editar",
+        ["Lista", "Digitar"],
+        horizontal=True,
+        key=f"{key_prefix}_pick_mode",
     )
+    idx = 0
+    if pick_mode == "Lista":
+        idx = st.selectbox(
+            "Prueba a editar:",
+            range(len(session_seedings)),
+            format_func=lambda i: labels[i],
+            key=f"{key_prefix}_pick",
+        )
+    else:
+        typed = st.text_input(
+            "Digita prueba (nombre, título o número):",
+            key=f"{key_prefix}_pick_typed",
+            placeholder="Ej: 50 mts libre…  ·  PRUEBA 3  ·  3",
+        )
+        if typed.strip():
+            resolved_col = resolve_typed_prueba(typed, event_cols)
+            matches = []
+            for i, s in enumerate(session_seedings):
+                titulo = str(s['data'].get('titulo') or '')
+                evento = str(s.get('evento') or '')
+                if resolved_col and evento == resolved_col:
+                    matches.append(i)
+                elif typed.upper() in titulo.upper() or typed.upper() in evento.upper():
+                    matches.append(i)
+                else:
+                    num_m = re.match(r'^(?:PRUEBA\s*)?(\d+)\s*$', typed.strip(), flags=re.IGNORECASE)
+                    if num_m:
+                        try:
+                            pn = int(s['data'].get('prueba_num') or 0)
+                        except (TypeError, ValueError):
+                            pn = 0
+                        if pn == int(num_m.group(1)):
+                            matches.append(i)
+            if len(matches) == 1:
+                idx = matches[0]
+                st.success(f"Coincide con: **{labels[idx]}**")
+            elif len(matches) > 1:
+                idx = st.selectbox(
+                    "Varias coincidencias — elige una:",
+                    matches,
+                    format_func=lambda i: labels[i],
+                    key=f"{key_prefix}_pick_multi",
+                )
+            else:
+                st.warning("No hay sembrado cargado que coincida con ese texto.")
+                suggestions = suggest_typed_pruebas(typed, [s['evento'] for s in session_seedings])
+                for sname in suggestions[:5]:
+                    st.caption(f"• {sname}")
+                return
+        else:
+            st.caption("Escribe el nombre o número de la prueba para editarla.")
+            return
+
     item = session_seedings[idx]
     seeding_key = auto_seeding_session_key(mode, item['evento'], item['genero'])
     seeding_data = st.session_state[seeding_key]
@@ -3209,13 +3383,8 @@ def sembrado_competencia_interface():
         col_event, col_gender = st.columns([2, 1])
         
         with col_event:
-            selected_event = st.selectbox(
-                "Selecciona el evento para crear sembrado manual:",
-                event_cols,
-                format_func=lambda col: titulo_prueba_numerada(
-                    event_cols.index(col) + 1, col
-                ) if col in event_cols else col,
-                key="manual_event_select"
+            selected_event = render_prueba_picker(
+                event_cols, key_prefix="manual", label="el evento"
             )
         
         with col_gender:

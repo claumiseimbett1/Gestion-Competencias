@@ -177,6 +177,7 @@
       }
     ],
     "nadadores_disponibles": [],
-    "total_nadadores": 16
+    "total_nadadores": 16,
+    "carriles_piscina": 8
   }
 }
