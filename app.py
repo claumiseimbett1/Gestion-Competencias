@@ -906,20 +906,16 @@ def mostrar_carga_excel_orden_pruebas(event_manager):
     st.markdown("""
     **Formato del Excel**
 
-    Preferible una hoja llamada **Orden evento** con columnas:
-    - **Orden** — número de secuencia (1, 2, 3…)
-    - **Prueba** / **Prueba sistema** — nombre de la prueba
-    - **En app actual** / **Incluir** (opcional) — `Si` para incluirla
-
-    También acepta un Excel simple con solo `Orden` + `Prueba`.
-    Los nombres con **CROLL** se normalizan a **LIBRE**.
+    Preferible hoja **Orden evento** con columnas `Orden`, `Prueba sistema`, `En app actual`.
+    Al cargar también sincroniza la **asignación por categoría** (hoja Asignacion o
+    inferida desde los nombres: p. ej. `Menores 1`, `Menores 2-3`, `Infantil A - Master`).
     """)
 
     only_marked = st.checkbox(
         "Solo pruebas marcadas como Si / Incluir",
-        value=True,
+        value=False,
         key="event_order_excel_only_marked",
-        help="Si el archivo tiene columna de inclusión, carga solo las marcadas",
+        help="Desmarcado = carga todas las filas del orden (recomendado si algunas quedan sin Si)",
     )
 
     uploaded_file = st.file_uploader(
@@ -933,7 +929,7 @@ def mostrar_carga_excel_orden_pruebas(event_manager):
 
     with col_up:
         load_clicked = st.button(
-            "📤 Cargar orden desde archivo",
+            "📤 Cargar orden + asignación",
             type="primary",
             key="load_event_order_btn",
             disabled=uploaded_file is None,
@@ -957,12 +953,19 @@ def mostrar_carga_excel_orden_pruebas(event_manager):
 
     if source is not None:
         success, result = event_manager.load_event_order_from_excel(
-            source, only_marked=only_marked
+            source,
+            only_marked=only_marked,
+            categories=st.session_state.get('evento_categories') or [],
         )
         if success:
             st.session_state.evento_event_order = result['event_order']
+            if result.get('category_events'):
+                st.session_state.evento_category_events = result['category_events']
+            assigned = sum(1 for v in (result.get('category_events') or {}).values() if v)
             st.success(
-                f"✅ {result['count']} pruebas cargadas desde hoja **{result['sheet']}**"
+                f"✅ {result['count']} pruebas desde **{result['sheet']}**. "
+                f"Asignación: **{result.get('assign_source', '—')}** "
+                f"({assigned} categorías con pruebas)."
             )
             st.rerun()
         else:
@@ -980,6 +983,15 @@ def mostrar_paso_asignacion_categorias(event_manager):
     if not st.session_state.evento_event_order:
         st.warning("⚠️ Primero debe configurar las pruebas del evento en el paso anterior")
         return
+
+    if st.button("🔄 Sincronizar asignación desde nombres del orden", key="sync_cat_events_from_order"):
+        synced = event_manager.infer_category_events_from_order(
+            st.session_state.evento_categories,
+            st.session_state.evento_event_order,
+        )
+        st.session_state.evento_category_events = synced
+        st.success("✅ Asignación actualizada según los nombres de las pruebas")
+        st.rerun()
 
     st.markdown("""
     <div class="info-message">

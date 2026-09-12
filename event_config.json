@@ -1,0 +1,177 @@
+{
+  "event_name": "FESTI-TORNEO DE ANIVERSARIO EL NADADOR MAS RAPIDO - NNG 2026",
+  "categories": [
+    {
+      "name": "Menores 1",
+      "age_range": "5 - 6"
+    },
+    {
+      "name": "Menores 2",
+      "age_range": "7 - 8"
+    },
+    {
+      "name": "Menores 3",
+      "age_range": "9"
+    },
+    {
+      "name": "Infantil A",
+      "age_range": "10 -11"
+    },
+    {
+      "name": "Infantil B",
+      "age_range": "12 - 13"
+    },
+    {
+      "name": "Juvenil A",
+      "age_range": "14 - 15"
+    },
+    {
+      "name": "Juvenil B",
+      "age_range": "16 - 17"
+    },
+    {
+      "name": "Junior y Mayores",
+      "age_range": "18-25"
+    },
+    {
+      "name": "Master 1",
+      "age_range": "26 - 39"
+    },
+    {
+      "name": "Master 2",
+      "age_range": "40 - 80"
+    }
+  ],
+  "event_order": [
+    "200 mts libres Infantil A - Master",
+    "15 mts pat de libre Menores 1",
+    "25 mts pat de libre Menores 2-3",
+    "100 mts mariposa Infantil A - Master",
+    "15 mts pat de espalda Menores 1",
+    "25 mts pat de espalda Menores 2-3",
+    "100 mts libre Infantil A - Master",
+    "50 mts espalda Infantil A - Master",
+    "15 mts libre instintivo Menores 1",
+    "25 mts libre Menores 2-3",
+    "100 mts pecho Infantil A - Master",
+    "25 mts espalda Menores 2-3",
+    "50 mts mariposa Infantil A - Master",
+    "100 mts espalda Infantil A - Master",
+    "25 mts pecho Menores 2-3",
+    "50 mts pecho Infantil A - Master",
+    "50 mts libre Menores 2-3",
+    "50 mts libre Infantil A - Master"
+  ],
+  "category_events": {
+    "Menores 1": [
+      "15 mts pat de libre Menores 1",
+      "15 mts pat de espalda Menores 1",
+      "15 mts libre instintivo Menores 1"
+    ],
+    "Menores 2": [
+      "25 mts pat de libre Menores 2-3",
+      "25 mts pat de espalda Menores 2-3",
+      "25 mts libre Menores 2-3",
+      "25 mts espalda Menores 2-3",
+      "25 mts pecho Menores 2-3",
+      "50 mts libre Menores 2-3"
+    ],
+    "Menores 3": [
+      "25 mts pat de libre Menores 2-3",
+      "25 mts pat de espalda Menores 2-3",
+      "25 mts libre Menores 2-3",
+      "25 mts espalda Menores 2-3",
+      "25 mts pecho Menores 2-3",
+      "50 mts libre Menores 2-3"
+    ],
+    "Infantil A": [
+      "200 mts libres Infantil A - Master",
+      "100 mts mariposa Infantil A - Master",
+      "100 mts libre Infantil A - Master",
+      "50 mts espalda Infantil A - Master",
+      "100 mts pecho Infantil A - Master",
+      "50 mts mariposa Infantil A - Master",
+      "100 mts espalda Infantil A - Master",
+      "50 mts pecho Infantil A - Master",
+      "50 mts libre Infantil A - Master"
+    ],
+    "Infantil B": [
+      "200 mts libres Infantil A - Master",
+      "100 mts mariposa Infantil A - Master",
+      "100 mts libre Infantil A - Master",
+      "50 mts espalda Infantil A - Master",
+      "100 mts pecho Infantil A - Master",
+      "50 mts mariposa Infantil A - Master",
+      "100 mts espalda Infantil A - Master",
+      "50 mts pecho Infantil A - Master",
+      "50 mts libre Infantil A - Master"
+    ],
+    "Juvenil A": [
+      "200 mts libres Infantil A - Master",
+      "100 mts mariposa Infantil A - Master",
+      "100 mts libre Infantil A - Master",
+      "50 mts espalda Infantil A - Master",
+      "100 mts pecho Infantil A - Master",
+      "50 mts mariposa Infantil A - Master",
+      "100 mts espalda Infantil A - Master",
+      "50 mts pecho Infantil A - Master",
+      "50 mts libre Infantil A - Master"
+    ],
+    "Juvenil B": [
+      "200 mts libres Infantil A - Master",
+      "100 mts mariposa Infantil A - Master",
+      "100 mts libre Infantil A - Master",
+      "50 mts espalda Infantil A - Master",
+      "100 mts pecho Infantil A - Master",
+      "50 mts mariposa Infantil A - Master",
+      "100 mts espalda Infantil A - Master",
+      "50 mts pecho Infantil A - Master",
+      "50 mts libre Infantil A - Master"
+    ],
+    "Junior y Mayores": [
+      "200 mts libres Infantil A - Master",
+      "100 mts mariposa Infantil A - Master",
+      "100 mts libre Infantil A - Master",
+      "50 mts espalda Infantil A - Master",
+      "100 mts pecho Infantil A - Master",
+      "50 mts mariposa Infantil A - Master",
+      "100 mts espalda Infantil A - Master",
+      "50 mts pecho Infantil A - Master",
+      "50 mts libre Infantil A - Master"
+    ],
+    "Master 1": [
+      "200 mts libres Infantil A - Master",
+      "100 mts mariposa Infantil A - Master",
+      "100 mts libre Infantil A - Master",
+      "50 mts espalda Infantil A - Master",
+      "100 mts pecho Infantil A - Master",
+      "50 mts mariposa Infantil A - Master",
+      "100 mts espalda Infantil A - Master",
+      "50 mts pecho Infantil A - Master",
+      "50 mts libre Infantil A - Master"
+    ],
+    "Master 2": [
+      "200 mts libres Infantil A - Master",
+      "100 mts mariposa Infantil A - Master",
+      "100 mts libre Infantil A - Master",
+      "50 mts espalda Infantil A - Master",
+      "100 mts pecho Infantil A - Master",
+      "50 mts mariposa Infantil A - Master",
+      "100 mts espalda Infantil A - Master",
+      "50 mts pecho Infantil A - Master",
+      "50 mts libre Infantil A - Master"
+    ]
+  },
+  "min_age": 5,
+  "max_age": 80,
+  "swimmer_fee": 80000,
+  "team_fee": 30000,
+  "welcome_message": "",
+  "farewell_message": "",
+  "event_logo": "FESTI-TORNEO_DE_ANIVERSARIO_EL_NADADOR_MAS_RAPIDO_-_NNG_2026_logo.png",
+  "start_date": "2026-09-13",
+  "end_date": "2026-09-13",
+  "age_criteria": "december_31",
+  "created_date": "2026-09-12T10:32:12.407025",
+  "modified_date": "2026-09-12T10:32:12.407025"
+}

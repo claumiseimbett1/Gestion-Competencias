@@ -354,16 +354,183 @@ class EventManager:
         text = str(value).strip().lower()
         return text in {'si', 'sí', 'yes', 'y', 'true', '1', 'x', 'ok'}
 
-    def load_event_order_from_excel(self, uploaded_file, only_marked=True):
+    @staticmethod
+    def _normalize_label(value):
+        import re
+        text = str(value or '').upper().strip()
+        text = (text.replace('Á', 'A').replace('É', 'E').replace('Í', 'I')
+                    .replace('Ó', 'O').replace('Ú', 'U'))
+        return re.sub(r'\s+', ' ', text)
+
+    def match_categories_for_event(self, event_name, category_names):
+        """Deduce categorías cubiertas por el nombre de la prueba."""
+        import re
+        if not event_name or not category_names:
+            return []
+
+        event_norm = self._normalize_label(event_name)
+        matched = []
+
+        def stage_key(cat_norm):
+            if 'MENORES' in cat_norm:
+                m2 = re.search(r'MENORES\s*(\d+)', cat_norm)
+                return (0, int(m2.group(1)) if m2 else 0)
+            if 'INFANTIL A' in cat_norm:
+                return (1, 0)
+            if 'INFANTIL B' in cat_norm:
+                return (1, 1)
+            if 'JUVENIL A' in cat_norm:
+                return (2, 0)
+            if 'JUVENIL B' in cat_norm:
+                return (2, 1)
+            if 'JUNIOR' in cat_norm or cat_norm == 'MAYORES':
+                return (3, 0)
+            if 'MASTER' in cat_norm:
+                m2 = re.search(r'MASTER\s*([12ABC])', cat_norm)
+                letter = m2.group(1) if m2 else '1'
+                order = {'1': 0, 'A': 0, '2': 1, 'B': 1, '3': 2, 'C': 2}.get(letter, 0)
+                return (4, order)
+            return (99, 0)
+
+        def token_key(token):
+            t = self._normalize_label(token)
+            if t == 'MASTER':
+                t = 'MASTER 2'
+            if t == 'JUNIOR':
+                t = 'JUNIOR Y MAYORES'
+            if t == 'MAYORES':
+                t = 'JUNIOR Y MAYORES'
+            return stage_key(t)
+
+        # 1) Rango numérico: "Menores 2-3"
+        m = re.search(r'\b(MENORES|INFANTIL|JUVENIL|MASTER)\s*(\d+)\s*[-–]\s*(\d+)\b', event_norm)
+        if m:
+            prefix, a, b = m.group(1), int(m.group(2)), int(m.group(3))
+            lo, hi = min(a, b), max(a, b)
+            for cat in category_names:
+                cat_norm = self._normalize_label(cat)
+                cm = re.search(rf'\b{prefix}\s*(\d+)\b', cat_norm)
+                if cm and lo <= int(cm.group(1)) <= hi:
+                    matched.append(cat)
+            if matched:
+                return matched
+
+        # 2) Rango por etapas: "INFANTIL A - MASTER"
+        span = re.search(
+            r'\b(MENORES\s*\d*|INFANTIL\s*[AB]|JUVENIL\s*[AB]|JUNIOR(?:\s*Y\s*MAYORES)?|MAYORES|MASTER(?:\s*[12ABC])?)'
+            r'\s*[-–]\s*'
+            r'(MENORES\s*\d*|INFANTIL\s*[AB]|JUVENIL\s*[AB]|JUNIOR(?:\s*Y\s*MAYORES)?|MAYORES|MASTER(?:\s*[12ABC])?)\b',
+            event_norm,
+        )
+        if span:
+            start_k, end_k = token_key(span.group(1)), token_key(span.group(2))
+            lo, hi = min(start_k, end_k), max(start_k, end_k)
+            for cat in category_names:
+                if lo <= stage_key(self._normalize_label(cat)) <= hi:
+                    matched.append(cat)
+            if matched:
+                return matched
+
+        # 3) Contención directa del nombre de categoría
+        for cat in category_names:
+            cat_norm = self._normalize_label(cat)
+            if cat_norm and cat_norm in event_norm:
+                matched.append(cat)
+        if matched:
+            return matched
+
+        return []
+
+    def infer_category_events_from_order(self, categories, event_order):
+        """Arma category_events coherente con categories + event_order."""
+        cat_names = [c['name'] if isinstance(c, dict) else str(c) for c in (categories or [])]
+        result = {name: [] for name in cat_names}
+        for event in event_order or []:
+            for cat in self.match_categories_for_event(event, cat_names):
+                if event not in result[cat]:
+                    result[cat].append(event)
+        return result
+
+    def load_category_events_from_excel(self, uploaded_file, event_order, categories):
+        """Lee Asignacion por categoria o infiere desde nombres de prueba."""
+        from planilla_utils import normalize_prueba_name
+        import re
+
+        cat_names = [c['name'] if isinstance(c, dict) else str(c) for c in (categories or [])]
+        order_map = {self._normalize_label(e): e for e in (event_order or [])}
+        inferred = self.infer_category_events_from_order(categories, event_order)
+
+        try:
+            xl = pd.ExcelFile(uploaded_file)
+        except Exception:
+            return inferred, 'inferido'
+
+        assign_sheet = None
+        for name in xl.sheet_names:
+            low = str(name).lower()
+            if 'asign' in low or ('categ' in low and 'orden' not in low):
+                assign_sheet = name
+                break
+        if not assign_sheet:
+            return inferred, 'inferido'
+
+        df = pd.read_excel(xl, sheet_name=assign_sheet)
+        if df.empty:
+            return inferred, 'inferido'
+
+        cat_col = pruebas_col = None
+        for col in df.columns:
+            low = str(col).lower()
+            if cat_col is None and ('categ' in low or low == 'nombre'):
+                cat_col = col
+            elif pruebas_col is None and ('prueba' in low or 'evento' in low):
+                pruebas_col = col
+        if not cat_col or not pruebas_col:
+            return inferred, 'inferido'
+
+        loaded = {name: [] for name in cat_names}
+        hits = 0
+        for _, row in df.iterrows():
+            raw_cat, raw_pruebas = row.get(cat_col), row.get(pruebas_col)
+            if pd.isna(raw_cat) or pd.isna(raw_pruebas):
+                continue
+            cat_norm = self._normalize_label(raw_cat)
+            cat_key = None
+            for name in cat_names:
+                n = self._normalize_label(name)
+                if n == cat_norm or n.replace('-', ' ') == cat_norm.replace('-', ' '):
+                    cat_key = name
+                    break
+                if cat_norm in n or n in cat_norm:
+                    cat_key = name
+                    break
+            if not cat_key:
+                continue
+            for part in re.split(r'[,;|/]', str(raw_pruebas)):
+                name = normalize_prueba_name(part.strip())
+                if not name:
+                    continue
+                canonical = order_map.get(self._normalize_label(name))
+                if not canonical:
+                    needle = self._normalize_label(name)
+                    for ev_norm, ev in order_map.items():
+                        if needle in ev_norm or ev_norm in needle:
+                            canonical = ev
+                            break
+                if canonical and canonical not in loaded[cat_key]:
+                    loaded[cat_key].append(canonical)
+                    hits += 1
+
+        if hits >= max(1, len(event_order or []) // 2):
+            for name in cat_names:
+                if not loaded.get(name) and inferred.get(name):
+                    loaded[name] = list(inferred[name])
+            return loaded, assign_sheet
+        return inferred, 'inferido (Excel desactualizado)'
+
+    def load_event_order_from_excel(self, uploaded_file, only_marked=True, categories=None):
         """
-        Cargar orden de pruebas desde Excel.
-
-        Columnas flexibles:
-        - Orden / Order / #
-        - Prueba / Prueba sistema / Evento / Nombre
-        - En app actual / Incluir / Activo (opcional): Si/Yes/1
-
-        Si hay varias hojas, usa preferentemente \"Orden evento\".
+        Cargar orden de pruebas + asignación por categoría desde Excel.
         """
         try:
             from planilla_utils import normalize_prueba_name
@@ -377,10 +544,7 @@ class EventManager:
             if df.empty:
                 return False, f"La hoja '{sheet}' está vacía"
 
-            order_col = None
-            prueba_col = None
-            include_col = None
-
+            order_col = prueba_col = include_col = None
             for col in df.columns:
                 col_lower = str(col).lower().strip()
                 if order_col is None and (
@@ -389,16 +553,16 @@ class EventManager:
                 ):
                     order_col = col
                 elif prueba_col is None and any(
-                    key in col_lower
-                    for key in (
+                    key in col_lower for key in (
                         'prueba sistema', 'nombre en sistema', 'prueba', 'evento',
                         'event', 'nombre', 'prueba pdf'
                     )
                 ):
                     prueba_col = col
                 elif include_col is None and any(
-                    key in col_lower
-                    for key in ('en app', 'incluir', 'activo', 'usar', 'seleccion', 'selección')
+                    key in col_lower for key in (
+                        'en app', 'incluir', 'activo', 'usar', 'seleccion', 'selección'
+                    )
                 ):
                     include_col = col
 
@@ -433,7 +597,7 @@ class EventManager:
             if not rows:
                 hint = ""
                 if include_col is not None and only_marked:
-                    hint = " (revisa la columna de inclusión: Si/Yes/1)"
+                    hint = " (revisa Si/Incluir, o desmarca el filtro)"
                 return False, f"No se encontraron pruebas válidas en '{sheet}'{hint}"
 
             rows.sort(key=lambda item: (item[0], item[1]))
@@ -446,9 +610,16 @@ class EventManager:
                 seen.add(key)
                 event_order.append(name)
 
+            cats = categories if categories is not None else self.get_categories()
+            category_events, assign_source = self.load_category_events_from_excel(
+                uploaded_file, event_order, cats
+            )
+
             return True, {
                 'event_order': event_order,
+                'category_events': category_events,
                 'sheet': sheet,
+                'assign_source': assign_source,
                 'count': len(event_order),
             }
 
@@ -472,9 +643,21 @@ class EventManager:
         return None
 
     def get_events_for_category(self, category_name):
-        """Obtener pruebas asignadas a una categoría específica"""
+        """Obtener pruebas asignadas a una categoría (match flexible de nombre)."""
         category_events = self.get_category_events()
-        return category_events.get(category_name, [])
+        if not category_name:
+            return []
+        if category_name in category_events:
+            return list(category_events.get(category_name, []))
+
+        target = self._normalize_label(category_name)
+        for key, events in category_events.items():
+            key_norm = self._normalize_label(key)
+            if key_norm == target:
+                return list(events)
+            if key_norm.replace('-', ' ') == target.replace('-', ' '):
+                return list(events)
+        return []
 
     def assign_events_to_category(self, category_name, events):
         """Asignar pruebas a una categoría"""
@@ -541,12 +724,30 @@ class EventManager:
 
     def get_available_events_for_swimmer(self, category_name, swimmer_age=None):
         """Obtener las pruebas disponibles para un nadador según su categoría y edad"""
+        from_category = False
         if not category_name:
             available_events = self.get_selected_events()
         else:
             available_events = self.get_events_for_category(category_name)
+            from_category = bool(available_events)
+            if not available_events:
+                inferred = self.infer_category_events_from_order(
+                    self.get_categories(), self.get_selected_events()
+                )
+                available_events = list(inferred.get(category_name, []))
+                if not available_events:
+                    target = self._normalize_label(category_name)
+                    for key, evs in inferred.items():
+                        if self._normalize_label(key) == target:
+                            available_events = list(evs)
+                            break
+                from_category = bool(available_events)
 
-        # Filtrar por edad si se proporciona
+        # category_events es la autoridad: no filtrar por catálogo de edades
+        # (rompe pruebas custom como "15 mts ... Menores 1" para edad 5).
+        if from_category:
+            return available_events
+
         if swimmer_age is not None:
             available_events = self.filter_events_by_age(available_events, swimmer_age)
 
@@ -598,18 +799,32 @@ class EventManager:
 
     def _base_prueba_min_age(self, prueba_base):
         """Edad mínima según la prueba base (distancia/estilo)."""
+        import re
         base = str(prueba_base).upper()
+        base = base.replace('METROS', 'M').replace('MTS', 'M').replace('MT', 'M')
+        base = re.sub(r'\s+', ' ', base)
+
+        # Distancia corta / iniciación
+        if re.search(r'\b15\s*M\b', base) or 'INSTINTIVO' in base:
+            return 5
+        if 'PATADA' in base or re.search(r'\bPAT\b', base) or 'PAT DE' in base:
+            return 5
+        if 'CON TABLA' in base:
+            return 5
+
         rules = [
             ("25M PATADA", 5), ("25M LIBRE CON TABLA", 5), ("25M LIBRE INSTINTIVO", 5),
-            ("25M LIBRE", 6), ("25M PECHO", 6), ("25M MARIPOSA", 6),
+            ("25M LIBRE", 6), ("25M PECHO", 6), ("25M MARIPOSA", 6), ("25M ESPALDA", 6),
             ("50M LIBRE CON ALETAS", 8), ("50M MARIPOSA", 8),
             ("50M LIBRE", 6), ("50M ESPALDA", 6), ("50M PECHO", 7),
-            ("100M LIBRE", 8),
+            ("100M LIBRE", 8), ("100M", 8), ("200M", 10), ("400M", 10),
         ]
         for key, min_age in sorted(rules, key=lambda x: -len(x[0])):
-            if key in base:
+            if key in base.replace(' ', ''):
                 return min_age
-        return 6
+            if key.replace('M', ' M') in base or key in base:
+                return min_age
+        return 5  # default permisivo para pruebas custom del programa
 
     def get_event_age_restriction(self, event_name):
         """Obtener la restricción de edad para un evento específico"""
