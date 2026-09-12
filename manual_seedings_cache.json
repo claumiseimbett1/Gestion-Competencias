@@ -1,0 +1,182 @@
+{
+  "manual_seeding_200 mts libres Infantil A - Master_Todos": {
+    "evento": "200 mts libres Infantil A - Master",
+    "genero": "Todos",
+    "prueba_num": 1,
+    "titulo": "PRUEBA 1 200 mts libres Infantil A - Master",
+    "series": [
+      {
+        "serie": 1,
+        "carriles": [
+          {
+            "id": 55,
+            "nombre": "Nicolas Jaraba Mercado",
+            "equipo": "MASTER",
+            "edad": 12,
+            "categoria": "Infantil B",
+            "sexo": "Masculino",
+            "tiempo": "03:10.97",
+            "tiempo_en_segundos": 190.97
+          },
+          {
+            "id": 85,
+            "nombre": "Libardo Pinzón Vivas",
+            "equipo": "MASTER",
+            "edad": 53,
+            "categoria": "Master 2",
+            "sexo": "Masculino",
+            "tiempo": "03:00.00",
+            "tiempo_en_segundos": 180.0
+          },
+          {
+            "id": 33,
+            "nombre": "SARAY BERROCAL",
+            "equipo": "NNG",
+            "edad": 15,
+            "categoria": "Juvenil A",
+            "sexo": "Femenino",
+            "tiempo": "02:56.23",
+            "tiempo_en_segundos": 176.23
+          },
+          {
+            "id": 78,
+            "nombre": "YOSED CAMILO PEREZ MOLINA",
+            "equipo": "NNG",
+            "edad": 19,
+            "categoria": "Junior y Mayores",
+            "sexo": "Masculino",
+            "tiempo": "02:03.15",
+            "tiempo_en_segundos": 123.15
+          },
+          {
+            "id": 69,
+            "nombre": "SEBASTIAN BURGOS CALAO",
+            "equipo": "NNG",
+            "edad": 15,
+            "categoria": "Juvenil A",
+            "sexo": "Masculino",
+            "tiempo": "02:30.25",
+            "tiempo_en_segundos": 150.25
+          },
+          {
+            "id": 72,
+            "nombre": "Raul Hoyos Ruiz",
+            "equipo": "MASTER",
+            "edad": 16,
+            "categoria": "Juvenil B",
+            "sexo": "Masculino",
+            "tiempo": "03:00.00",
+            "tiempo_en_segundos": 180.0
+          },
+          {
+            "id": 60,
+            "nombre": "JUAN PABLO GONZALEZ",
+            "equipo": "MASTER",
+            "edad": 13,
+            "categoria": "Infantil B",
+            "sexo": "Masculino",
+            "tiempo": "03:05.00",
+            "tiempo_en_segundos": 185.0
+          },
+          {
+            "id": 59,
+            "nombre": "SAMUEL MOVILLA LOPEZ",
+            "equipo": "NNG",
+            "edad": 12,
+            "categoria": "Infantil B",
+            "sexo": "Masculino",
+            "tiempo": "03:30.26",
+            "tiempo_en_segundos": 210.26
+          }
+        ]
+      },
+      {
+        "serie": 2,
+        "carriles": [
+          {
+            "id": 81,
+            "nombre": "CARLOS CABRALES",
+            "equipo": "NNG",
+            "edad": 26,
+            "categoria": "Master 1",
+            "sexo": "Masculino",
+            "tiempo": "s/t",
+            "tiempo_en_segundos": null
+          },
+          {
+            "id": 37,
+            "nombre": "MANUELA RODRIGUEZ",
+            "equipo": "NNG",
+            "edad": 28,
+            "categoria": "Master 1",
+            "sexo": "Femenino",
+            "tiempo": "s/t",
+            "tiempo_en_segundos": null
+          },
+          {
+            "id": 35,
+            "nombre": "ANDRETH IVONNE MOVILLA VASQUEZ",
+            "equipo": "SWIMMERS",
+            "edad": 20,
+            "categoria": "Junior y Mayores",
+            "sexo": "Femenino",
+            "tiempo": "s/t",
+            "tiempo_en_segundos": null
+          },
+          {
+            "id": 14,
+            "nombre": "Kaylen Jireth Núñez Hernández",
+            "equipo": "MASTER",
+            "edad": 10,
+            "categoria": "Infantil A",
+            "sexo": "Femenino",
+            "tiempo": "04:15.00",
+            "tiempo_en_segundos": 255.0
+          },
+          {
+            "id": 84,
+            "nombre": "ALEX GIRALDO",
+            "equipo": "NNG",
+            "edad": 49,
+            "categoria": "Master 2",
+            "sexo": "Masculino",
+            "tiempo": "04:20.36",
+            "tiempo_en_segundos": 260.36
+          },
+          {
+            "id": 36,
+            "nombre": "VALENTINA BURGOS",
+            "equipo": "NNG",
+            "edad": 24,
+            "categoria": "Junior y Mayores",
+            "sexo": "Femenino",
+            "tiempo": "s/t",
+            "tiempo_en_segundos": null
+          },
+          {
+            "id": 77,
+            "nombre": "LIAM YESID  RAMOS ARRIETA",
+            "equipo": "SWIMMERS",
+            "edad": 19,
+            "categoria": "Junior y Mayores",
+            "sexo": "Masculino",
+            "tiempo": "s/t",
+            "tiempo_en_segundos": null
+          },
+          {
+            "id": 86,
+            "nombre": "Claudia Serpa",
+            "equipo": "MASTER",
+            "edad": 46,
+            "categoria": "Master 2",
+            "sexo": "Femenino",
+            "tiempo": "s/t",
+            "tiempo_en_segundos": null
+          }
+        ]
+      }
+    ],
+    "nadadores_disponibles": [],
+    "total_nadadores": 16
+  }
+}

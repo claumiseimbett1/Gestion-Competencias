@@ -7,12 +7,15 @@ from planilla_utils import (
     ordered_prueba_hoja_keys,
     titulo_prueba_numerada,
     safe_excel_sheet_title,
+    standard_lane_order,
+    clamp_pool_lanes,
+    DEFAULT_POOL_LANES,
 )
 from openpyxl import Workbook
 from openpyxl.styles import Font
 
 ARCHIVO_SALIDA_TIEMPO = 'sembrado_competencia_POR_TIEMPO.xlsx'
-CARRILES_PISCINA = 8
+CARRILES_PISCINA = DEFAULT_POOL_LANES
 
 # Funciones de ayuda
 def parse_time(time_val):
@@ -28,8 +31,9 @@ def parse_time(time_val):
         return float(time_str)
     except (ValueError, IndexError): return float('inf')
 
-def seed_series(swimmers, lanes=8):
-    lane_order = [4, 5, 3, 6, 2, 7, 1, 8]
+def seed_series(swimmers, lanes=None):
+    lanes = clamp_pool_lanes(lanes if lanes is not None else CARRILES_PISCINA)
+    lane_order = standard_lane_order(lanes)
     num_swimmers = len(swimmers)
     if num_swimmers == 0: return []
     num_series = math.ceil(num_swimmers / lanes)
@@ -84,45 +88,61 @@ def _write_sembrado_sheet_por_tiempo(ws, titulo_prueba, series_list):
 
     ws.column_dimensions['B'].width = 40
 
-def main():
-    print("Iniciando sembrado por TIEMPO (versión corregida)...")
+def build_sembrado_data(archivo_entrada='planilla_inscripcion.xlsx', lanes=None):
+    """
+    Calcula el sembrado por tiempo.
+    Retorna (sembrado_final, event_cols) o (None, mensaje_error).
+    sembrado_final[nombre_prueba] = {series: [...]}
+    """
+    lanes = clamp_pool_lanes(lanes if lanes is not None else CARRILES_PISCINA)
     try:
-        df = pd.read_excel('planilla_inscripcion.xlsx')
+        df = pd.read_excel(archivo_entrada)
         info_cols = ['NOMBRE Y AP', 'EQUIPO', 'EDAD', 'CAT.', 'SEXO']
-        event_cols = [col for col in df.columns if col not in info_cols and 'Nø' not in col and 'FECHA DE NA' not in col]
+        event_cols = [
+            col for col in df.columns
+            if col not in info_cols and 'Nø' not in col and 'FECHA DE NA' not in col
+        ]
     except Exception as e:
-        print(f"Error al leer el archivo de Excel: {e}")
-        return
+        return None, f"Error al leer el archivo de Excel: {e}"
 
     eventos = {}
     for index, row in df.iterrows():
-        if pd.isna(row['NOMBRE Y AP']): continue
-        sexo = row['SEXO'].upper()
-        
+        if pd.isna(row['NOMBRE Y AP']):
+            continue
+        sexo = str(row['SEXO']).upper()
+
         for prueba in event_cols:
             if inscrito_en_prueba(row[prueba]):
                 nombre_prueba = f"{prueba} - {'Mujeres' if sexo == 'F' else 'Hombres'}"
-                if nombre_prueba not in eventos: eventos[nombre_prueba] = []
-                
+                if nombre_prueba not in eventos:
+                    eventos[nombre_prueba] = []
+
                 nadador_info = {
-                    "nombre": row['NOMBRE Y AP'], "equipo": row['EQUIPO'], "edad": int(row['EDAD']),
-                    "categoria": row['CAT.'], # <-- ¡CORRECCIÓN CLAVE!
-                    "tiempo_inscripcion": row[prueba], "tiempo_en_segundos": parse_time(row[prueba])
+                    "nombre": row['NOMBRE Y AP'],
+                    "equipo": row['EQUIPO'],
+                    "edad": int(row['EDAD']),
+                    "categoria": row['CAT.'],
+                    "tiempo_inscripcion": row[prueba],
+                    "tiempo_en_segundos": parse_time(row[prueba]),
                 }
                 eventos[nombre_prueba].append(nadador_info)
 
     sembrado_final = {}
     for nombre_prueba, nadadores in eventos.items():
-        sembrado_final[nombre_prueba] = {"series": seed_series(nadadores, CARRILES_PISCINA)}
+        sembrado_final[nombre_prueba] = {"series": seed_series(nadadores, lanes)}
 
+    return sembrado_final, event_cols
+
+
+def write_sembrado_excel(sembrado_final, event_cols, archivo_salida=ARCHIVO_SALIDA_TIEMPO):
+    """Escribe sembrado_competencia_POR_TIEMPO.xlsx (una hoja por prueba)."""
     wb = Workbook()
     if not sembrado_final:
         ws = wb.active
         ws.title = "Sin datos"
         ws.cell(row=1, column=1, value="No hay nadadores inscritos para generar sembrado.")
-        wb.save(ARCHIVO_SALIDA_TIEMPO)
-        print(f"Archivo '{ARCHIVO_SALIDA_TIEMPO}' generado (sin datos).")
-        return
+        wb.save(archivo_salida)
+        return archivo_salida
 
     used_titles = set()
     first_sheet = True
@@ -139,11 +159,30 @@ def main():
             ws = wb.create_sheet(title=sheet_title)
         _write_sembrado_sheet_por_tiempo(ws, titulo_hoja, data_prueba['series'])
 
-    wb.save(ARCHIVO_SALIDA_TIEMPO)
-    print(f"¡Éxito! Archivo '{ARCHIVO_SALIDA_TIEMPO}' generado: una hoja por prueba ({len(sembrado_final)} hojas).")
+    wb.save(archivo_salida)
+    return archivo_salida
 
-def get_seeding_data():
+
+def main(lanes=None):
+    print("Iniciando sembrado por TIEMPO (versión corregida)...")
+    result = build_sembrado_data(lanes=lanes)
+    if result[0] is None:
+        print(result[1])
+        return
+
+    sembrado_final, event_cols = result
+    write_sembrado_excel(sembrado_final, event_cols)
+    if not sembrado_final:
+        print(f"Archivo '{ARCHIVO_SALIDA_TIEMPO}' generado (sin datos).")
+    else:
+        print(
+            f"¡Éxito! Archivo '{ARCHIVO_SALIDA_TIEMPO}' generado: "
+            f"una hoja por prueba ({len(sembrado_final)} hojas)."
+        )
+
+def get_seeding_data(lanes=None):
     """Retorna los datos del sembrado para visualización sin generar archivo"""
+    lanes = clamp_pool_lanes(lanes if lanes is not None else CARRILES_PISCINA)
     try:
         df = pd.read_excel('planilla_inscripcion.xlsx')
         info_cols = ['NOMBRE Y AP', 'EQUIPO', 'EDAD', 'CAT.', 'SEXO']
@@ -170,15 +209,15 @@ def get_seeding_data():
 
     sembrado_final = {}
     for nombre_prueba, nadadores in eventos.items():
-        sembrado_final[nombre_prueba] = {"series": seed_series(nadadores, CARRILES_PISCINA)}
+        sembrado_final[nombre_prueba] = {"series": seed_series(nadadores, lanes)}
 
     ordered_keys = ordered_prueba_hoja_keys(sembrado_final, event_cols)
     sembrado_ordenado = {k: sembrado_final[k] for k in ordered_keys}
     return sembrado_ordenado, "Sembrado generado exitosamente"
 
-def main_full():
+def main_full(lanes=None):
     """Función completa para usar desde app.py"""
-    main()
+    main(lanes=lanes)
 
 if __name__ == "__main__":
     main()

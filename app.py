@@ -19,6 +19,11 @@ from planilla_utils import (
     titulo_prueba_numerada,
     build_manual_seeding_title,
     get_manual_prueba_number,
+    standard_lane_order,
+    clamp_pool_lanes,
+    DEFAULT_POOL_LANES,
+    MIN_POOL_LANES,
+    MAX_POOL_LANES,
 )
 
 # Importar el módulo de inscripción con el nuevo nombre
@@ -1325,6 +1330,9 @@ def generar_sembrado_categoria():
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
             
+            # Sección de descarga en formatos del sembrado manual
+            render_auto_sembrado_format_downloads('categoria', 'legacy_cat')
+
             # Sección de papeletas para jueces
             st.markdown("### 📋 Generar Papeletas para Jueces")
             st.info("Usa el sembrado manual guardado (series y carriles). No modifica tu sembrado.")
@@ -1419,6 +1427,9 @@ def generar_sembrado_tiempo():
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
             
+            # Sección de descarga en formatos del sembrado manual
+            render_auto_sembrado_format_downloads('tiempo', 'legacy_tiempo')
+
             # Sección de papeletas para jueces
             st.markdown("### 📋 Generar Papeletas para Jueces")
             st.info("Usa el sembrado manual guardado (series y carriles). No modifica tu sembrado.")
@@ -1620,24 +1631,26 @@ def get_swimmers_for_manual_seeding(df, event_col, gender_filter):
     return swimmers
 
 
-def build_initial_manual_seeding(swimmers_list, event_col, gender_filter, event_cols):
-    """Sembrado automático inicial (series de 8, carriles estándar)."""
+def build_initial_manual_seeding(swimmers_list, event_col, gender_filter, event_cols, lanes=None):
+    """Sembrado automático inicial (series según carriles de piscina)."""
+    lanes = clamp_pool_lanes(
+        lanes if lanes is not None else get_pool_lanes()
+    )
     sorted_swimmers = sorted(
         swimmers_list,
         key=lambda x: x.get('tiempo_en_segundos', script1.parse_time(x['tiempo'])),
     )
 
     series = []
-    swimmers_per_series = 8
-    num_series = (len(sorted_swimmers) + swimmers_per_series - 1) // swimmers_per_series
+    num_series = (len(sorted_swimmers) + lanes - 1) // lanes if sorted_swimmers else 0
+    lane_assignment = standard_lane_order(lanes)
 
     for serie_num in range(num_series):
         serie_swimmers = sorted_swimmers[
-            serie_num * swimmers_per_series:(serie_num + 1) * swimmers_per_series
+            serie_num * lanes:(serie_num + 1) * lanes
         ]
-        lane_assignment = [4, 5, 3, 6, 2, 7, 1, 8]
 
-        serie = {"serie": serie_num + 1, "carriles": [None] * 8}
+        serie = {"serie": serie_num + 1, "carriles": [None] * lanes}
         for i, swimmer in enumerate(serie_swimmers):
             if i < len(lane_assignment):
                 lane_idx = lane_assignment[i] - 1
@@ -1653,7 +1666,33 @@ def build_initial_manual_seeding(swimmers_list, event_col, gender_filter, event_
         'series': series,
         'nadadores_disponibles': [],
         'total_nadadores': len(swimmers_list),
+        'carriles_piscina': lanes,
     }
+
+
+def get_pool_lanes(session_state=None):
+    """Carriles configurados para el sembrado (sesión o valor por defecto)."""
+    state = session_state if session_state is not None else st.session_state
+    return clamp_pool_lanes(state.get('carriles_piscina', DEFAULT_POOL_LANES))
+
+
+def render_pool_lanes_selector():
+    """Pregunta el número de carriles antes de generar cualquier sembrado."""
+    st.markdown("#### 🏊 Carriles de la piscina")
+    st.caption(
+        "Define cuántos carriles usar al generar sembrado por categoría, por tiempo o manual. "
+        f"Rango: {MIN_POOL_LANES}–{MAX_POOL_LANES}."
+    )
+    lanes = st.number_input(
+        "Número de carriles",
+        min_value=MIN_POOL_LANES,
+        max_value=MAX_POOL_LANES,
+        value=get_pool_lanes(),
+        step=1,
+        key="carriles_piscina",
+        help="Ej.: 6 u 8 según tu piscina. Afecta series y asignación centro→afuera.",
+    )
+    return clamp_pool_lanes(lanes)
 
 
 def manual_seeding_session_key(event_col, gender_filter):
@@ -2000,13 +2039,19 @@ def _parse_manual_seeding_worksheet(ws, df):
             parts = str(cell_val).strip().split()
             serie_num = int(parts[1]) if len(parts) > 1 else len(series) + 1
             row += 2  # fila de encabezados
-            carriles = [None] * 8
-            for lane_idx in range(8):
+            carriles = [None] * 10  # capacidad máxima; se recorta después
+            lanes_seen = 0
+            for lane_idx in range(10):
                 if row > max_row:
                     break
                 nombre = ws.cell(row=row, column=2).value
+                carril_num = ws.cell(row=row, column=1).value
+                # fin de serie si ya no hay fila de carril
+                if carril_num is None and nombre in (None, ''):
+                    break
                 if nombre in (None, ''):
                     row += 1
+                    lanes_seen = max(lanes_seen, lane_idx + 1)
                     continue
                 equipo = ws.cell(row=row, column=3).value
                 swimmer = {
@@ -2025,8 +2070,10 @@ def _parse_manual_seeding_worksheet(ws, df):
                         else 'Femenino'
                     )
                 carriles[lane_idx] = swimmer
+                lanes_seen = max(lanes_seen, lane_idx + 1)
                 row += 1
-            series.append({'serie': serie_num, 'carriles': carriles})
+            n_lanes = clamp_pool_lanes(lanes_seen or get_pool_lanes())
+            series.append({'serie': serie_num, 'carriles': carriles[:n_lanes]})
         else:
             row += 1
     return series
@@ -2251,12 +2298,15 @@ def list_expected_manual_pruebas(df, event_cols):
     return expected
 
 
-def seed_all_manual_pruebas(session_state, df, event_cols, overwrite=False):
+def seed_all_manual_pruebas(session_state, df, event_cols, overwrite=False, lanes=None):
     """
     Graba en sesión todas las pruebas con inscripciones.
     No modifica sembrados existentes. Si el evento ya tiene sembrado **Todos**
     (editado a mano), no crea copias automáticas M/F encima.
     """
+    lanes = clamp_pool_lanes(
+        lanes if lanes is not None else get_pool_lanes(session_state)
+    )
     created = 0
     kept = 0
     for event_col, gender_filter, _ in list_expected_manual_pruebas(df, event_cols):
@@ -2269,7 +2319,7 @@ def seed_all_manual_pruebas(session_state, df, event_cols, overwrite=False):
             continue
         swimmers = get_swimmers_for_manual_seeding(df, event_col, gender_filter)
         session_state[key] = build_initial_manual_seeding(
-            swimmers, event_col, gender_filter, event_cols
+            swimmers, event_col, gender_filter, event_cols, lanes=lanes
         )
         created += 1
     persist_manual_seedings(session_state, event_cols=event_cols)
@@ -2334,6 +2384,572 @@ def generate_all_manual_seedings_excel(seedings, event_order=None, two_columns=F
     return buffer.getvalue()
 
 
+def _format_auto_tiempo(tiempo_val):
+    if tiempo_val is None:
+        return ''
+    try:
+        if pd.isna(tiempo_val):
+            return ''
+    except (TypeError, ValueError):
+        pass
+    if hasattr(tiempo_val, 'strftime'):
+        try:
+            return tiempo_val.strftime('%M:%S.%f')[:-4]
+        except Exception:
+            pass
+    s = str(tiempo_val).strip()
+    return '' if s.lower() in ('nan', 'none', 'nat') else s
+
+
+def _normalize_auto_swimmer(nadador):
+    """Adapta nadador del sembrado auto al formato del PDF/Excel manual."""
+    if not nadador:
+        return None
+    tiempo = nadador.get('tiempo')
+    if tiempo in (None, ''):
+        tiempo = nadador.get('tiempo_inscripcion', '')
+    return {
+        'nombre': nadador.get('nombre', ''),
+        'equipo': nadador.get('equipo', ''),
+        'edad': nadador.get('edad', ''),
+        'categoria': nadador.get('categoria', ''),
+        'tiempo': _format_auto_tiempo(tiempo),
+        'tiempo_competencia': _format_auto_tiempo(nadador.get('tiempo_competencia', '')),
+        'tiempo_en_segundos': nadador.get('tiempo_en_segundos'),
+    }
+
+
+def _parse_auto_prueba_key(nombre_prueba):
+    """'50m LIBRE - Mujeres' → (evento, Femenino)."""
+    name = str(nombre_prueba)
+    if name.endswith(' - Mujeres'):
+        return name[: -len(' - Mujeres')], 'Femenino'
+    if name.endswith(' - Hombres'):
+        return name[: -len(' - Hombres')], 'Masculino'
+    return None, None
+
+
+def auto_sembrado_to_export_seedings(sembrado_final, event_cols, mode='tiempo', lanes=None):
+    """
+    Convierte sembrado por categoría/tiempo al formato de descarga del sembrado manual.
+    mode='categoria': sembrado_final[prueba] = [{categoria, series}, ...]
+    mode='tiempo': sembrado_final[prueba] = {series: [...]}
+    """
+    lanes = clamp_pool_lanes(
+        lanes if lanes is not None else get_pool_lanes()
+    )
+    seedings = []
+    for nombre_prueba, data in (sembrado_final or {}).items():
+        evento, genero = _parse_auto_prueba_key(nombre_prueba)
+        if not evento:
+            continue
+
+        series_out = []
+        if mode == 'categoria':
+            serie_num = 1
+            for cat_block in (data if isinstance(data, list) else []):
+                for serie in cat_block.get('series', []):
+                    series_out.append({
+                        'serie': serie_num,
+                        'carriles': [
+                            _normalize_auto_swimmer(s) for s in serie.get('carriles', [])
+                        ],
+                    })
+                    serie_num += 1
+        else:
+            series_list = data.get('series', []) if isinstance(data, dict) else []
+            for serie in series_list:
+                series_out.append({
+                    'serie': serie.get('serie'),
+                    'carriles': [
+                        _normalize_auto_swimmer(s) for s in serie.get('carriles', [])
+                    ],
+                })
+
+        if not series_out:
+            continue
+
+        titulo = build_manual_seeding_title(evento, genero, event_cols or [])
+        total = sum(1 for s in series_out for c in s['carriles'] if c)
+        seedings.append({
+            'evento': evento,
+            'genero': genero,
+            'data': {
+                'evento': evento,
+                'genero': genero,
+                'titulo': titulo,
+                'prueba_num': get_manual_prueba_number(evento, genero, event_cols or []),
+                'series': series_out,
+                'nadadores_disponibles': [],
+                'total_nadadores': total,
+                'editado_manual': False,
+                'modo': mode,
+                'carriles_piscina': lanes,
+            },
+        })
+    return seedings
+
+
+def auto_seeding_session_key(mode, evento, genero):
+    return f"auto_seeding_{mode}_{evento}_{genero}"
+
+
+def load_auto_seedings_into_session(session_state, mode, overwrite=False):
+    """
+    Carga sembrado por categoría/tiempo en session_state para edición manual.
+    No sobrescribe pruebas marcadas como editado_manual salvo overwrite=True.
+    """
+    seedings, event_cols, err = prepare_auto_sembrado_exports(mode)
+    if err:
+        return 0, 0, event_cols, err
+    if not seedings:
+        return 0, 0, event_cols, None
+
+    created = 0
+    kept = 0
+    for item in seedings:
+        key = auto_seeding_session_key(mode, item['evento'], item['genero'])
+        existing = session_state.get(key)
+        if (
+            existing
+            and isinstance(existing, dict)
+            and existing.get('editado_manual')
+            and not overwrite
+        ):
+            kept += 1
+            continue
+        if existing and not overwrite and not existing.get('editado_manual'):
+            # refrescar automático no editado
+            pass
+        data = dict(item['data'])
+        data['evento'] = item['evento']
+        data['genero'] = item['genero']
+        data.setdefault('nadadores_disponibles', [])
+        data['modo'] = mode
+        session_state[key] = data
+        created += 1
+    return created, kept, event_cols, None
+
+
+def get_auto_seedings_from_session(session_state, mode, event_cols=None):
+    """Lista sembrados editables del modo categoría/tiempo en sesión."""
+    from planilla_utils import sort_manual_seedings
+
+    prefix = f"auto_seeding_{mode}_"
+    seedings = []
+    for key, data in session_state.items():
+        if not str(key).startswith(prefix):
+            continue
+        if not isinstance(data, dict) or 'series' not in data:
+            continue
+        evento = data.get('evento')
+        genero = data.get('genero')
+        if not evento or not genero:
+            continue
+        seedings.append({'evento': evento, 'genero': genero, 'data': data})
+    return sort_manual_seedings(seedings, event_cols or [])
+
+
+def render_lane_seeding_editor(seeding_key, seeding_data, event_cols, key_prefix):
+    """
+    Editor de series/carriles (mismo flujo que sembrado manual):
+    mover, quitar, asignar, tiempos de competencia, nuevas series.
+    """
+    selected_event = seeding_data.get('evento')
+    gender_filter = seeding_data.get('genero', 'Todos')
+    lanes = clamp_pool_lanes(
+        seeding_data.get('carriles_piscina')
+        or (
+            max((len(s.get('carriles', [])) for s in seeding_data.get('series', [])), default=0)
+            or get_pool_lanes()
+        )
+    )
+    seeding_data['carriles_piscina'] = lanes
+
+    def _save_edit():
+        seeding_data['editado_manual'] = True
+        seeding_data['carriles_piscina'] = lanes
+        if not seeding_data.get('titulo'):
+            seeding_data['titulo'] = build_manual_seeding_title(
+                selected_event, gender_filter, event_cols or []
+            )
+        st.session_state[seeding_key] = seeding_data
+
+    st.markdown(f"#### 🎯 {seeding_data.get('titulo') or selected_event}")
+    st.caption(f"Carriles por serie: **{lanes}**")
+    if seeding_data.get('editado_manual'):
+        st.caption("✏️ Con cambios manuales (se conservan al regenerar salvo que fuerces overwrite).")
+
+    if seeding_data.get('nadadores_disponibles'):
+        st.markdown("##### 👥 Nadadores Disponibles")
+        cols_available = st.columns(min(len(seeding_data['nadadores_disponibles']), 4))
+        for i, swimmer in enumerate(seeding_data['nadadores_disponibles']):
+            with cols_available[i % 4]:
+                st.markdown(
+                    f"**{swimmer['nombre']}**<br>"
+                    f"<small>{swimmer.get('equipo', '')} - {swimmer.get('categoria', '')}</small>",
+                    unsafe_allow_html=True,
+                )
+
+    st.markdown("##### 🏊 Series y Carriles")
+    for serie_idx, serie in enumerate(seeding_data['series']):
+        st.markdown(f"**SERIE {serie['serie']}**")
+        while len(serie['carriles']) < lanes:
+            serie['carriles'].append(None)
+        if len(serie['carriles']) > lanes:
+            # conservar nadadores extra en disponibles
+            for extra in serie['carriles'][lanes:]:
+                if extra:
+                    seeding_data.setdefault('nadadores_disponibles', []).append(extra)
+            serie['carriles'] = serie['carriles'][:lanes]
+
+        lane_cols = st.columns(lanes)
+
+        for lane_idx in range(lanes):
+            with lane_cols[lane_idx]:
+                st.markdown(f"**Carril {lane_idx + 1}**")
+                current_swimmer = serie['carriles'][lane_idx]
+
+                if current_swimmer:
+                    st.markdown(
+                        f"**{current_swimmer.get('nombre', '')}**<br>"
+                        f"<small>{current_swimmer.get('equipo', '')} | "
+                        f"{current_swimmer.get('categoria', '')}</small>",
+                        unsafe_allow_html=True,
+                    )
+                    st.text_input(
+                        "T. Sembrado:",
+                        value=str(current_swimmer.get('tiempo', '')),
+                        key=f"{key_prefix}_seed_t_{serie_idx}_{lane_idx}",
+                        disabled=True,
+                    )
+                    current_comp = current_swimmer.get('tiempo_competencia', '') or ''
+                    new_comp = st.text_input(
+                        "T. Competencia:",
+                        value=current_comp,
+                        key=f"{key_prefix}_comp_t_{serie_idx}_{lane_idx}",
+                        placeholder="MM:SS.dd",
+                    )
+                    if new_comp != current_comp:
+                        seeding_data['series'][serie_idx]['carriles'][lane_idx]['tiempo_competencia'] = new_comp
+                        _save_edit()
+
+                    if st.button("❌", key=f"{key_prefix}_rm_{serie_idx}_{lane_idx}", help="Remover"):
+                        seeding_data.setdefault('nadadores_disponibles', []).append(current_swimmer)
+                        seeding_data['series'][serie_idx]['carriles'][lane_idx] = None
+                        _save_edit()
+                        st.rerun()
+                else:
+                    st.caption("🔘 Vacío")
+                    available = list(seeding_data.get('nadadores_disponibles') or [])
+                    for s_idx, s in enumerate(seeding_data['series']):
+                        for l_idx, swimmer in enumerate(s['carriles']):
+                            if swimmer and not (s_idx == serie_idx and l_idx == lane_idx):
+                                available.append({**swimmer, '_from_serie': s_idx, '_from_lane': l_idx})
+
+                    if available:
+                        options = ["Seleccionar…"] + [
+                            f"{s['nombre']} ({s.get('equipo', '')} - {s.get('categoria', '')})"
+                            for s in available
+                        ]
+                        sel = st.selectbox(
+                            "Asignar:",
+                            range(len(options)),
+                            format_func=lambda x: options[x],
+                            key=f"{key_prefix}_asg_{serie_idx}_{lane_idx}",
+                        )
+                        if sel > 0 and st.button("✅", key=f"{key_prefix}_ok_{serie_idx}_{lane_idx}"):
+                            chosen = available[sel - 1]
+                            if '_from_serie' in chosen:
+                                from_s, from_l = chosen['_from_serie'], chosen['_from_lane']
+                                clean = {k: v for k, v in chosen.items() if not k.startswith('_')}
+                                seeding_data['series'][serie_idx]['carriles'][lane_idx] = clean
+                                seeding_data['series'][from_s]['carriles'][from_l] = None
+                            else:
+                                seeding_data['series'][serie_idx]['carriles'][lane_idx] = chosen
+                                seeding_data['nadadores_disponibles'].remove(chosen)
+                            _save_edit()
+                            st.rerun()
+        st.markdown("---")
+
+    col_add, col_rm, col_info = st.columns([1, 1, 2])
+    with col_add:
+        if st.button("➕ Nueva Serie", key=f"{key_prefix}_add_serie"):
+            seeding_data['series'].append({
+                'serie': len(seeding_data['series']) + 1,
+                'carriles': [None] * lanes,
+            })
+            _save_edit()
+            st.rerun()
+    with col_rm:
+        if len(seeding_data['series']) > 1 and st.button(
+            "🗑️ Última serie", key=f"{key_prefix}_rm_serie", help="Solo si está vacía"
+        ):
+            last = seeding_data['series'][-1]
+            if all(s is None for s in last['carriles']):
+                seeding_data['series'].pop()
+                _save_edit()
+                st.rerun()
+            else:
+                st.error("Solo se pueden eliminar series vacías")
+    with col_info:
+        cats = {}
+        total = 0
+        for serie in seeding_data['series']:
+            for sw in serie['carriles']:
+                if sw:
+                    cats[sw.get('categoria', '?')] = cats.get(sw.get('categoria', '?'), 0) + 1
+                    total += 1
+        if cats:
+            st.info(
+                "📊 " + ", ".join(f"{c}: {n}" for c, n in sorted(cats.items()))
+                + f" | Total: {total}"
+            )
+
+    col_save, col_dl, col_reset = st.columns(3)
+    with col_save:
+        if st.button("💾 Guardar cambios", type="primary", key=f"{key_prefix}_save"):
+            _save_edit()
+            st.success("✅ Cambios guardados en memoria (valen para PDF/Excel de este modo)")
+    with col_dl:
+        buf = generate_seeding_excel_from_manual(
+            seeding_data, selected_event, gender_filter,
+            two_columns=False, event_cols=event_cols,
+        )
+        st.download_button(
+            label="📥 Excel esta prueba",
+            data=buf,
+            file_name=f"sembrado_{seeding_data.get('prueba_num', 0)}_{gender_filter}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key=f"{key_prefix}_dl_one",
+        )
+    with col_reset:
+        if st.button("🔄 Resetear prueba", key=f"{key_prefix}_reset", help="Volver al automático"):
+            if seeding_key in st.session_state:
+                del st.session_state[seeding_key]
+            seedings, _, err = prepare_auto_sembrado_exports(
+                seeding_data.get('modo', 'tiempo'), lanes=lanes
+            )
+            if not err and seedings:
+                for item in seedings:
+                    if item['evento'] == selected_event and item['genero'] == gender_filter:
+                        data = dict(item['data'])
+                        data['evento'] = selected_event
+                        data['genero'] = gender_filter
+                        data['editado_manual'] = False
+                        data['carriles_piscina'] = lanes
+                        st.session_state[seeding_key] = data
+                        break
+            st.rerun()
+
+
+def render_auto_seeding_manual_editor(mode, key_prefix):
+    """UI: cargar sembrado auto + editar series/carriles como en Manual."""
+    label = "Categorías" if mode == 'categoria' else "Tiempo"
+    st.markdown("---")
+    st.markdown(f"### ✍️ Edición manual — Sembrado por {label}")
+    st.caption(
+        "Mueve nadadores entre carriles/series, quita o asigna, y agrega series. "
+        "Los cambios se usan en el PDF/Excel de esta pestaña."
+    )
+
+    if not os.path.exists("planilla_inscripcion.xlsx"):
+        st.warning("Necesitas planilla de inscripción.")
+        return
+
+    col_load, col_force = st.columns([1, 1])
+    with col_load:
+        if st.button(
+            "📥 Cargar sembrado para editar",
+            type="primary",
+            key=f"{key_prefix}_load",
+            help="Genera el sembrado automático y lo deja editable (respeta cambios ya hechos)",
+        ):
+            with st.spinner("Cargando…"):
+                created, kept, event_cols, err = load_auto_seedings_into_session(
+                    st.session_state, mode, overwrite=False
+                )
+                if err:
+                    st.error(err)
+                else:
+                    st.success(f"✅ {created} cargada(s) · {kept} con cambios previos conservados")
+                    st.rerun()
+    with col_force:
+        if st.button(
+            "♻️ Regenerar (pierde ediciones)",
+            key=f"{key_prefix}_force",
+            help="Vuelve a calcular todo el sembrado automático y sobrescribe ediciones",
+        ):
+            with st.spinner("Regenerando…"):
+                created, _, _, err = load_auto_seedings_into_session(
+                    st.session_state, mode, overwrite=True
+                )
+                if err:
+                    st.error(err)
+                else:
+                    st.success(f"✅ Regeneradas {created} prueba(s)")
+                    st.rerun()
+
+    session_seedings = get_auto_seedings_from_session(st.session_state, mode)
+    if not session_seedings:
+        st.info("Pulsa **Cargar sembrado para editar** (o genera el Excel arriba y luego carga).")
+        return
+
+    try:
+        df = pd.read_excel("planilla_inscripcion.xlsx")
+        info_cols = ['NOMBRE Y AP', 'EQUIPO', 'EDAD', 'CAT.', 'SEXO']
+        event_cols = [
+            c for c in df.columns
+            if c not in info_cols and 'Nø' not in c and 'FECHA DE NA' not in c
+        ]
+    except Exception:
+        event_cols = []
+
+    session_seedings = get_auto_seedings_from_session(st.session_state, mode, event_cols)
+    edited = sum(1 for s in session_seedings if s['data'].get('editado_manual'))
+    st.info(f"**{len(session_seedings)}** prueba(s) · **{edited}** con edición manual")
+
+    labels = [
+        f"{s['data'].get('titulo') or s['evento']} ({'✏️' if s['data'].get('editado_manual') else 'auto'})"
+        for s in session_seedings
+    ]
+    idx = st.selectbox(
+        "Prueba a editar:",
+        range(len(session_seedings)),
+        format_func=lambda i: labels[i],
+        key=f"{key_prefix}_pick",
+    )
+    item = session_seedings[idx]
+    seeding_key = auto_seeding_session_key(mode, item['evento'], item['genero'])
+    seeding_data = st.session_state[seeding_key]
+    render_lane_seeding_editor(seeding_key, seeding_data, event_cols, f"{key_prefix}_{idx}")
+
+
+def prepare_auto_sembrado_exports(mode, lanes=None):
+    """Calcula sembrados listos para PDF/Excel. mode: 'categoria' | 'tiempo'."""
+    lanes = clamp_pool_lanes(
+        lanes if lanes is not None else get_pool_lanes()
+    )
+    if mode == 'categoria':
+        result = script1.build_sembrado_data(lanes=lanes)
+    else:
+        result = script2.build_sembrado_data(lanes=lanes)
+    if result[0] is None:
+        return None, None, result[1]
+    sembrado_final, event_cols = result
+    seedings = auto_sembrado_to_export_seedings(
+        sembrado_final, event_cols, mode=mode, lanes=lanes
+    )
+    return seedings, event_cols, None
+
+
+def resolve_auto_sembrado_for_download(mode):
+    """Prefiere sembrados editados en sesión; si no hay, calcula automático."""
+    try:
+        df = pd.read_excel("planilla_inscripcion.xlsx")
+        info_cols = ['NOMBRE Y AP', 'EQUIPO', 'EDAD', 'CAT.', 'SEXO']
+        event_cols = [
+            c for c in df.columns
+            if c not in info_cols and 'Nø' not in c and 'FECHA DE NA' not in c
+        ]
+    except Exception:
+        event_cols = None
+
+    session_seedings = get_auto_seedings_from_session(st.session_state, mode, event_cols)
+    if session_seedings:
+        return session_seedings, event_cols or [], None
+    return prepare_auto_sembrado_exports(mode)
+
+
+def _auto_sembrado_event_title(prefix):
+    try:
+        em = event_manager_module.EventManager()
+        if em.load_event_config():
+            return f"{prefix} - {em.get_event_name()}"
+    except Exception:
+        pass
+    return prefix
+
+
+def render_auto_sembrado_format_downloads(mode, key_prefix):
+    """
+    Descarga acumulada igual que sembrado manual:
+    PDF consecutivo 2 col., Excel 1 col., Excel 2 col.
+    """
+    excel_path = (
+        "sembrado_competencia.xlsx"
+        if mode == 'categoria'
+        else "sembrado_competencia_POR_TIEMPO.xlsx"
+    )
+    if not os.path.exists(excel_path) and not os.path.exists("planilla_inscripcion.xlsx"):
+        return
+
+    st.markdown("---")
+    st.markdown("#### 📥 Descarga en formatos del sembrado manual")
+    st.markdown(
+        "Mismos formatos que en **Manual**: PDF consecutivo en hoja vertical a **2 columnas**, "
+        "Excel **1 columna** y Excel **2 columnas**."
+    )
+
+    seedings, event_cols, err = resolve_auto_sembrado_for_download(mode)
+    if err:
+        st.warning(err)
+        return
+    if not seedings:
+        st.info("No hay pruebas con nadadores para exportar en estos formatos.")
+        return
+
+    label = "Categorías" if mode == 'categoria' else "Tiempo"
+    edited = sum(1 for s in seedings if s.get('data', {}).get('editado_manual'))
+    st.info(
+        f"**{len(seedings)} prueba(s)** listas ({label})"
+        + (f" · **{edited}** con edición manual" if edited else "")
+    )
+
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    event_title = _auto_sembrado_event_title(f"Sembrado por {label}")
+    file_tag = "categoria" if mode == 'categoria' else "tiempo"
+
+    dl1, dl2, dl3 = st.columns(3)
+    with dl1:
+        pdf_buffer = sembrado_manual_pdf_module.generate_all_manual_seedings_pdf(
+            seedings, event_order=event_cols, event_name=event_title
+        )
+        if pdf_buffer:
+            st.download_button(
+                label=f"📄 PDF consecutivo 2 col. ({len(seedings)} pruebas)",
+                data=pdf_buffer,
+                file_name=f"sembrado_{file_tag}_completo_{timestamp}.pdf",
+                mime="application/pdf",
+                type="primary",
+                key=f"download_{key_prefix}_pdf",
+            )
+    with dl2:
+        xlsx_1 = generate_all_manual_seedings_excel(
+            seedings, event_order=event_cols, two_columns=False
+        )
+        st.download_button(
+            label=f"📥 Todos — 1 columna ({len(seedings)} hojas)",
+            data=xlsx_1,
+            file_name=f"sembrado_{file_tag}_completo_{timestamp}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary",
+            key=f"download_{key_prefix}_xlsx1",
+        )
+    with dl3:
+        xlsx_2 = generate_all_manual_seedings_excel(
+            seedings, event_order=event_cols, two_columns=True
+        )
+        st.download_button(
+            label=f"📥 Todos — 2 columnas ({len(seedings)} hojas)",
+            data=xlsx_2,
+            file_name=f"sembrado_{file_tag}_completo_2col_{timestamp}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary",
+            key=f"download_{key_prefix}_xlsx2",
+        )
+
+
 def generate_seeding_excel_from_manual(seeding_data, event_name, gender, two_columns=False, event_cols=None):
     """
     Genera un archivo Excel desde datos de sembrado manual
@@ -2377,9 +2993,9 @@ def sembrado_competencia_interface():
     
     # Verificar si hay sembrados cacheados y mostrar advertencia si puede haber cambios
     cached_seedings = []
-    if 'seeding_preview_cat' in st.session_state:
+    if any(str(k).startswith('auto_seeding_categoria_') for k in st.session_state.keys()):
         cached_seedings.append("Por Categorías")
-    if 'seeding_preview_time' in st.session_state:
+    if any(str(k).startswith('auto_seeding_tiempo_') for k in st.session_state.keys()):
         cached_seedings.append("Por Tiempo")
     if any(str(key).startswith('manual_seeding_') for key in st.session_state.keys()):
         cached_seedings.append("Manual")
@@ -2408,6 +3024,8 @@ def sembrado_competencia_interface():
             Si agregaste nuevas inscripciones, usa el botón <strong>🔄</strong> para actualizar.
         </div>
         """, unsafe_allow_html=True)
+
+    pool_lanes = render_pool_lanes_selector()
     
     # Pestañas para diferentes métodos de sembrado
     tab1, tab2, tab3 = st.tabs(["📊 Por Categorías", "⏱️ Por Tiempo", "✍️ Manual"])
@@ -2430,13 +3048,17 @@ def sembrado_competencia_interface():
         
         with col1:
             if st.button("🚀 Generar Sembrado por Categorías", type="primary"):
-                with st.spinner("Generando sembrado por categorías..."):
+                with st.spinner(f"Generando sembrado por categorías ({pool_lanes} carriles)..."):
                     try:
-                        script1.main_full()
-                        st.markdown("""
+                        script1.main_full(lanes=pool_lanes)
+                        load_auto_seedings_into_session(
+                            st.session_state, 'categoria', overwrite=False
+                        )
+                        st.markdown(f"""
                             <div class="success-message">
                                 ✅ <strong>Sembrado generado exitosamente!</strong><br>
                                 Archivo creado: <code>sembrado_competencia.xlsx</code>
+                                · {pool_lanes} carriles
                             </div>
                             """, unsafe_allow_html=True)
                         st.rerun()
@@ -2444,35 +3066,7 @@ def sembrado_competencia_interface():
                         st.error(f"Error al generar sembrado: {e}")
         
         with col2:
-            col_view, col_refresh = st.columns([2, 1])
-            with col_view:
-                if st.button("👁️ Visualizar Sembrado", help="Ver preview del sembrado antes de descargar"):
-                    with st.spinner("Cargando visualización..."):
-                        try:
-                            seeding_data, message = script1.get_seeding_data()
-                            if seeding_data:
-                                st.session_state['seeding_preview_cat'] = seeding_data
-                                st.success("✅ Visualización cargada")
-                            else:
-                                st.error(message)
-                        except Exception as e:
-                            st.error(f"Error al cargar visualización: {e}")
-            
-            with col_refresh:
-                if st.button("🔄", help="Actualizar con nuevas inscripciones"):
-                    # Limpiar cache y recargar
-                    if 'seeding_preview_cat' in st.session_state:
-                        del st.session_state['seeding_preview_cat']
-                    with st.spinner("Actualizando sembrado..."):
-                        try:
-                            seeding_data, message = script1.get_seeding_data()
-                            if seeding_data:
-                                st.session_state['seeding_preview_cat'] = seeding_data
-                                st.success("✅ Sembrado actualizado")
-                            else:
-                                st.error(message)
-                        except Exception as e:
-                            st.error(f"Error al actualizar: {e}")
+            st.caption("Tras generar, usa la sección **Edición manual** abajo.")
         
         with col3:
             if os.path.exists("sembrado_competencia.xlsx"):
@@ -2484,118 +3078,9 @@ def sembrado_competencia_interface():
                         file_name="sembrado_competencia.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
-        
-        # Mostrar visualización del sembrado si está disponible
-        if 'seeding_preview_cat' in st.session_state:
-            st.markdown("---")
-            st.markdown("### 👁️ Vista Previa Editable - Sembrado por Categorías")
-            
-            seeding_data = st.session_state['seeding_preview_cat']
-            
-            # Selector de evento para visualizar
-            eventos_disponibles = list(seeding_data.keys())
-            if eventos_disponibles:
-                evento_seleccionado = st.selectbox(
-                    "Selecciona un evento para editar:",
-                    eventos_disponibles,
-                    key="evento_cat_preview"
-                )
-                
-                if evento_seleccionado:
-                    st.markdown(f"**{evento_seleccionado}**")
-                    
-                    # Crear una sola tabla consolidada para todas las series del evento
-                    all_carriles_data = []
-                    series = seeding_data[evento_seleccionado]['series']
-                    
-                    for serie in series:
-                        for i, nadador in enumerate(serie['carriles'], 1):
-                            if nadador:
-                                all_carriles_data.append({
-                                    "Serie": serie['serie'],
-                                    "Carril": i,
-                                    "Nombre": nadador['nombre'],
-                                    "Equipo": nadador['equipo'],
-                                    "Edad": nadador['edad'],
-                                    "Categoría": nadador['categoria'],
-                                    "Tiempo Inscripción": str(nadador['tiempo_inscripcion']),
-                                    "Tiempo Competencia": ""
-                                })
-                    
-                    if all_carriles_data:
-                        df_evento = pd.DataFrame(all_carriles_data)
-                        
-                        # Tabla editable con solo la columna Tiempo Competencia editable
-                        edited_df = st.data_editor(
-                            df_evento,
-                            disabled=["Serie", "Carril", "Nombre", "Equipo", "Edad", "Categoría", "Tiempo Inscripción"],
-                            use_container_width=True,
-                            hide_index=True,
-                            key=f"editor_cat_{evento_seleccionado}"
-                        )
-                        
-                        # Botones de acción
-                        col_save, col_download, col_process, col_info = st.columns([1, 1, 1, 1])
-                        
-                        with col_save:
-                            if st.button("💾 Guardar Cambios", type="primary", help="Guardar los tiempos editados"):
-                                # Actualizar session_state con los cambios
-                                updated_key = f"updated_seeding_cat_{evento_seleccionado}"
-                                st.session_state[updated_key] = edited_df
-                                st.success("✅ Cambios guardados en memoria")
-                        
-                        with col_download:
-                            if st.button("⬇️ Descargar Excel", help="Descargar archivo Excel con los tiempos actualizados"):
-                                # Generar archivo Excel con los datos editados
-                                excel_buffer = generate_seeding_excel(edited_df, evento_seleccionado, "categoria")
-                                st.download_button(
-                                    label="📥 Descargar Sembrado Actualizado",
-                                    data=excel_buffer,
-                                    file_name=f"sembrado_{evento_seleccionado.replace(' ', '_').replace('-', '_')}_editado.xlsx",
-                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                                )
-                        
-                        with col_process:
-                            if st.button("🏆 Procesar a Resultados", help="Convertir a formato de resultados para procesamiento"):
-                                # Verificar si hay tiempos de competencia
-                                tiempos_comp = [t for t in edited_df["Tiempo Competencia"] if t and t.strip()]
-                                if len(tiempos_comp) > 0:
-                                    # Guardar archivo temporalmente y procesarlo
-                                    temp_file = f"temp_seeding_cat_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-                                    excel_data = generate_seeding_excel(edited_df, evento_seleccionado, "categoria")
-                                    
-                                    with open(temp_file, "wb") as f:
-                                        f.write(excel_data)
-                                    
-                                    try:
-                                        # Procesar con el script de resultados
-                                        import importlib.util
-                                        spec = importlib.util.spec_from_file_location("processor", "5-procesar_sembrado_tiempos.py")
-                                        processor = importlib.util.module_from_spec(spec)
-                                        spec.loader.exec_module(processor)
-                                        
-                                        success, message = processor.process_seeding_with_times(temp_file)
-                                        
-                                        if success:
-                                            st.success(f"✅ {message}")
-                                            st.info("📄 Archivo de resultados disponible en gestión de archivos")
-                                        else:
-                                            st.error(f"❌ {message}")
-                                    
-                                    except Exception as e:
-                                        st.error(f"❌ Error al procesar: {e}")
-                                    
-                                    finally:
-                                        # Limpiar archivo temporal
-                                        if os.path.exists(temp_file):
-                                            os.remove(temp_file)
-                                else:
-                                    st.warning("⚠️ Debes agregar al menos un tiempo de competencia")
-                        
-                        with col_info:
-                            tiempos_completados = len([t for t in edited_df["Tiempo Competencia"] if t and t.strip()])
-                            total_nadadores = len([n for n in edited_df["Nombre"] if n != "---"])
-                            st.info(f"⏱️ Tiempos: {tiempos_completados}/{total_nadadores}")
+
+        render_auto_sembrado_format_downloads('categoria', 'auto_cat')
+        render_auto_seeding_manual_editor('categoria', 'edit_cat')
     
     with tab2:
         st.markdown("### ⏱️ Sembrado por Tiempo")
@@ -2615,13 +3100,17 @@ def sembrado_competencia_interface():
         
         with col1:
             if st.button("🚀 Generar Sembrado por Tiempo", type="primary", key="gen_tiempo"):
-                with st.spinner("Generando sembrado por tiempo..."):
+                with st.spinner(f"Generando sembrado por tiempo ({pool_lanes} carriles)..."):
                     try:
-                        script2.main()
-                        st.markdown("""
+                        script2.main(lanes=pool_lanes)
+                        load_auto_seedings_into_session(
+                            st.session_state, 'tiempo', overwrite=False
+                        )
+                        st.markdown(f"""
                             <div class="success-message">
                                 ✅ <strong>Sembrado generado exitosamente!</strong><br>
                                 Archivo creado: <code>sembrado_competencia_POR_TIEMPO.xlsx</code>
+                                · {pool_lanes} carriles
                             </div>
                             """, unsafe_allow_html=True)
                         st.rerun()
@@ -2629,35 +3118,7 @@ def sembrado_competencia_interface():
                         st.error(f"Error al generar sembrado: {e}")
         
         with col2:
-            col_view, col_refresh = st.columns([2, 1])
-            with col_view:
-                if st.button("👁️ Visualizar Sembrado", help="Ver preview del sembrado antes de descargar", key="view_tiempo"):
-                    with st.spinner("Cargando visualización..."):
-                        try:
-                            seeding_data, message = script2.get_seeding_data()
-                            if seeding_data:
-                                st.session_state['seeding_preview_time'] = seeding_data
-                                st.success("✅ Visualización cargada")
-                            else:
-                                st.error(message)
-                        except Exception as e:
-                            st.error(f"Error al cargar visualización: {e}")
-            
-            with col_refresh:
-                if st.button("🔄", key="refresh_time", help="Actualizar con nuevas inscripciones"):
-                    # Limpiar cache y recargar
-                    if 'seeding_preview_time' in st.session_state:
-                        del st.session_state['seeding_preview_time']
-                    with st.spinner("Actualizando sembrado..."):
-                        try:
-                            seeding_data, message = script2.get_seeding_data()
-                            if seeding_data:
-                                st.session_state['seeding_preview_time'] = seeding_data
-                                st.success("✅ Sembrado actualizado")
-                            else:
-                                st.error(message)
-                        except Exception as e:
-                            st.error(f"Error al actualizar: {e}")
+            st.caption("Tras generar, usa la sección **Edición manual** abajo.")
         
         with col3:
             if os.path.exists("sembrado_competencia_POR_TIEMPO.xlsx"):
@@ -2669,121 +3130,11 @@ def sembrado_competencia_interface():
                         file_name="sembrado_competencia_POR_TIEMPO.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
+
+        render_auto_sembrado_format_downloads('tiempo', 'auto_tiempo')
+        render_auto_seeding_manual_editor('tiempo', 'edit_tiempo')
         
-        # Mostrar visualización del sembrado si está disponible
-        if 'seeding_preview_time' in st.session_state:
-            st.markdown("---")
-            st.markdown("### 👁️ Vista Previa Editable - Sembrado por Tiempo")
-            
-            seeding_data = st.session_state['seeding_preview_time']
-            
-            # Selector de evento para visualizar
-            eventos_disponibles = list(seeding_data.keys())
-            if eventos_disponibles:
-                evento_seleccionado = st.selectbox(
-                    "Selecciona un evento para editar:",
-                    eventos_disponibles,
-                    key="evento_time_preview"
-                )
-                
-                if evento_seleccionado:
-                    st.markdown(f"**{evento_seleccionado}**")
-                    
-                    # Crear una sola tabla consolidada para todas las series del evento
-                    all_carriles_data = []
-                    series = seeding_data[evento_seleccionado]['series']
-                    
-                    for serie in series:
-                        for i, nadador in enumerate(serie['carriles'], 1):
-                            if nadador:
-                                all_carriles_data.append({
-                                    "Serie": serie['serie'],
-                                    "Carril": i,
-                                    "Nombre": nadador['nombre'],
-                                    "Equipo": nadador['equipo'],
-                                    "Edad": nadador['edad'],
-                                    "Categoría": nadador['categoria'],
-                                    "Tiempo Inscripción": str(nadador['tiempo_inscripcion']),
-                                    "Tiempo Competencia": ""
-                                })
-                    
-                    if all_carriles_data:
-                        df_evento = pd.DataFrame(all_carriles_data)
-                        
-                        # Tabla editable con solo la columna Tiempo Competencia editable
-                        edited_df = st.data_editor(
-                            df_evento,
-                            disabled=["Serie", "Carril", "Nombre", "Equipo", "Edad", "Categoría", "Tiempo Inscripción"],
-                            use_container_width=True,
-                            hide_index=True,
-                            key=f"editor_time_{evento_seleccionado}"
-                        )
-                        
-                        # Botones de acción
-                        col_save, col_download, col_process, col_info = st.columns([1, 1, 1, 1])
-                        
-                        with col_save:
-                            if st.button("💾 Guardar Cambios", type="primary", help="Guardar los tiempos editados", key="save_time"):
-                                # Actualizar session_state con los cambios
-                                updated_key = f"updated_seeding_time_{evento_seleccionado}"
-                                st.session_state[updated_key] = edited_df
-                                st.success("✅ Cambios guardados en memoria")
-                        
-                        with col_download:
-                            if st.button("⬇️ Descargar Excel", help="Descargar archivo Excel con los tiempos actualizados", key="download_time"):
-                                # Generar archivo Excel con los datos editados
-                                excel_buffer = generate_seeding_excel(edited_df, evento_seleccionado, "tiempo")
-                                st.download_button(
-                                    label="📥 Descargar Sembrado Actualizado",
-                                    data=excel_buffer,
-                                    file_name=f"sembrado_{evento_seleccionado.replace(' ', '_').replace('-', '_')}_editado.xlsx",
-                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                    key="dl_time"
-                                )
-                        
-                        with col_process:
-                            if st.button("🏆 Procesar a Resultados", help="Convertir a formato de resultados para procesamiento", key="process_time"):
-                                # Verificar si hay tiempos de competencia
-                                tiempos_comp = [t for t in edited_df["Tiempo Competencia"] if t and t.strip()]
-                                if len(tiempos_comp) > 0:
-                                    # Guardar archivo temporalmente y procesarlo
-                                    temp_file = f"temp_seeding_time_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-                                    excel_data = generate_seeding_excel(edited_df, evento_seleccionado, "tiempo")
-                                    
-                                    with open(temp_file, "wb") as f:
-                                        f.write(excel_data)
-                                    
-                                    try:
-                                        # Procesar con el script de resultados
-                                        import importlib.util
-                                        spec = importlib.util.spec_from_file_location("processor", "5-procesar_sembrado_tiempos.py")
-                                        processor = importlib.util.module_from_spec(spec)
-                                        spec.loader.exec_module(processor)
-                                        
-                                        success, message = processor.process_seeding_with_times(temp_file)
-                                        
-                                        if success:
-                                            st.success(f"✅ {message}")
-                                            st.info("📄 Archivo de resultados disponible en gestión de archivos")
-                                        else:
-                                            st.error(f"❌ {message}")
-                                    
-                                    except Exception as e:
-                                        st.error(f"❌ Error al procesar: {e}")
-                                    
-                                    finally:
-                                        # Limpiar archivo temporal
-                                        if os.path.exists(temp_file):
-                                            os.remove(temp_file)
-                                else:
-                                    st.warning("⚠️ Debes agregar al menos un tiempo de competencia")
-                        
-                        with col_info:
-                            tiempos_completados = len([t for t in edited_df["Tiempo Competencia"] if t and t.strip()])
-                            total_nadadores = len([n for n in edited_df["Nombre"] if n != "---"])
-                            st.info(f"⏱️ Tiempos: {tiempos_completados}/{total_nadadores}")
-        
-    
+
     with tab3:
         st.markdown("### ✍️ Sembrado Manual")
         st.markdown("""
@@ -2902,7 +3253,8 @@ def sembrado_competencia_interface():
             # Verificar si necesita actualización automática
             if seeding_key not in st.session_state:
                 st.session_state[seeding_key] = build_initial_manual_seeding(
-                    swimmers_for_event, selected_event, gender_filter, event_cols
+                    swimmers_for_event, selected_event, gender_filter, event_cols,
+                    lanes=pool_lanes,
                 )
             else:
                 # Verificar si el número de nadadores cambió
@@ -2911,6 +3263,14 @@ def sembrado_competencia_interface():
                     st.warning(f"⚠️ Se detectaron {len(swimmers_for_event) - current_total} nuevas inscripciones. Usa 'Actualizar Sembrado' para cargarlas.")
             
             seeding_data = st.session_state[seeding_key]
+            manual_lanes = clamp_pool_lanes(
+                seeding_data.get('carriles_piscina')
+                or (
+                    max((len(s.get('carriles', [])) for s in seeding_data.get('series', [])), default=0)
+                    or pool_lanes
+                )
+            )
+            seeding_data['carriles_piscina'] = manual_lanes
             if not seeding_data.get('titulo'):
                 seeding_data['titulo'] = build_manual_seeding_title(
                     selected_event, gender_filter, event_cols
@@ -2922,6 +3282,7 @@ def sembrado_competencia_interface():
 
             # Interfaz de edición manual
             st.markdown(f"#### 🎯 {seeding_data['titulo']}")
+            st.caption(f"Carriles por serie: **{manual_lanes}** (configurados arriba)")
             
             # Mostrar nadadores disponibles (no asignados)
             if seeding_data['nadadores_disponibles']:
@@ -2962,11 +3323,17 @@ def sembrado_competencia_interface():
             
             for serie_idx, serie in enumerate(seeding_data['series']):
                 st.markdown(f"**SERIE {serie['serie']}**")
+                while len(serie['carriles']) < manual_lanes:
+                    serie['carriles'].append(None)
+                if len(serie['carriles']) > manual_lanes:
+                    for extra in serie['carriles'][manual_lanes:]:
+                        if extra:
+                            seeding_data.setdefault('nadadores_disponibles', []).append(extra)
+                    serie['carriles'] = serie['carriles'][:manual_lanes]
                 
-                # Crear columnas para los 8 carriles
-                lane_cols = st.columns(8)
+                lane_cols = st.columns(manual_lanes)
                 
-                for lane_idx in range(8):
+                for lane_idx in range(manual_lanes):
                     with lane_cols[lane_idx]:
                         st.markdown(f"**Carril {lane_idx + 1}**")
                         
@@ -3085,8 +3452,9 @@ def sembrado_competencia_interface():
                 with col_add:
                     if st.button("➕ Nueva Serie"):
                         new_serie_num = len(seeding_data['series']) + 1
-                        new_serie = {"serie": new_serie_num, "carriles": [None] * 8}
+                        new_serie = {"serie": new_serie_num, "carriles": [None] * manual_lanes}
                         seeding_data['series'].append(new_serie)
+                        seeding_data['carriles_piscina'] = manual_lanes
                         st.session_state[seeding_key] = seeding_data
                         _save_manual_edit()
                         st.rerun()
@@ -3211,7 +3579,7 @@ def sembrado_competencia_interface():
                 key="seed_all_manual_pruebas",
             ):
                 created, kept = seed_all_manual_pruebas(
-                    st.session_state, df, event_cols, overwrite=False
+                    st.session_state, df, event_cols, overwrite=False, lanes=pool_lanes
                 )
                 event_title = "Sembrado Manual"
                 try:

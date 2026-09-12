@@ -4,6 +4,51 @@ from pathlib import Path
 
 import pandas as pd
 
+DEFAULT_POOL_LANES = 8
+MIN_POOL_LANES = 4
+MAX_POOL_LANES = 10
+
+
+def clamp_pool_lanes(lanes):
+    """Normaliza el número de carriles a un entero válido."""
+    try:
+        n = int(lanes)
+    except (TypeError, ValueError):
+        n = DEFAULT_POOL_LANES
+    return max(MIN_POOL_LANES, min(MAX_POOL_LANES, n))
+
+
+def standard_lane_order(lanes=DEFAULT_POOL_LANES):
+    """
+    Orden de asignación de carriles (1-indexado): más rápido al centro.
+    Órdenes clásicos para 4/5/6/8/10; genérico centro→afuera para el resto.
+    """
+    lanes = clamp_pool_lanes(lanes)
+    known = {
+        4: [2, 3, 1, 4],
+        5: [3, 4, 2, 5, 1],
+        6: [3, 4, 2, 5, 1, 6],
+        7: [4, 5, 3, 6, 2, 7, 1],
+        8: [4, 5, 3, 6, 2, 7, 1, 8],
+        9: [5, 6, 4, 7, 3, 8, 2, 9, 1],
+        10: [5, 6, 4, 7, 3, 8, 2, 9, 1, 10],
+    }
+    if lanes in known:
+        return known[lanes]
+
+    center = (lanes + 1) // 2
+    order = [center]
+    offset = 1
+    while len(order) < lanes:
+        right = center + offset
+        left = center - offset
+        if right <= lanes:
+            order.append(right)
+        if left >= 1 and len(order) < lanes:
+            order.append(left)
+        offset += 1
+    return order
+
 
 def safe_excel_sheet_title(name, used_titles):
     """Nombre de hoja válido en Excel (máx. 31 caracteres, sin \\ / * ? : [ ])."""
@@ -291,9 +336,14 @@ def split_seeding_by_gender(todos_item, gender_filter, event_col, event_cols):
     conservando carril y serie de cada nadador.
     """
     data = todos_item['data']
+    num_lanes = max(
+        (len(serie.get('carriles', [])) for serie in data.get('series', [])),
+        default=DEFAULT_POOL_LANES,
+    )
+    num_lanes = clamp_pool_lanes(num_lanes or DEFAULT_POOL_LANES)
     new_series = []
     for serie in data.get('series', []):
-        new_carriles = [None] * 8
+        new_carriles = [None] * num_lanes
         for lane_idx, swimmer in enumerate(serie.get('carriles', [])):
             if not swimmer:
                 continue
@@ -323,6 +373,7 @@ def split_seeding_by_gender(todos_item, gender_filter, event_col, event_cols):
             'total_nadadores': total,
             'editado_manual': True,
             'desde_todos': True,
+            'carriles_piscina': num_lanes,
         },
     }
 
