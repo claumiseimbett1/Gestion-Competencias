@@ -448,8 +448,10 @@ class SwimmerRegistration:
     def load_existing_data(self):
         if os.path.exists(self.archivo_inscripcion):
             try:
+                from planilla_utils import align_planilla_columns_to_events
                 df = pd.read_excel(self.archivo_inscripcion)
-                return normalize_planilla_columns(df)
+                events = self.get_available_events()
+                return align_planilla_columns_to_events(df, events)
             except Exception as e:
                 print(f"Error al cargar datos existentes: {e}")
                 return None
@@ -713,12 +715,29 @@ class SwimmerRegistration:
             return []
 
         available_events = self.get_available_events()
+        try:
+            from planilla_utils import align_planilla_columns_to_events, match_column_to_event
+            df = align_planilla_columns_to_events(df, available_events)
+        except Exception:
+            pass
+
         swimmers = []
         for index, row in df.iterrows():
             events_registered = []
             for event in available_events:
-                if inscrito_en_prueba(row.get(event)):
-                    events_registered.append(f"{event}: {row[event]}")
+                cell = row[event] if event in df.columns else None
+                if cell is None:
+                    # buscar columna equivalente
+                    try:
+                        from planilla_utils import match_column_to_event
+                        for col in df.columns:
+                            if match_column_to_event(col, [event]) == event:
+                                cell = row[col]
+                                break
+                    except Exception:
+                        pass
+                if inscrito_en_prueba(cell):
+                    events_registered.append(f"{event}: {cell}")
 
             swimmers.append({
                 'index': index,
@@ -2518,8 +2537,12 @@ class SwimmerRegistration:
     def bulk_import_from_excel(self, uploaded_file):
         """Importa múltiples nadadores desde un archivo Excel"""
         try:
-            # Leer archivo Excel
-            df = normalize_planilla_columns(pd.read_excel(uploaded_file))
+            from planilla_utils import align_planilla_columns_to_events
+
+            # Leer archivo Excel y alinear nombres de pruebas al evento
+            df = pd.read_excel(uploaded_file)
+            available_events = self.get_available_events()
+            df = align_planilla_columns_to_events(df, available_events)
 
             # Validar columnas requeridas
             required_columns = ['NOMBRE Y AP', 'EQUIPO', 'EDAD', 'CAT.', 'SEXO']
@@ -2561,6 +2584,10 @@ class SwimmerRegistration:
                         except (ValueError, TypeError):
                             age = None
                     category = str(row['CAT.']).strip() if pd.notna(row['CAT.']) else ""
+                    if category and self.event_manager:
+                        resolved = self.event_manager.resolve_category_name(category)
+                        if resolved:
+                            category = resolved
 
                     if age is None or age <= 0:
                         errors.append(f"Fila {index + 2}: Edad inválida para {swimmer_name} (use FECHA DE NA o EDAD)")

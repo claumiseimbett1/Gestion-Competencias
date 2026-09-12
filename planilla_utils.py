@@ -21,17 +21,81 @@ def safe_excel_sheet_title(name, used_titles):
 
 
 def normalize_prueba_name(name):
-    """Unificar nombre de prueba (p. ej. CROLL → LIBRE)."""
-    return re.sub(r'CROLL', 'LIBRE', str(name), flags=re.IGNORECASE)
+    """Unificar nombre de prueba (p. ej. CROLL → LIBRE, 'hasta' → '-')."""
+    text = str(name or '').strip()
+    text = re.sub(r'CROLL', 'LIBRE', text, flags=re.IGNORECASE)
+    # Solo "hasta" (título de categoría), no tocar rangos tipo Menores 2-3
+    text = re.sub(r'\s+\bhasta\b\s+', ' - ', text, flags=re.IGNORECASE)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
+
+def prueba_match_key(name):
+    """Clave comparable para emparejar columnas Excel ↔ event_order."""
+    text = normalize_prueba_name(name).upper()
+    text = (text.replace('Á', 'A').replace('É', 'E').replace('Í', 'I')
+                .replace('Ó', 'O').replace('Ú', 'U'))
+    text = text.replace('METROS', 'M').replace('MTS', 'M').replace('MT ', 'M ')
+    # Compactar guiones para que '2 - 3' == '2-3' y 'A - Master' == 'A-MASTER'
+    text = re.sub(r'\s*[-–—]\s*', '-', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
+
+def match_column_to_event(column_name, event_names):
+    """
+    Devuelve el nombre canónico de event_names que corresponde a column_name,
+    o None si no hay match.
+    """
+    if not column_name or not event_names:
+        return None
+    col_key = prueba_match_key(column_name)
+    # Exacto por clave
+    for event in event_names:
+        if prueba_match_key(event) == col_key:
+            return event
+    # Contención (por si el Excel trae título más corto/largo)
+    for event in event_names:
+        ev_key = prueba_match_key(event)
+        if col_key in ev_key or ev_key in col_key:
+            return event
+    return None
+
+
+def align_planilla_columns_to_events(df, event_names):
+    """
+    Renombra columnas de la planilla para que coincidan con event_order.
+    Ej: '… Infantil A hasta Master' → '… Infantil A - Master'
+    """
+    if df is None or df.empty:
+        return df
+    info_cols = {'NOMBRE Y AP', 'EQUIPO', 'EDAD', 'CAT.', 'SEXO', 'FECHA DE NA', 'Nø', 'No'}
+    rename_map = {}
+    used_targets = set()
+    for col in df.columns:
+        if str(col).strip() in info_cols or str(col).upper().startswith('NØ'):
+            continue
+        if 'FECHA' in str(col).upper():
+            continue
+        matched = match_column_to_event(col, event_names)
+        if matched and matched not in used_targets and matched != col:
+            rename_map[col] = matched
+            used_targets.add(matched)
+        elif matched == col:
+            used_targets.add(matched)
+    if rename_map:
+        df = df.rename(columns=rename_map)
+    # También CROLL → LIBRE en lo que quede
+    return normalize_planilla_columns(df)
 
 
 def normalize_planilla_columns(df):
-    """Renombra columnas de pruebas CROLL a LIBRE en la planilla."""
-    rename_map = {
-        col: normalize_prueba_name(col)
-        for col in df.columns
-        if re.search(r'CROLL', str(col), flags=re.IGNORECASE)
-    }
+    """Renombra columnas de pruebas (CROLL→LIBRE, hasta→-)."""
+    rename_map = {}
+    for col in df.columns:
+        new_name = normalize_prueba_name(col)
+        if new_name != col:
+            rename_map[col] = new_name
     if rename_map:
         df = df.rename(columns=rename_map)
     return df
