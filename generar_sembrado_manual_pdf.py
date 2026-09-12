@@ -14,13 +14,13 @@ from planilla_utils import (
 
 _SERIE_HEADERS = ['#', 'Nombre', 'Equipo', 'Ed', 'Cat', 'T.I.', 'T.C.']
 
-# Tipografía ampliada para lectura en impresión
-_FONT_BODY = 8
-_FONT_HEADER = 8
-_FONT_SERIE = 9
-_FONT_PRUEBA = 10
-_FONT_DOC = 13
-_ROW_PAD = 1.5
+# Tipografía legible sin solaparse; márgenes laterales mínimos
+_FONT_BODY = 7
+_FONT_HEADER = 7
+_FONT_SERIE = 8
+_FONT_PRUEBA = 9
+_FONT_DOC = 11
+_ROW_PAD = 1.0
 
 _PLAIN_TABLE = TableStyle([
     ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
@@ -156,10 +156,10 @@ def generate_all_manual_seedings_pdf(seedings, event_order=None, event_name='Sem
     doc = SimpleDocTemplate(
         buffer,
         pagesize=page_size,
-        leftMargin=0.28 * inch,
-        rightMargin=0.28 * inch,
-        topMargin=0.30 * inch,
-        bottomMargin=0.30 * inch,
+        leftMargin=0.12 * inch,
+        rightMargin=0.12 * inch,
+        topMargin=0.25 * inch,
+        bottomMargin=0.25 * inch,
         title=event_name,
     )
 
@@ -187,7 +187,7 @@ def generate_all_manual_seedings_pdf(seedings, event_order=None, event_name='Sem
     )
 
     usable_width = page_size[0] - doc.leftMargin - doc.rightMargin
-    col_gap = 0.10 * inch
+    col_gap = 0.08 * inch
     col_width = (usable_width - col_gap) / 2
 
     elements = [Paragraph(event_name, doc_title_style), Spacer(1, 4)]
