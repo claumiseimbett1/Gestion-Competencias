@@ -642,13 +642,61 @@ class EventManager:
                 return category
         return None
 
+    def resolve_category_name(self, category_name, category_names=None):
+        """Resuelve alias de categoría al nombre canónico del evento."""
+        if not category_name:
+            return None
+        names = category_names
+        if names is None:
+            names = [
+                c['name'] if isinstance(c, dict) else str(c)
+                for c in (self.get_categories() or [])
+            ]
+        if not names:
+            return str(category_name).strip()
+
+        raw = str(category_name).strip()
+        target = self._normalize_label(raw)
+        target_compact = target.replace('-', ' ').replace(' Y ', ' ')
+
+        # Exacto / flexible
+        for name in names:
+            n = self._normalize_label(name)
+            if n == target or n.replace('-', ' ') == target.replace('-', ' '):
+                return name
+
+        # Alias Junior / Mayores → Junior y Mayores
+        junior_aliases = {
+            'JUNIOR', 'JUNIOR A', 'JUNIOR B', 'MAYORES', 'MAYOR',
+            'JUNIOR-MAYORES', 'JUNIOR MAYORES', 'JUNIOR Y MAYOR',
+            'JUNIOR-MAYOR', 'SENIOR',
+        }
+        if target_compact in junior_aliases or target in junior_aliases:
+            for name in names:
+                n = self._normalize_label(name)
+                if 'JUNIOR' in n or n == 'MAYORES':
+                    return name
+
+        # Contención (Junior dentro de Junior y Mayores)
+        for name in names:
+            n = self._normalize_label(name)
+            if target and (target in n or n in target):
+                return name
+
+        return raw
+
     def get_events_for_category(self, category_name):
-        """Obtener pruebas asignadas a una categoría (match flexible de nombre)."""
+        """Obtener pruebas asignadas a una categoría (match flexible / alias Junior)."""
         category_events = self.get_category_events()
         if not category_name:
             return []
+
         if category_name in category_events:
             return list(category_events.get(category_name, []))
+
+        resolved = self.resolve_category_name(category_name)
+        if resolved and resolved in category_events:
+            return list(category_events.get(resolved, []))
 
         target = self._normalize_label(category_name)
         for key, events in category_events.items():
@@ -656,6 +704,11 @@ class EventManager:
             if key_norm == target:
                 return list(events)
             if key_norm.replace('-', ' ') == target.replace('-', ' '):
+                return list(events)
+            # Junior → Junior y Mayores
+            if target in {'JUNIOR', 'MAYORES', 'JUNIOR-MAYORES', 'JUNIOR MAYORES'} and (
+                'JUNIOR' in key_norm or key_norm == 'MAYORES'
+            ):
                 return list(events)
         return []
 
@@ -728,23 +781,28 @@ class EventManager:
         if not category_name:
             available_events = self.get_selected_events()
         else:
-            available_events = self.get_events_for_category(category_name)
+            resolved = self.resolve_category_name(category_name)
+            available_events = self.get_events_for_category(resolved or category_name)
             from_category = bool(available_events)
             if not available_events:
                 inferred = self.infer_category_events_from_order(
                     self.get_categories(), self.get_selected_events()
                 )
-                available_events = list(inferred.get(category_name, []))
+                lookup = resolved or category_name
+                available_events = list(inferred.get(lookup, []))
                 if not available_events:
-                    target = self._normalize_label(category_name)
+                    target = self._normalize_label(lookup)
                     for key, evs in inferred.items():
-                        if self._normalize_label(key) == target:
+                        key_n = self._normalize_label(key)
+                        if key_n == target or key_n.replace('-', ' ') == target.replace('-', ' '):
+                            available_events = list(evs)
+                            break
+                        if target in {'JUNIOR', 'MAYORES'} and ('JUNIOR' in key_n or key_n == 'MAYORES'):
                             available_events = list(evs)
                             break
                 from_category = bool(available_events)
 
         # category_events es la autoridad: no filtrar por catálogo de edades
-        # (rompe pruebas custom como "15 mts ... Menores 1" para edad 5).
         if from_category:
             return available_events
 

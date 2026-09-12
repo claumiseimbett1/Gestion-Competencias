@@ -961,6 +961,7 @@ def mostrar_carga_excel_orden_pruebas(event_manager):
             st.session_state.evento_event_order = result['event_order']
             if result.get('category_events'):
                 st.session_state.evento_category_events = result['category_events']
+            _clear_category_event_checkbox_keys(st.session_state)
             assigned = sum(1 for v in (result.get('category_events') or {}).values() if v)
             st.success(
                 f"✅ {result['count']} pruebas desde **{result['sheet']}**. "
@@ -972,8 +973,16 @@ def mostrar_carga_excel_orden_pruebas(event_manager):
             st.error(f"❌ {result}")
 
 
+
+def _clear_category_event_checkbox_keys(session_state):
+    """Resetea widgets de asignacion para que tomen los valores actuales."""
+    for key in list(session_state.keys()):
+        if str(key).startswith('cat_event_'):
+            del session_state[key]
+
+
 def mostrar_paso_asignacion_categorias(event_manager):
-    """Paso 4: Asignación de pruebas por categoría"""
+    """Paso 4: Asignacion de pruebas por categoria"""
     st.markdown("### 🎯 Asignación de Pruebas por Categoría")
 
     if not st.session_state.evento_categories:
@@ -984,50 +993,82 @@ def mostrar_paso_asignacion_categorias(event_manager):
         st.warning("⚠️ Primero debe configurar las pruebas del evento en el paso anterior")
         return
 
+    # Reparar categorias vacias (Juvenil/Master) inferiendo desde el orden
+    inferred = event_manager.infer_category_events_from_order(
+        st.session_state.evento_categories,
+        st.session_state.evento_event_order,
+    )
+    current_map = st.session_state.evento_category_events or {}
+    merged = {}
+    repaired = False
+    for cat in st.session_state.evento_categories:
+        name = cat['name']
+        existing = list(current_map.get(name, []) or [])
+        if not existing:
+            target = event_manager._normalize_label(name)
+            for key, evs in current_map.items():
+                if event_manager._normalize_label(key).replace('-', ' ') == target.replace('-', ' '):
+                    existing = list(evs or [])
+                    break
+        suggested = list(inferred.get(name, []) or [])
+        if existing:
+            combined = list(existing)
+            for ev in suggested:
+                if ev not in combined and ev in st.session_state.evento_event_order:
+                    combined.append(ev)
+                    repaired = True
+            merged[name] = combined
+        elif suggested:
+            merged[name] = suggested
+            repaired = True
+        else:
+            merged[name] = []
+
+    expected_keys = {c['name'] for c in st.session_state.evento_categories}
+    if repaired or set(merged.keys()) != expected_keys:
+        st.session_state.evento_category_events = merged
+        _clear_category_event_checkbox_keys(st.session_state)
+
     if st.button("🔄 Sincronizar asignación desde nombres del orden", key="sync_cat_events_from_order"):
         synced = event_manager.infer_category_events_from_order(
             st.session_state.evento_categories,
             st.session_state.evento_event_order,
         )
         st.session_state.evento_category_events = synced
-        st.success("✅ Asignación actualizada según los nombres de las pruebas")
+        _clear_category_event_checkbox_keys(st.session_state)
+        st.success("✅ Asignación actualizada (incluye Juvenil y Master)")
         st.rerun()
 
     st.markdown("""
     <div class="info-message">
-        Seleccione qué pruebas puede nadar cada categoría. Solo aparecen las pruebas
-        que fueron incluidas en el evento.
+        Las pruebas <em>Infantil A - Master</em> aplican a Infantil, Juvenil, Junior y Master.
+        Si Juvenil/Master aparecen vacíos, pulsa <strong>Sincronizar asignación</strong>.
     </div>
     """, unsafe_allow_html=True)
 
-    # Para cada categoría, mostrar checkboxes de las pruebas del evento
     for category in st.session_state.evento_categories:
         category_name = category['name']
+        current_events = list(st.session_state.evento_category_events.get(category_name, []) or [])
 
-        st.markdown(f"**📋 {category_name}** {f'({category["age_range"]})' if category['age_range'] else ''}")
+        age_txt = f"({category['age_range']})" if category.get('age_range') else ''
+        st.markdown(f"**📋 {category_name}** {age_txt}")
 
-        # Obtener pruebas actualmente asignadas a esta categoría
-        current_events = st.session_state.evento_category_events.get(category_name, [])
-
-        # Crear checkboxes en columnas
         cols = st.columns(3)
         selected_events_for_category = []
 
         for i, event in enumerate(st.session_state.evento_event_order):
             col = cols[i % 3]
             with col:
-                is_selected = st.checkbox(
-                    event,
-                    value=event in current_events,
-                    key=f"cat_event_{category_name}_{i}"
-                )
+                safe = ''.join(ch if ch.isalnum() else '_' for ch in str(event))[:48]
+                key = f"cat_event_{category_name}_{safe}"
+                if key not in st.session_state:
+                    st.session_state[key] = event in current_events
+                is_selected = st.checkbox(event, key=key)
                 if is_selected:
                     selected_events_for_category.append(event)
 
-        # Actualizar session state
         st.session_state.evento_category_events[category_name] = selected_events_for_category
 
-        # Mostrar resumen
         if selected_events_for_category:
             st.success(f"✅ {len(selected_events_for_category)} pruebas seleccionadas para {category_name}")
         else:
