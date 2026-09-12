@@ -89,6 +89,31 @@ def _truncate(text, max_len=24):
     return s[: max_len - 1] + '…'
 
 
+_PARTICLE_APELLIDOS = {
+    'de', 'del', 'la', 'las', 'los', 'y', 'san', 'santa',
+}
+
+
+def _short_name(nombre):
+    """
+    Quita el segundo apellido para el PDF (evita solapamiento).
+    Ej: 'Juan Carlos Pérez López' → 'Juan Carlos Pérez'
+        'Guadalupe Cortez de Hoyos' → 'Guadalupe Cortez'
+    """
+    parts = str(nombre or '').strip().split()
+    if len(parts) <= 2:
+        return ' '.join(parts)
+
+    # Quitar segundo apellido; si el penúltimo es partícula (de/del/de la…), quitar el bloque
+    end = len(parts) - 1
+    while end > 1 and parts[end - 1].lower() in _PARTICLE_APELLIDOS:
+        end -= 1
+    shortened = parts[:end]
+    if len(shortened) < 2:
+        shortened = parts[:2]
+    return ' '.join(shortened)
+
+
 def _occupied_lanes(carriles):
     """Solo carriles con nadador, conservando el número real de carril (1-based)."""
     occupied = []
@@ -104,14 +129,15 @@ def _build_serie_block_table(serie, col_width):
     if not occupied:
         return Spacer(col_width, 1)
 
+    # Más espacio al nombre (ya acortado); tiempos un poco más compactos
     col_widths = [
-        col_width * 0.06,
-        col_width * 0.30,
-        col_width * 0.16,
+        col_width * 0.05,
+        col_width * 0.34,
+        col_width * 0.15,
         col_width * 0.05,
         col_width * 0.11,
-        col_width * 0.16,
-        col_width * 0.16,
+        col_width * 0.15,
+        col_width * 0.15,
     ]
 
     data = [[f"SERIE {serie['serie']}", '', '', '', '', '', '']]
@@ -120,10 +146,10 @@ def _build_serie_block_table(serie, col_width):
     for lane_num, swimmer in occupied:
         data.append([
             str(lane_num),
-            _truncate(swimmer.get('nombre', ''), 26),
-            _truncate(swimmer.get('equipo', ''), 14),
+            _truncate(_short_name(swimmer.get('nombre', '')), 22),
+            _truncate(swimmer.get('equipo', ''), 12),
             str(swimmer.get('edad', '')),
-            _truncate(swimmer.get('categoria', ''), 11),
+            _truncate(swimmer.get('categoria', ''), 10),
             _format_time(swimmer.get('tiempo', '')),
             _format_time(swimmer.get('tiempo_competencia', '')),
         ])

@@ -25,6 +25,9 @@ from planilla_utils import (
     DEFAULT_POOL_LANES,
     MIN_POOL_LANES,
     MAX_POOL_LANES,
+    UNION_SERIES_MAX_LANES,
+    propose_series_union,
+    format_series_union_summary,
 )
 
 # Importar el módulo de inscripción con el nuevo nombre
@@ -2671,6 +2674,91 @@ def get_auto_seedings_from_session(session_state, mode, event_cols=None):
     return sort_manual_seedings(seedings, event_cols or [])
 
 
+def apply_series_union_to_seeding_data(seeding_data, max_lanes=UNION_SERIES_MAX_LANES):
+    """
+    Aplica unión de series si es beneficiosa.
+    Returns (ok, summary_or_reason).
+    """
+    new_series, summary = propose_series_union(
+        seeding_data.get('series', []), max_lanes=max_lanes
+    )
+    if not new_series or not summary.get('beneficial'):
+        return False, summary
+    seeding_data['series'] = new_series
+    seeding_data['carriles_piscina'] = summary['max_lanes']
+    seeding_data['series_unidas'] = True
+    seeding_data['editado_manual'] = True
+    total = sum(1 for s in new_series for c in s['carriles'] if c)
+    seeding_data['total_nadadores'] = total
+    # Nadadores disponibles no se mezclan en la unión
+    seeding_data.setdefault('nadadores_disponibles', [])
+    return True, summary
+
+
+def count_series_union_candidates(session_state, mode, max_lanes=UNION_SERIES_MAX_LANES):
+    """Cuántas pruebas del modo auto se beneficiarían de unir series."""
+    candidates = []
+    for item in get_auto_seedings_from_session(session_state, mode):
+        _, summary = propose_series_union(item['data'].get('series', []), max_lanes=max_lanes)
+        if summary.get('beneficial'):
+            candidates.append((item, summary))
+    return candidates
+
+
+def apply_series_union_to_all_auto(session_state, mode, max_lanes=UNION_SERIES_MAX_LANES):
+    """Aprueba unión en todas las pruebas elegibles del modo."""
+    applied = 0
+    skipped = 0
+    for item in get_auto_seedings_from_session(session_state, mode):
+        key = auto_seeding_session_key(mode, item['evento'], item['genero'])
+        data = session_state.get(key) or item['data']
+        ok, _ = apply_series_union_to_seeding_data(data, max_lanes=max_lanes)
+        if ok:
+            session_state[key] = data
+            applied += 1
+        else:
+            skipped += 1
+    return applied, skipped
+
+
+def render_series_union_controls(seeding_key, seeding_data, key_prefix, max_lanes=UNION_SERIES_MAX_LANES):
+    """Vista previa + aprobación de unión de series para una prueba."""
+    new_series, summary = propose_series_union(
+        seeding_data.get('series', []), max_lanes=max_lanes
+    )
+    st.markdown("##### 🔗 Unión de series (máx. 6 carriles)")
+    if not summary.get('beneficial') or not new_series:
+        reason = summary.get('reason') or 'No aplica'
+        st.caption(f"Sin unión pendiente: {reason}.")
+        if seeding_data.get('series_unidas'):
+            st.caption("✅ Esta prueba ya tiene series unidas.")
+        return
+
+    st.info(format_series_union_summary(summary))
+    approve = st.checkbox(
+        "Confirmo unir las series de esta prueba",
+        key=f"{key_prefix}_union_confirm",
+        help="Reempaqueta nadadores en el mínimo de series con hasta 6 carriles "
+             "(más rápidos al centro, series finales).",
+    )
+    if st.button(
+        "✅ Aprobar unión de esta prueba",
+        type="primary",
+        key=f"{key_prefix}_union_apply",
+        disabled=not approve,
+    ):
+        ok, sum2 = apply_series_union_to_seeding_data(seeding_data, max_lanes=max_lanes)
+        if ok:
+            st.session_state[seeding_key] = seeding_data
+            st.success(
+                f"Unión aplicada: {sum2['before_series']} → {sum2['after_series']} series "
+                f"({sum2['max_lanes']} carriles)."
+            )
+            st.rerun()
+        else:
+            st.warning(sum2.get('reason') or 'No se pudo unir')
+
+
 def render_lane_seeding_editor(seeding_key, seeding_data, event_cols, key_prefix):
     """
     Editor de series/carriles (mismo flujo que sembrado manual):
@@ -2700,6 +2788,12 @@ def render_lane_seeding_editor(seeding_key, seeding_data, event_cols, key_prefix
     st.caption(f"Carriles por serie: **{lanes}**")
     if seeding_data.get('editado_manual'):
         st.caption("✏️ Con cambios manuales (se conservan al regenerar salvo que fuerces overwrite).")
+    if seeding_data.get('series_unidas'):
+        st.caption("🔗 Series unidas (máx. 6 carriles).")
+
+    render_series_union_controls(
+        seeding_key, seeding_data, key_prefix, max_lanes=UNION_SERIES_MAX_LANES
+    )
 
     if seeding_data.get('nadadores_disponibles'):
         st.markdown("##### 👥 Nadadores Disponibles")
@@ -2929,6 +3023,43 @@ def render_auto_seeding_manual_editor(mode, key_prefix):
     session_seedings = get_auto_seedings_from_session(st.session_state, mode, event_cols)
     edited = sum(1 for s in session_seedings if s['data'].get('editado_manual'))
     st.info(f"**{len(session_seedings)}** prueba(s) · **{edited}** con edición manual")
+
+    # Unión masiva de series (máx. 6 carriles) con aprobación
+    candidates = count_series_union_candidates(
+        st.session_state, mode, max_lanes=UNION_SERIES_MAX_LANES
+    )
+    st.markdown("#### 🔗 Unión de series por prueba (máx. 6 carriles)")
+    st.caption(
+        "Junta series incompletas de la misma prueba para llenar hasta 6 carriles. "
+        "No se aplica sola: debes aprobarla."
+    )
+    if candidates:
+        st.warning(
+            f"**{len(candidates)}** prueba(s) pueden reducir series. "
+            "Ejemplos: " + "; ".join(
+                f"{(c[0]['data'].get('titulo') or c[0]['evento'])}: "
+                f"{c[1]['before_series']}→{c[1]['after_series']}"
+                for c in candidates[:4]
+            )
+            + ("…" if len(candidates) > 4 else "")
+        )
+        approve_all = st.checkbox(
+            "Confirmo unir series en todas las pruebas elegibles",
+            key=f"{key_prefix}_union_all_confirm",
+        )
+        if st.button(
+            f"✅ Aprobar unión en {len(candidates)} prueba(s)",
+            type="primary",
+            key=f"{key_prefix}_union_all",
+            disabled=not approve_all,
+        ):
+            applied, skipped = apply_series_union_to_all_auto(
+                st.session_state, mode, max_lanes=UNION_SERIES_MAX_LANES
+            )
+            st.success(f"✅ Unión aplicada en **{applied}** prueba(s) · {skipped} sin cambio")
+            st.rerun()
+    else:
+        st.caption("Ninguna prueba pendiente de unión (o ya están unidas/completas).")
 
     labels = [
         f"{s['data'].get('titulo') or s['evento']} ({'✏️' if s['data'].get('editado_manual') else 'auto'})"

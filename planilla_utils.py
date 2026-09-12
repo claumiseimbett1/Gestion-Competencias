@@ -50,6 +50,139 @@ def standard_lane_order(lanes=DEFAULT_POOL_LANES):
     return order
 
 
+# Unión de series incompletas por prueba (hasta 6 carriles)
+UNION_SERIES_MAX_LANES = 6
+
+
+def _swimmer_sort_seconds(swimmer):
+    """Segundos para ordenar al unir series (más rápido = menor)."""
+    v = swimmer.get('tiempo_en_segundos') if isinstance(swimmer, dict) else None
+    if v is not None:
+        try:
+            fv = float(v)
+            if fv == fv:  # not NaN
+                return fv
+        except (TypeError, ValueError):
+            pass
+    raw = ''
+    if isinstance(swimmer, dict):
+        raw = swimmer.get('tiempo') or swimmer.get('tiempo_inscripcion') or ''
+    if hasattr(raw, 'minute'):
+        return raw.minute * 60 + raw.second + getattr(raw, 'microsecond', 0) / 1_000_000
+    s = str(raw or '').strip().replace(',', '.')
+    if not s or s.lower() in ('nan', 'none', 'nat', 's/t'):
+        return float('inf')
+    try:
+        parts = s.split(':')
+        if len(parts) == 2:
+            return int(parts[0]) * 60 + float(parts[1])
+        return float(s)
+    except (ValueError, IndexError):
+        return float('inf')
+
+
+def propose_series_union(series_list, max_lanes=UNION_SERIES_MAX_LANES):
+    """
+    Propone unir series de una misma prueba llenando hasta max_lanes (p. ej. 6).
+
+    Returns:
+        (new_series, summary) donde summary incluye beneficial, before/after, etc.
+        new_series es None si no hay nada que unir.
+    """
+    import math
+
+    try:
+        max_lanes = int(max_lanes)
+    except (TypeError, ValueError):
+        max_lanes = UNION_SERIES_MAX_LANES
+    max_lanes = max(MIN_POOL_LANES, min(MAX_POOL_LANES, max_lanes))
+    max_lanes = min(max_lanes, UNION_SERIES_MAX_LANES)
+
+    active = []
+    before_fill = []
+    for serie in series_list or []:
+        count = sum(1 for c in (serie.get('carriles') or []) if c)
+        if count:
+            active.append(serie)
+            before_fill.append(count)
+
+    swimmers = []
+    for serie in active:
+        for sw in serie.get('carriles') or []:
+            if sw:
+                swimmers.append({k: v for k, v in sw.items() if not str(k).startswith('_')})
+
+    summary = {
+        'ok': False,
+        'beneficial': False,
+        'before_series': len(active),
+        'after_series': len(active),
+        'before_fill': before_fill,
+        'after_fill': before_fill,
+        'swimmers': len(swimmers),
+        'max_lanes': max_lanes,
+        'reason': '',
+    }
+
+    if len(swimmers) == 0:
+        summary['reason'] = 'Sin nadadores'
+        return None, summary
+
+    # Una sola serie ya compacta en ≤ max_lanes: no hay unión
+    if len(active) == 1:
+        carriles = active[0].get('carriles') or []
+        if before_fill[0] <= max_lanes and len(carriles) <= max_lanes:
+            summary['reason'] = 'Ya está en una sola serie'
+            return None, summary
+
+    sorted_sw = sorted(swimmers, key=_swimmer_sort_seconds)
+    num_series = math.ceil(len(sorted_sw) / max_lanes)
+    lane_order = standard_lane_order(max_lanes)
+    n = len(sorted_sw)
+    new_series = []
+    for i in range(num_series):
+        start = max(0, n - (i + 1) * max_lanes)
+        end = n - i * max_lanes
+        chunk = sorted_sw[start:end]
+        carriles = [None] * max_lanes
+        for j, sw in enumerate(chunk):
+            if j < len(lane_order):
+                carriles[lane_order[j] - 1] = sw
+        new_series.append({'serie': i + 1, 'carriles': carriles})
+
+    after_fill = [sum(1 for c in s['carriles'] if c) for s in new_series]
+    beneficial = num_series < len(active)
+    # También útil si hay huecos aunque no baje el número (reempaquetar a 6 carriles)
+    has_gaps = any(c < max_lanes for c in before_fill) and len(active) > 1
+    summary.update({
+        'ok': True,
+        'beneficial': beneficial or has_gaps,
+        'after_series': num_series,
+        'after_fill': after_fill,
+        'reason': '',
+    })
+    if not summary['beneficial']:
+        summary['reason'] = 'No reduce series ni huecos'
+        return None, summary
+    return new_series, summary
+
+
+def format_series_union_summary(summary):
+    """Texto corto para mostrar antes de aprobar la unión."""
+    if not summary:
+        return ''
+    before = summary.get('before_fill') or []
+    after = summary.get('after_fill') or []
+    return (
+        f"Antes: **{summary.get('before_series', 0)}** series "
+        f"({', '.join(str(x) for x in before)} nadadores) → "
+        f"Después: **{summary.get('after_series', 0)}** series "
+        f"({', '.join(str(x) for x in after)}) · "
+        f"máx. {summary.get('max_lanes', UNION_SERIES_MAX_LANES)} carriles · "
+        f"{summary.get('swimmers', 0)} nadadores"
+    )
+
+
 def safe_excel_sheet_title(name, used_titles):
     """Nombre de hoja válido en Excel (máx. 31 caracteres, sin \\ / * ? : [ ])."""
     s = re.sub(r'[\[\]*?:/\\]', '-', str(name)).strip() or 'Prueba'
